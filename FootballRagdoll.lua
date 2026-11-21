@@ -1,226 +1,5426 @@
-local function base91decode(s,alphabet)
-    local lut={}
-    for i=1,#alphabet do lut[alphabet:byte(i)]=i-1 end
-    local output={}
-    local value=-1
-    local buffer=0
-    local bits=0
-    for i=1,#s do
-        local c=lut[s:byte(i)]
-        if c then
-            if value<0 then value=c
+if getgenv().KirtiumHub then
+    if KirtiumHub.ConnectionController and KirtiumHub.ConnectionController.Connections then
+        for i, v in next, KirtiumHub.ConnectionController.Connections do
+            pcall(function() v:Disconnect() end)
+            KirtiumHub.ConnectionController.Connections[i] = nil
+        end
+    end
+    if KirtiumHub.TasksController and KirtiumHub.TasksController.Tasks then
+        for i, v in next, KirtiumHub.TasksController.Tasks do
+            pcall(function() task.cancel(v) end)
+            KirtiumHub.TasksController.Tasks[i] = nil
+        end
+    end
+    if KirtiumHub.UIController then
+        local UI = KirtiumHub.UIController
+    end
+    pcall(function()
+        for _, sg in ipairs(cloneref(game:GetService("CoreGui")):GetChildren()) do
+            if sg.Name == "Blossom" then sg:Destroy() end
+        end
+    end)
+    getgenv().KirtiumHub = nil
+    task.wait(0.2)
+end
+
+local HUB_NAME = "kirtium.qyz"
+local CURRENT_VERSION = "Leaked Open Source"
+local DISCORD_INVITE = "https://discord.gg/PEaaCvKQ2b"
+local HUB_LOGO = "rbxassetid://140431954244571"
+
+local Services = setmetatable({}, {
+    __index = function(self, Index)
+        local service = cloneref(game:GetService(Index))
+        rawset(self, Index, service)
+        return service
+    end
+})
+
+local Players = Services.Players
+local RunService = Services.RunService
+local LocalPlayer = Players.LocalPlayer
+
+getgenv().KirtiumHub = {
+    Meta = {
+        Version = CURRENT_VERSION,
+        Discord = DISCORD_INVITE,
+        Logo = HUB_LOGO,
+        ServerName = HUB_NAME,
+    },
+
+    PlayerController = {
+        Player = LocalPlayer,
+        PlayerGui = LocalPlayer.PlayerGui,
+    },
+
+    UIController = {
+        Window = nil,
+        Tabs = {},
+    },
+
+    ConnectionController = {
+        Connections = {},
+    },
+
+    TasksController = {
+        Tasks = {},
+    },
+
+    Functions = {},
+}
+
+function KirtiumHub.ConnectionController.Insert(Connection)
+    table.insert(KirtiumHub.ConnectionController.Connections, Connection)
+end
+
+function KirtiumHub.TasksController.Insert(Task)
+    table.insert(KirtiumHub.TasksController.Tasks, Task)
+end
+
+getgenv().KirtiumSilentAim = getgenv().KirtiumSilentAim or { Enabled = false, Hooked = false }
+getgenv().KirtiumMaxPower = getgenv().KirtiumMaxPower or { Enabled = false, Hooked = false }
+local SilentAimState = getgenv().KirtiumSilentAim
+local MaxPowerState = getgenv().KirtiumMaxPower
+
+function KirtiumHub.Functions.InstallMaxPower()
+    local MP = getgenv().KirtiumMaxPower
+    if MP.Hooked then return true end
+    local ok, Rules = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Rules
+    end)
+    if not ok or type(Rules) ~= "table" or type(Rules.charge) ~= "function" then return false end
+    local orig
+    local function wrapper(value)
+        local state = getgenv().KirtiumMaxPower
+        if state and state.Enabled then return 1 end
+        return orig(value)
+    end
+    if hookfunction then
+        orig = hookfunction(Rules.charge, wrapper)
+        MP.Hooked = true
+    elseif setreadonly then
+        orig = Rules.charge
+        setreadonly(Rules, false)
+        Rules.charge = wrapper
+        setreadonly(Rules, true)
+        MP.Hooked = true
+    end
+    return MP.Hooked == true
+end
+
+getgenv().KirtiumReach = getgenv().KirtiumReach or { Enabled = false, Add = 3 }
+getgenv().KirtiumReach.Enabled = false
+getgenv().KirtiumAntiRagdoll = getgenv().KirtiumAntiRagdoll or {}
+getgenv().KirtiumAntiRagdoll.Enabled = false
+getgenv().KirtiumAntiRagdoll.Tackle = false
+getgenv().KirtiumAntiRagdoll.GetUp = false
+getgenv().KirtiumAntiRagdoll.Running = false
+
+function KirtiumHub.Functions.InstallAntiRagdoll()
+    local AR = getgenv().KirtiumAntiRagdoll
+    if AR.Hooked2 then return true end
+    local mod = KirtiumHub.Functions.MannequinClientModule()
+    if not mod then return false end
+    local okT, Tuning = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+    end)
+    if okT and type(Tuning) == "table" and type(Tuning.Slide) == "table" then
+        AR.Tuning = Tuning
+        AR.SitDefault = AR.SitDefault or Tuning.Slide.SitTime
+    end
+    AR.Hooked = true
+    AR.Hooked2 = true
+    return true
+end
+
+function KirtiumHub.Functions.RecoveredRemote()
+    local AR = getgenv().KirtiumAntiRagdoll
+    if AR.Remote then return AR.Remote end
+    local ok, remote = pcall(function()
+        local Net = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
+        return Net:RemoteEvent("MannequinRecovered")
+    end)
+    if ok and remote then
+        AR.Remote = remote
+        return remote
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.InstantRecover(body)
+    local AR = getgenv().KirtiumAntiRagdoll
+    local remote = KirtiumHub.Functions.RecoveredRemote()
+    if not body.mrWrapped then
+        body.mrWrapped = true
+        body.mrOrig = body.onRecovered
+        body.onRecovered = function()
+            if not remote then return end
+            local wait = 0.65 - (os.clock() - (body.physicalAt or 0))
+            if wait <= 0 then
+                pcall(function() remote:FireServer() end)
             else
-                value=value+c*91
-                buffer=buffer+value*2^bits
-                bits=bits+((value%8192)>88 and 13 or 14)
-                while bits>=8 do
-                    output[#output+1]=string.char(buffer%256)
-                    buffer=math.floor(buffer/256)
-                    bits=bits-8
-                end
-                value=-1
+                task.delay(wait, function()
+                    if not body.active then
+                        pcall(function() remote:FireServer() end)
+                    end
+                end)
             end
         end
     end
-    if value>=0 then output[#output+1]=string.char((buffer+value*2^bits)%256) end
-    return table.concat(output)
-end
-local function bunzip(s)
-    local pos=1
-    local buffer=0
-    local bits=0
-    local floor=math.floor
-    local function get(n)
-        if n>24 then
-            local n1=n-24
-            return get(n1)*16777216+get(24)
-        end
-        while bits<n do
-            local byte=s:byte(pos)
-            assert(byte,'truncated compressed data')
-            buffer=buffer*256+byte
-            bits=bits+8
-            pos=pos+1
-        end
-        local v=floor(buffer/2^(bits-n))%2^n
-        bits=bits-n
-        buffer=buffer%2^bits
-        return v
+    local mode = body.mode
+    if mode == "Fall" or mode == "KickFall" or mode == "FrontFall" or mode == "Slide" then
+        body.yaw = AR.Yaw or body.yaw or 0
     end
-    assert(get(24)==0x425a68,'invalid bzip2 header')
-    local blocksize=get(8)-48
-    assert(blocksize>=1 and blocksize<=9,'invalid blocksize')
-    local result={}
-    while true do
-        local magic=get(48)
-        local crc=get(32)
-        if magic==0x177245385090 then break end
-        assert(magic==0x314159265359,'invalid bzip2 block magic')
-        assert(get(1)==0,'randomized blocks unsupported')
-        local primary=get(24)
-        local used={}
-        local groupsMask=get(16)
-        local available={}
-        for block=0,15 do
-            local present=floor(groupsMask/2^(15-block))%2
-            if present==1 then
-                local charMask=get(16)
-                for j=0,15 do
-                    if floor(charMask/2^(15-j))%2==1 then
-                        available[#available+1]=block*16+j
+    body.pending = nil
+    body.launch = nil
+    body.fromKick = nil
+    body.fromFront = nil
+    body.seatPending = false
+    body.driveOff = nil
+    body.reseatPending = true
+    local ok = pcall(body.reseat, body)
+    if not ok then
+        pcall(body.standNow, body)
+    end
+    if body.active then
+        pcall(body.standNow, body)
+    end
+end
+
+function KirtiumHub.Functions.StopBallKeep()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallKeep") end)
+end
+
+function KirtiumHub.Functions.StartBallKeep()
+    KirtiumHub.Functions.StopBallKeep()
+    local AR = getgenv().KirtiumAntiRagdoll
+    local st = { Had = 0 }
+    RunService:BindToRenderStep("KirtiumBallKeep", Enum.RenderPriority.Input.Value + 9, function()
+        if not AR.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local id = char:GetAttribute("DribbleId")
+        if type(id) ~= "number" or id == 0 then return end
+        local ball = KirtiumHub.Functions.GetBall()
+        if not ball then return end
+        local now = os.clock()
+        if ball:GetAttribute("Possessor") == id then
+            st.Had = now
+            return
+        end
+        if now - st.Had > 1.5 then return end
+        if KirtiumHub.TrickActive or now < (KirtiumHub.ShotNext or 0) then return end
+        local vel = ball.AssemblyLinearVelocity
+        if Vector3.new(vel.X, 0, vel.Z).Magnitude > 40 then
+            st.Had = 0
+            return
+        end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        local dx = ball.Position.X + vel.X * 0.12 - root.Position.X
+        local dz = ball.Position.Z + vel.Z * 0.12 - root.Position.Z
+        local distance = math.sqrt(dx * dx + dz * dz)
+        if distance > 45 or distance < 1.2 then return end
+        local direction = Vector3.new(dx / distance, 0, dz / distance)
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 31)
+        cm.FacingDirection = direction
+    end)
+end
+
+function KirtiumHub.Functions.StopAntiRagdoll()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumAntiRagdoll") end)
+    KirtiumHub.Functions.StopBallKeep()
+    getgenv().KirtiumAntiRagdoll.Running = false
+    pcall(function()
+        local mod = KirtiumHub.MannequinClientRef
+        local char = LocalPlayer.Character
+        local animator = mod and char and mod.getAnimator(char)
+        local body = animator and animator.body
+        if body then
+            if body.mrWrapped then
+                body.onRecovered = body.mrOrig
+                body.mrWrapped = nil
+                body.mrOrig = nil
+            end
+            if body.mrTackleFn and body.onTackle == body.mrTackleFn then
+                body.onTackle = body.mrTackleOrig
+            end
+            body.mrTackleFn = nil
+            body.mrTackleOrig = nil
+            body.mrHit = nil
+            body.mrHitAt = nil
+        end
+    end)
+end
+
+function KirtiumHub.Functions.StartAntiRagdoll()
+    local F = KirtiumHub.Functions
+    F.StopAntiRagdoll()
+    local mod = F.MannequinClientModule()
+    if not mod then return false end
+    local AR = getgenv().KirtiumAntiRagdoll
+    F.StartBallKeep()
+    local cachedChar, cachedAnimator
+    RunService:BindToRenderStep("KirtiumAntiRagdoll", Enum.RenderPriority.Input.Value + 6, function()
+        if not AR.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local animator = cachedAnimator
+        if char ~= cachedChar or not animator or not animator.body then
+            local ok, result = pcall(mod.getAnimator, char)
+            if not ok or not result then return end
+            cachedChar, cachedAnimator = char, result
+            animator = result
+        end
+        local body = animator.body
+        if not body then return end
+        if not body.active then
+            local root = char:FindFirstChild("Root")
+            if root then
+                local look = root.CFrame.LookVector
+                if look.X * look.X + look.Z * look.Z > 0.000001 then
+                    AR.Yaw = math.atan2(-look.X, -look.Z)
+                end
+            end
+            return
+        end
+        local mode = body.mode
+        local now = os.clock()
+        if mode == "Slide" or mode == "Dive" or mode == "Block" or mode == "KeyDive" then
+            AR.OwnAt = now
+            if mode ~= "Slide" or not AR.GetUp then return end
+            local t = body.t or 0
+            local hit = body.tackled ~= nil and next(body.tackled) ~= nil
+            if t < 0.2 then return end
+            if not (hit or body.slideEnd ~= nil or t >= 0.3) then return end
+            F.InstantRecover(body)
+            return
+        end
+        if not AR.Tackle then return end
+        if now - (AR.OwnAt or -math.huge) < 0.6 then return end
+        F.InstantRecover(body)
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        KirtiumHub.Functions.StopAntiRagdoll()
+    end })
+    AR.Running = true
+    return true
+end
+
+function KirtiumHub.Functions.RefreshAntiRagdoll()
+    local F = KirtiumHub.Functions
+    local AR = getgenv().KirtiumAntiRagdoll
+    AR.Enabled = AR.Tackle == true or AR.GetUp == true
+    local T = AR.Tuning
+    if T and T.Slide and AR.SitDefault then
+        T.Slide.SitTime = AR.GetUp and 0.02 or AR.SitDefault
+    end
+    if AR.Enabled then
+        if not AR.Running then
+            F.StartAntiRagdoll()
+        end
+    elseif AR.Running then
+        F.StopAntiRagdoll()
+    end
+end
+
+function KirtiumHub.Functions.SetAntiTackle(state)
+    getgenv().KirtiumAntiRagdoll.Tackle = state == true
+    KirtiumHub.Functions.RefreshAntiRagdoll()
+end
+
+function KirtiumHub.Functions.SetInstantGetUp(state)
+    getgenv().KirtiumAntiRagdoll.GetUp = state == true
+    KirtiumHub.Functions.RefreshAntiRagdoll()
+end
+
+getgenv().KirtiumNoCooldown = getgenv().KirtiumNoCooldown or { Enabled = false }
+
+function KirtiumHub.Functions.StopNoCooldown()
+    local NC = getgenv().KirtiumNoCooldown
+    if NC.Conns then
+        for _, c in ipairs(NC.Conns) do
+            pcall(function() c:Disconnect() end)
+        end
+        NC.Conns = nil
+    end
+    if NC.Tuning and NC.SlideDefault then
+        NC.Tuning.Slide.Cooldown = NC.SlideDefault
+    end
+end
+
+function KirtiumHub.Functions.StartNoCooldown()
+    KirtiumHub.Functions.StopNoCooldown()
+    local NC = getgenv().KirtiumNoCooldown
+    local ok, tuning = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+    end)
+    if ok and type(tuning) == "table" and type(tuning.Slide) == "table" then
+        NC.Tuning = tuning
+        NC.SlideDefault = NC.SlideDefault or tuning.Slide.Cooldown
+        tuning.Slide.Cooldown = 0
+    end
+    local conns = {}
+    NC.Conns = conns
+    for _, name in ipairs({ "SlideReadyAt", "SlideCooldown", "PokeReadyAt" }) do
+        local function clear()
+            if not NC.Enabled then return end
+            local v = LocalPlayer:GetAttribute(name)
+            if v ~= nil and v ~= 0 then
+                LocalPlayer:SetAttribute(name, 0)
+            end
+        end
+        conns[#conns + 1] = LocalPlayer:GetAttributeChangedSignal(name):Connect(clear)
+        clear()
+    end
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        KirtiumHub.Functions.StopNoCooldown()
+    end })
+    return true
+end
+
+getgenv().KirtiumAutoPoke = getgenv().KirtiumAutoPoke or { Enabled = false, Range = 6 }
+
+function KirtiumHub.Functions.GetPokeAction()
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local context = scripts and scripts:FindFirstChild("Poke")
+    local action = context and context:FindFirstChild("Poke")
+    if action and action:IsA("InputAction") then
+        return action
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.FirePoke()
+    local action = KirtiumHub.Functions.GetPokeAction()
+    if not action then return false end
+    local binding = KirtiumHub.PokeBinding
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "KirtiumPoke"
+        binding.Type = (Enum :: any).InputBindingType.Scriptable
+        binding.Parent = action
+        KirtiumHub.PokeBinding = binding
+        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+            pcall(function() binding:Destroy() end)
+            KirtiumHub.PokeBinding = nil
+        end })
+    end
+    binding:Fire(true)
+    task.delay(0.05, function()
+        pcall(function() binding:Fire(false) end)
+    end)
+    return true
+end
+
+function KirtiumHub.Functions.FindPokeTarget()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("Root")
+    if not root then return nil end
+    local ball = Services.CollectionService:GetTagged("SoccerBall")[1]
+    if not ball then return nil end
+    local possessor = ball:GetAttribute("Possessor")
+    if type(possessor) ~= "number" or possessor == 0 then return nil end
+    local myId = char:GetAttribute("DribbleId")
+    if possessor == myId then return nil end
+    local myTeam = char:GetAttribute("Team")
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model ~= char and model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+            local team = model:GetAttribute("Team")
+            if myTeam ~= nil and team == myTeam then return nil end
+            local theirRoot = model:FindFirstChild("Root")
+            if theirRoot and theirRoot:IsA("BasePart") then
+                local delta = theirRoot.Position - root.Position
+                local flat = Vector3.new(delta.X, 0, delta.Z).Magnitude
+                return model, flat
+            end
+        end
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.IsTouch()
+    local UIS = Services.UserInputService
+    return UIS.TouchEnabled and not UIS.KeyboardEnabled
+end
+
+function KirtiumHub.Functions.ReleaseAllBindings()
+    local B = KirtiumHub.Bindings
+    if B then
+        for _, b in pairs(B) do
+            pcall(function() b:Fire(false) end)
+        end
+    end
+    local AS = KirtiumHub.AutoShoot
+    if AS and AS.Binding then
+        pcall(function() AS.Binding:Fire(false) end)
+    end
+    local AP = KirtiumHub.AutoPoke
+    if AP and AP.Binding then
+        pcall(function() AP.Binding:Fire(false) end)
+    end
+    KirtiumHub.TrickActive = false
+    KirtiumHub.ShotNext = 0
+    local V = KirtiumHub.TrickView
+    if V then V.Active = false end
+    local F = KirtiumHub.Force
+    if F then F.Until = 0 end
+end
+
+function KirtiumHub.Functions.StopAutoPoke()
+    local state = KirtiumHub.AutoPoke
+    KirtiumHub.AutoPoke = nil
+    if state then
+        if state.Conn then
+            pcall(function() state.Conn:Disconnect() end)
+        end
+        if state.Binding then
+            pcall(function() state.Binding:Fire(false) end)
+            pcall(function() state.Binding:Destroy() end)
+        end
+    end
+end
+
+function KirtiumHub.Functions.StartAutoPoke()
+    KirtiumHub.Functions.StopAutoPoke()
+    local state = { Acc = 0 }
+    KirtiumHub.AutoPoke = state
+    state.Conn = RunService.Heartbeat:Connect(function(dt)
+        state.Acc += dt
+        if state.Acc < 0.2 then return end
+        state.Acc = 0
+        local cfg = getgenv().KirtiumAutoPoke
+        if not cfg.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+        if type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow() then return end
+        local target, distance = KirtiumHub.Functions.FindPokeTarget()
+        if target and distance <= cfg.Range then
+            KirtiumHub.Functions.FirePoke()
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert(state.Conn)
+end
+
+getgenv().KirtiumSprint = getgenv().KirtiumSprint or { Infinite = false, Auto = false }
+
+function KirtiumHub.Functions.MannequinClientModule()
+    local cached = KirtiumHub.MannequinClientRef
+    if cached then return cached end
+    local ok, mod = pcall(function()
+        return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("MannequinClient"))
+    end)
+    if ok and type(mod) == "table" then
+        KirtiumHub.MannequinClientRef = mod
+        return mod
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.StopAutoSprint()
+    local state = KirtiumHub.AutoSprint
+    KirtiumHub.AutoSprint = nil
+    if state and state.Restore then
+        state.Restore()
+    end
+end
+
+function KirtiumHub.Functions.StartAutoSprint()
+    KirtiumHub.Functions.StopAutoSprint()
+    local mod = KirtiumHub.Functions.MannequinClientModule()
+    if not mod then return false end
+    local state: {[string]: any} = { Original = mod.keepSprint, Move = nil, Cached = true, At = 0 }
+
+    local function moving()
+        local now = os.clock()
+        if now - state.At < 0.05 then return state.Cached end
+        state.At = now
+        if not (state.Move and state.Move.Parent) then
+            local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+            local ctx = scripts and scripts:FindFirstChild("Mannequin")
+            state.Move = ctx and ctx:FindFirstChild("Move")
+        end
+        if not state.Move then
+            state.Cached = true
+            return true
+        end
+        local ok, s = pcall(state.Move.GetState, state.Move)
+        state.Cached = ok and typeof(s) == "Vector2" and s.Magnitude > 0.1
+        return state.Cached
+    end
+
+    local function wrapper(...)
+        if getgenv().KirtiumSprint.Auto and moving() then
+            return true
+        end
+        local original = state.Original
+        if original then
+            return original(...)
+        end
+        return false
+    end
+
+    local function restore()
+        if state.Conn then
+            pcall(function() state.Conn:Disconnect() end)
+            state.Conn = nil
+        end
+        if mod.keepSprint == wrapper then
+            mod.keepSprint = state.Original
+        end
+    end
+
+    state.Restore = restore
+    mod.keepSprint = wrapper
+    local acc = 0
+    state.Conn = RunService.Heartbeat:Connect(function(dt)
+        acc += dt
+        if acc < 0.5 then return end
+        acc = 0
+        if mod.keepSprint ~= wrapper then
+            state.Original = mod.keepSprint
+            mod.keepSprint = wrapper
+        end
+    end)
+    KirtiumHub.AutoSprint = state
+    KirtiumHub.ConnectionController.Insert(state.Conn)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = restore })
+    return true
+end
+
+function KirtiumHub.Functions.StopInfiniteSprint()
+    KirtiumHub.RunSpeedBound = nil
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumRunSpeed") end)
+end
+
+function KirtiumHub.Functions.StartInfiniteSprint()
+    local F = KirtiumHub.Functions
+    F.StopInfiniteSprint()
+    KirtiumHub.RunSpeedBound = true
+    local speed = F.SprintBase()
+    local cfg = getgenv().KirtiumSprint
+    local char, cm
+    RunService:BindToRenderStep("KirtiumRunSpeed", Enum.RenderPriority.Input.Value + 5, function()
+        local boost = cfg.Boost or 1
+        if not (cfg.Infinite or boost > 1) then return end
+        local current = LocalPlayer.Character
+        if current ~= char or not (cm and cm.Parent) then
+            char = current
+            cm = char and char:FindFirstChildOfClass("ControllerManager")
+        end
+        if not cm then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local dir = cm.MovingDirection
+        if dir.X * dir.X + dir.Y * dir.Y + dir.Z * dir.Z < 0.0025 then return end
+        local current = cm.BaseMoveSpeed
+        local base = current
+        if cfg.Infinite and base < speed then
+            base = speed
+        end
+        if boost > 1 and base >= speed * 0.85 then
+            local target = speed * boost
+            if base < target then base = target end
+        end
+        if base ~= current then
+            cm.BaseMoveSpeed = base
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        KirtiumHub.Functions.StopInfiniteSprint()
+    end })
+end
+
+function KirtiumHub.Functions.RefreshRunSpeed()
+    local cfg = getgenv().KirtiumSprint
+    if cfg.Infinite or (cfg.Boost or 1) > 1 then
+        if not KirtiumHub.RunSpeedBound then
+            KirtiumHub.Functions.StartInfiniteSprint()
+        end
+    else
+        KirtiumHub.Functions.StopInfiniteSprint()
+    end
+end
+
+function KirtiumHub.Functions.SilentAimModules()
+    local SA = getgenv().KirtiumSilentAim
+    if SA.BallView and SA.Flight and SA.Families then return true end
+    pcall(function()
+        local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+        SA.BallView = require(gameFolder:WaitForChild("BallView"))
+    end)
+    pcall(function()
+        local sharedGame = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+        local Kick = require(sharedGame:WaitForChild("Kick"))
+        SA.Flight = Kick.Flight
+        SA.Families = Kick.Families
+        SA.KeeperRules = require(sharedGame:WaitForChild("KeeperRules"))
+    end)
+    return SA.BallView ~= nil and SA.Flight ~= nil and SA.Families ~= nil
+end
+
+function KirtiumHub.Functions.SilentAimGoalCompute()
+    local SA = getgenv().KirtiumSilentAim
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("Root")
+    local goals = {}
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            table.insert(goals, part)
+        end
+    end
+    if #goals < 2 then return nil end
+    table.sort(goals, function(a, b) return a.Position.X < b.Position.X end)
+    local team = char and char:GetAttribute("Team")
+    local hasTeam = team == "Blue" or team == "Red"
+    local chosen
+    if hasTeam and SA.KeeperRules then
+        local ok, side, area = pcall(function()
+            return SA.KeeperRules.ownSide(team), SA.KeeperRules.area(team)
+        end)
+        if ok and side and area then
+            for _, part in ipairs(goals) do
+                if (part.Position.X - area.centre.X) * -side > 0 then
+                    chosen = part
+                    break
+                end
+            end
+        end
+    end
+    if not chosen and hasTeam then
+        local blueSide = workspace:GetAttribute("BlueSide") == 1 and 1 or -1
+        local out = team == "Blue" and -blueSide or blueSide
+        chosen = out == -1 and goals[1] or goals[#goals]
+    end
+    if not chosen and root then
+        local look = root.CFrame.LookVector
+        local bestDot = -math.huge
+        for _, part in ipairs(goals) do
+            local d = (part.Position.X - root.Position.X) * look.X
+            if d > bestDot then
+                bestDot = d
+                chosen = part
+            end
+        end
+    end
+    if not chosen then return nil end
+    local b = chosen.Position.X < (goals[1].Position.X + goals[#goals].Position.X) / 2 and -1 or 1
+    local q = chosen.Size.Y / 9.142857142857142
+    local ground = chosen.Position.Y - chosen.Size.Y / 2
+    return {
+        x = chosen.Position.X - b * chosen.Size.X / 2 + b * 0.21428571428571425 * q,
+        z = chosen.Position.Z,
+        ground = ground,
+        top = ground + 8.714285714285714 * q,
+        half = 13.071428571428571 * q,
+        out = b,
+        team = hasTeam and team or nil,
+        char = char,
+    }
+end
+
+function KirtiumHub.Functions.Budget(seconds)
+    local touch = KirtiumHub.IsTouchCached
+    if touch == nil then
+        touch = KirtiumHub.Functions.IsTouch()
+        KirtiumHub.IsTouchCached = touch
+    end
+    return touch and seconds * 0.5 or seconds
+end
+
+function KirtiumHub.Functions.MannequinSnapshot()
+    local snap = KirtiumHub.MannequinSnap
+    local now = os.clock()
+    if snap and now - snap.At < 0.15 then
+        return snap.List
+    end
+    local list = {}
+    local n = 0
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        local root = model:FindFirstChild("Root")
+        if root and model:IsA("Model") and root:IsA("BasePart") then
+            n += 1
+            list[n] = {
+                model = model,
+                team = model:GetAttribute("Team"),
+                keeper = model:GetAttribute("AIGoalie") ~= nil or model:GetAttribute("Role") == "Goalkeeper",
+                pos = root.Position,
+            }
+        end
+    end
+    KirtiumHub.MannequinSnap = { At = now, List = list }
+    return list
+end
+
+function KirtiumHub.Functions.SilentAimGoal()
+    local cache = KirtiumHub.GoalCache
+    if not cache then
+        cache = { At = 0, Valid = false }
+        KirtiumHub.GoalCache = cache
+    end
+    local char = LocalPlayer.Character
+    local team = char and char:GetAttribute("Team")
+    local now = os.clock()
+    if cache.Valid and cache.Char == char and cache.Team == team and now - cache.At < 0.5 then
+        return cache.Value
+    end
+    cache.Value = KirtiumHub.Functions.SilentAimGoalCompute()
+    cache.Char = char
+    cache.Team = team
+    cache.At = now
+    cache.Valid = true
+    return cache.Value
+end
+
+function KirtiumHub.Functions.SetQuickInteract(state)
+    local backup = KirtiumHub.PromptBackup
+    if not backup then
+        backup = setmetatable({}, { __mode = "k" })
+        KirtiumHub.PromptBackup = backup
+    end
+    if KirtiumHub.QuickInteractConn then
+        KirtiumHub.QuickInteractConn:Disconnect()
+        KirtiumHub.QuickInteractConn = nil
+    end
+    if state then
+        KirtiumHub.QuickInteractConn = Services.ProximityPromptService.PromptShown:Connect(function(prompt)
+            if not backup[prompt] then
+                backup[prompt] = { hold = prompt.HoldDuration, line = prompt.RequiresLineOfSight }
+            end
+            prompt.HoldDuration = 0
+            prompt.RequiresLineOfSight = false
+        end)
+    else
+        for prompt, orig in pairs(backup) do
+            pcall(function()
+                prompt.HoldDuration = orig.hold
+                prompt.RequiresLineOfSight = orig.line
+            end)
+        end
+        table.clear(backup)
+    end
+end
+
+getgenv().KirtiumAutoShoot  = getgenv().KirtiumAutoShoot  or { Enabled = false, Range = 60 }
+getgenv().KirtiumAutoPickup = getgenv().KirtiumAutoPickup or { Enabled = false, Range = 25 }
+
+function KirtiumHub.Functions.GetBall()
+    local ball = KirtiumHub.BallRef
+    if ball and ball.Parent then return ball end
+    ball = Services.CollectionService:GetTagged("SoccerBall")[1]
+    KirtiumHub.BallRef = ball
+    return ball
+end
+
+function KirtiumHub.Functions.GetKickAction(name)
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local context = scripts and scripts:FindFirstChild("Kick")
+    local action = context and context:FindFirstChild(name or "KickStrike")
+    if action and action:IsA("InputAction") then
+        return action
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.StopAutoShoot()
+    if not getgenv().KirtiumAutoTricks.Enabled then
+        KirtiumHub.Functions.AutoEngineStop()
+    end
+end
+
+function KirtiumHub.Functions.StartAutoShoot()
+    KirtiumHub.Functions.AutoEngineStart()
+end
+
+function KirtiumHub.Functions.StopAutoPickup()
+    local st = KirtiumHub.AutoPickup
+    KirtiumHub.AutoPickup = nil
+    if st and st.Gate then
+        pcall(function() st.Gate:Disconnect() end)
+    end
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumAutoPickup") end)
+end
+
+function KirtiumHub.Functions.StartAutoPickup()
+    KirtiumHub.Functions.StopAutoPickup()
+    local cfg = getgenv().KirtiumAutoPickup
+    local st = { Acc = 0, Active = false }
+    KirtiumHub.AutoPickup = st
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.08 then return end
+        st.Acc = 0
+        st.Active = false
+        if not cfg.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local team = char:GetAttribute("Team")
+        if team ~= "Blue" and team ~= "Red" then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local now = workspace:GetServerTimeNow()
+        local hold = LocalPlayer:GetAttribute("KickoffHold")
+        if type(hold) == "number" and hold > now then return end
+        if KirtiumHub.TrickActive or os.clock() < (KirtiumHub.ShotNext or 0) then return end
+        local ball = KirtiumHub.Functions.GetBall()
+        if not ball then return end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then return end
+        local id = char:GetAttribute("DribbleId")
+        if ball:GetAttribute("ReleasedBy") == id then
+            local releasedAt = ball:GetAttribute("ReleasedAt")
+            if type(releasedAt) == "number" and now - releasedAt < 1.2 then return end
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        st.Root, st.Cm, st.Ball = root, cm, ball
+        st.Active = true
+    end)
+    RunService:BindToRenderStep("KirtiumAutoPickup", Enum.RenderPriority.Input.Value + 8, function()
+        if not st.Active then return end
+        local root, cm, ball = st.Root, st.Cm, st.Ball
+        if not (root.Parent and cm.Parent and ball.Parent) then
+            st.Active = false
+            return
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            st.Active = false
+            return
+        end
+        local ballPos = ball.Position
+        local rootPos = root.Position
+        if ballPos.Y > rootPos.Y - 2.4 then return end
+        local vel = ball.AssemblyLinearVelocity
+        if math.abs(vel.Y) > 8 then return end
+        local vx, vz = vel.X, vel.Z
+        if vx * vx + vz * vz > 900 then return end
+        local dx = ballPos.X + vx * 0.12 - rootPos.X
+        local dz = ballPos.Z + vz * 0.12 - rootPos.Z
+        local distance = math.sqrt(dx * dx + dz * dz)
+        if distance > cfg.Range or distance < 1.4 then return end
+        local direction = Vector3.new(dx / distance, 0, dz / distance)
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 20)
+        cm.FacingDirection = direction
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopAutoPickup() end })
+end
+
+getgenv().KirtiumGuard = getgenv().KirtiumGuard or { Enabled = false, Distance = 8, Predict = 0.35 }
+getgenv().KirtiumGuard.IgnoreTeammates = true
+
+function KirtiumHub.Functions.GuardOwnGoal()
+    local G = KirtiumHub.GuardGoal
+    local now = os.clock()
+    if G and now - G.At < 1 then
+        return G.Value
+    end
+    local stale = G and now - G.At < 10 and G.Value or nil
+    local attacked = KirtiumHub.Functions.SilentAimGoal()
+    if not attacked then return stale end
+    local far, farPart = -1, nil
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            local d = math.abs(part.Position.X - attacked.x)
+            if d > far then
+                far = d
+                farPart = part
+            end
+        end
+    end
+    if not farPart then return stale end
+    local value = Vector3.new(farPart.Position.X, 0, farPart.Position.Z)
+    KirtiumHub.GuardGoal = { At = now, Value = value }
+    return value
+end
+
+function KirtiumHub.Functions.StopGuard()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumGuard") end)
+    local st = KirtiumHub.GuardState
+    KirtiumHub.GuardState = nil
+    if st then
+        if st.Gate then
+            pcall(function() st.Gate:Disconnect() end)
+        end
+        if st.Controlling and st.Cm and st.Cm.Parent then
+            pcall(function() st.Cm.MovingDirection = Vector3.zero end)
+        end
+    end
+end
+
+function KirtiumHub.Functions.ClientModule(name)
+    local H = KirtiumHub
+    local cache = H.ClientModules
+    if not cache then
+        cache = {}
+        H.ClientModules = cache
+    end
+    local cached = cache[name]
+    if cached ~= nil then return cached or nil end
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local client = scripts and scripts:FindFirstChild("Client")
+    local folder = client and client:FindFirstChild("Game")
+    local inst = folder and folder:FindFirstChild(name)
+    if not (inst and inst:IsA("ModuleScript")) then return nil end
+    local ok, mod = pcall(require, inst)
+    cache[name] = (ok and type(mod) == "table") and mod or false
+    return cache[name] or nil
+end
+
+function KirtiumHub.Functions.StopBallReach()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallReach") end)
+    local st = KirtiumHub.BallReachState
+    KirtiumHub.BallReachState = nil
+    if st and st.Gate then
+        pcall(function() st.Gate:Disconnect() end)
+    end
+end
+
+function KirtiumHub.Functions.StartBallReach()
+    local F = KirtiumHub.Functions
+    F.StopBallReach()
+    local cfg = getgenv().KirtiumReach
+    local st = { Acc = 0, Active = false }
+    KirtiumHub.BallReachState = st
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.08 then return end
+        st.Acc = 0
+        st.Active = false
+        if not cfg.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        if F.MatchPaused(char) then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        if KirtiumHub.TrickActive or os.clock() < (KirtiumHub.ShotNext or 0) then return end
+        local ball = F.GetBall()
+        if not ball then return end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then return end
+        local id = char:GetAttribute("DribbleId")
+        if ball:GetAttribute("ReleasedBy") == id then
+            local releasedAt = ball:GetAttribute("ReleasedAt")
+            if type(releasedAt) == "number" and workspace:GetServerTimeNow() - releasedAt < 1.2 then return end
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim then
+                if anim.kick then return end
+                local kickS, headS, pokeS = anim.kickS, anim.headS, anim.pokeS
+                if kickS and not kickS.done then return end
+                if headS and not headS.done then return end
+                if pokeS and not pokeS.done then return end
+            end
+        end
+        st.Root, st.Cm, st.Ball = root, cm, ball
+        st.Active = true
+    end)
+    RunService:BindToRenderStep("KirtiumBallReach", Enum.RenderPriority.Input.Value + 11, function()
+        if not st.Active then return end
+        local root, cm, ball = st.Root, st.Cm, st.Ball
+        if not (root.Parent and cm.Parent and ball.Parent) then
+            st.Active = false
+            return
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            st.Active = false
+            return
+        end
+        local bp, rp = ball.Position, root.Position
+        if bp.Y > rp.Y - 2.4 then return end
+        local vel = ball.AssemblyLinearVelocity
+        if vel.X * vel.X + vel.Z * vel.Z > 1444 or math.abs(vel.Y) > 8 then return end
+        local dx = bp.X + vel.X * 0.1 - rp.X
+        local dz = bp.Z + vel.Z * 0.1 - rp.Z
+        local d = math.sqrt(dx * dx + dz * dz)
+        if d > 6 + cfg.Add or d < 1.6 then return end
+        local ux, uz = dx / d, dz / d
+        local md = cm.MovingDirection
+        if md.X * ux + md.Z * uz < -0.2 then return end
+        local direction = Vector3.new(ux, 0, uz)
+        cm.FacingDirection = direction
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 24)
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopBallReach() end })
+    return true
+end
+
+function KirtiumHub.Functions.ApplyBallReach()
+    local F = KirtiumHub.Functions
+    if getgenv().KirtiumReach.Enabled then
+        return F.StartBallReach()
+    end
+    F.StopBallReach()
+    return true
+end
+
+getgenv().KirtiumAutoDribble = getgenv().KirtiumAutoDribble or { Enabled = false, Range = 12 }
+
+function KirtiumHub.Functions.StopAutoDribble()
+    local st = KirtiumHub.AutoDribble
+    KirtiumHub.AutoDribble = nil
+    if st and st.Conn then
+        pcall(function() st.Conn:Disconnect() end)
+    end
+end
+
+function KirtiumHub.Functions.AutoDribbleTick(st, now)
+    local F = KirtiumHub.Functions
+    local cfg = getgenv().KirtiumAutoDribble
+    local char = LocalPlayer.Character
+    if not char then return end
+    local ball = F.GetBall()
+    if not ball then return end
+    local id = char:GetAttribute("DribbleId")
+    if type(id) ~= "number" or ball:GetAttribute("Possessor") ~= id then return end
+    if F.MatchPaused(char) then return end
+    local bodyState = char:GetAttribute("BodyState")
+    if bodyState ~= nil and bodyState ~= "Animated" then return end
+    if KirtiumHub.TrickActive or now < (KirtiumHub.ShotNext or 0) then return end
+    local root = char:FindFirstChild("Root")
+    if not root then return end
+    local play = F.SkillModule()
+    if not play then return end
+    if type(play.busy) == "function" and play.busy() then return end
+    local rp = root.Position
+    local shoot = getgenv().KirtiumAutoShoot
+    if shoot.Enabled then
+        local goal = F.SilentAimGoal()
+        if goal then
+            local limit = math.min(shoot.Range, 26)
+            local gx, gz = goal.x - rp.X, goal.z - rp.Z
+            if gx * gx + gz * gz <= limit * limit then return end
+        end
+    end
+    local rv = root.AssemblyLinearVelocity
+    local vx, vz = rv.X, rv.Z
+    local speed = math.sqrt(vx * vx + vz * vz)
+    local fx, fz
+    if speed > 3 then
+        fx, fz = vx / speed, vz / speed
+    else
+        local look = root.CFrame.LookVector
+        local m = math.sqrt(look.X * look.X + look.Z * look.Z)
+        if m < 0.001 then return end
+        fx, fz = look.X / m, look.Z / m
+    end
+    local team = char:GetAttribute("Team")
+    local range = cfg.Range
+    local nearD, nearAhead = math.huge, 0
+    local awayX, awayZ = 0, 0
+    local threats = 0
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model ~= char then
+            local other = model:GetAttribute("Team")
+            if type(other) == "string" and other ~= team and model:GetAttribute("AIGoalie") == nil then
+                local state = model:GetAttribute("BodyState")
+                local r = model:FindFirstChild("Root")
+                if r and (state == nil or state == "Animated") then
+                    local p = r.Position
+                    local dx, dz = p.X - rp.X, p.Z - rp.Z
+                    local d2 = dx * dx + dz * dz
+                    if d2 <= range * range and d2 > 0.25 then
+                        local d = math.sqrt(d2)
+                        local ux, uz = dx / d, dz / d
+                        local ahead = fx * ux + fz * uz
+                        if ahead > -0.2 then
+                            local ov = r.AssemblyLinearVelocity
+                            local closing = (vx - ov.X) * ux + (vz - ov.Z) * uz
+                            if d <= 8 or (d - 3) / math.max(closing, 4) <= 0.45 then
+                                threats += 1
+                                local w = 1 / d
+                                awayX -= ux * w
+                                awayZ -= uz * w
+                                if d < nearD then
+                                    nearD, nearAhead = d, ahead
+                                end
+                            end
+                        end
                     end
                 end
             end
         end
-        local groupCount=get(3)
-        assert(groupCount>=2 and groupCount<=6,'invalid groupCount')
-        local selectorCount=get(15)
-        local groupMTF={}
-        for i=1,groupCount do groupMTF[i]=i end
-        local selectors={}
-        for i=1,selectorCount do
-            local skip=1
-            while get(1)==1 do skip=skip+1 end
-            assert(skip<=#groupMTF,'selector OOB')
-            local v=groupMTF[skip]
-            for j=skip,2,-1 do groupMTF[j]=groupMTF[j-1] end
-            groupMTF[1]=v
-            selectors[i]=v
-        end
-        local symCount=#available+2
-        local decodeTables={}
-        for g=1,groupCount do
-            local length=get(5)
-            local counts={}
-            local lengths={}
-            for sym=0,symCount-1 do
-                while get(1)==1 do
-                    if get(1)==0 then length=length+1 else length=length-1 end
-                end
-                assert(length>=1 and length<=20,'invalid Huffman length')
-                lengths[sym]=length
-                counts[length]=(counts[length] or 0)+1
-            end
-            local nextcode={}
-            local code=0
-            for l=1,20 do
-                code=(code+(counts[l-1] or 0))*2
-                nextcode[l]=code
-            end
-            local tableByLen={}
-            for sym=0,symCount-1 do
-                local l=lengths[sym]
-                if not tableByLen[l] then tableByLen[l]={} end
-                local code2=nextcode[l]
-                tableByLen[l][code2]=sym
-                nextcode[l]=code2+1
-            end
-            decodeTables[g]=tableByLen
-        end
-        local favourites={}
-        for i=1,#available do favourites[i]=available[i] end
-        local chunks={}
-        local chunkIndex=0
-        local selectorIndex=0
-        local remaining=0
-        local huff
-        local rpt=0
-        local rptPow=0
-        while true do
-            remaining=remaining-1
-            if remaining<=0 then
-                selectorIndex=selectorIndex+1
-                huff=decodeTables[selectors[selectorIndex]]
-                assert(huff,'invalid selector')
-                remaining=50
-            end
-            local symbol,code= nil,0
-            for length=1,20 do
-                code=code*2+get(1)
-                local tree=huff[length]
-                if tree then
-                    symbol=tree[code]
-                    if symbol then break end
-                end
-            end
-            assert(symbol,'invalid Huffman code')
-            if symbol<=1 then
-                if rpt==0 then rptPow=1 end
-                rpt=rpt+rptPow*2^symbol
-                rptPow=rptPow*2
-            else
-                if rpt>0 then
-                    local value=favourites[1]
-                    for j=1,rpt do
-                        chunkIndex=chunkIndex+1
-                        chunks[chunkIndex]=value
-                    end
-                    rpt=0
-                end
-                if symbol==symCount-1 then break end
-                local i=symbol
-                local c=favourites[i]
-                assert(c,'bad move-to-front')
-                for j=i,2,-1 do favourites[j]=favourites[j-1] end
-                favourites[1]=c
-                chunkIndex=chunkIndex+1
-                chunks[chunkIndex]=c
-            end
-        end
-        assert(primary<chunkIndex,'invalid BWT primary')
-        local count={}
-        for i=1,chunkIndex do
-            local c=chunks[i]
-            count[c]=(count[c] or 0)+1
-        end
-        local starts={}
-        local acc=0
-        for c=0,255 do
-            starts[c]=acc
-            acc=acc+(count[c] or 0)
-        end
-        local links={}
-        for i=1,chunkIndex do
-            local c=chunks[i]
-            links[i]=starts[c]+1
-            starts[c]=starts[c]+1
-        end
-        local sorted={}
-        local k=1
-        for c=0,255 do
-            for j=1,(count[c] or 0) do sorted[k]=c;k=k+1 end
-        end
-        local text={}
-        local ptr=primary+1
-        text[1]=sorted[ptr]
-        for i=chunkIndex,2,-1 do
-            ptr=links[ptr]
-            text[i]=sorted[ptr]
-        end
-        local i=1
-        local seg={}
-        while i<=chunkIndex do
-            local c=text[i]
-            local run=1
-            if i<=chunkIndex-4 and text[i+1]==c and text[i+2]==c and text[i+3]==c then
-                run=text[i+4]+4
-                i=i+5
-            else
-                i=i+1
-            end
-            seg[#seg+1]=string.rep(string.char(c),run)
-        end
-        result[#result+1]=table.concat(seg)
     end
-    return table.concat(result)
+    if threats == 0 then return end
+    local cross = fx * awayZ - fz * awayX
+    local awayRight
+    if math.abs(cross) < 0.05 then
+        awayRight = st.Flip
+        st.Flip = not st.Flip
+    else
+        awayRight = cross > 0
+    end
+    local away = awayRight and "Right" or "Left"
+    local frontal = nearAhead > 0.75
+    local cands, n = {}, 0
+
+    local function add(w, kind, dir, half)
+        n += 1
+        cands[n] = { w = w, kind = kind, dir = dir, half = half }
+    end
+
+    if speed < 9 then
+        add(5, "Flick", away)
+        add(3, "Elastico", away)
+    else
+        if frontal and nearD < 7.5 and speed > 14 then
+            add(3, "Rainbow", "Up")
+        end
+        if frontal then
+            add(4, "Elastico", away)
+            add(3, "Roll", away, "Bottom")
+            add(3, "Roll", away, "Top")
+            add(3, "Flick", away)
+        else
+            add(5, "Flick", away)
+            add(3, "Roll", away, "Bottom")
+            add(3, "Elastico", away)
+            if nearD < 6 and speed < 20 then
+                add(2, "Flick", "Down")
+            end
+        end
+    end
+    local total = 0
+    for i = 1, n do
+        local c = cands[i]
+        c.key = c.kind .. c.dir .. (c.half or "")
+        if c.key == st.Last then
+            c.w = 0
+        end
+        total += c.w
+    end
+    if total <= 0 then return end
+    local pick
+    local roll = math.random() * total
+    for i = 1, n do
+        local c = cands[i]
+        if c.w > 0 then
+            pick = c
+            roll -= c.w
+            if roll <= 0 then break end
+        end
+    end
+    local ok, label = pcall(play.request, { kind = pick.kind, dir = pick.dir, half = pick.half }, speed)
+    if ok and label then
+        st.Last = pick.key
+        st.Next = now + 0.75 + math.random() * 0.45
+        F.Debug("dribble " .. tostring(label))
+    else
+        st.Next = now + 0.12
+    end
 end
-local alphabet=[==[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~"]==]
-local data=[======[?/9f4iG0)z4j^OScRGXbL(oD43c~B"u(B"B"<~u(SH4DC"Bt2OLqzkKCBtK^[eD8WhN=@Bd>_NAA=CIVO_mDHt3rSX#)ZCAAAAoI7vGqcADAwA9xFQb^[E9t+3o(S|ft[Q..d_Go<m~!*9V+*mQ:mqhrE7PolQk;CVhdA:mL$>i%q?A![u8T>KE}Ps%0G][r*P3:@h+(2`p>z!e&4}%;E(bIB=]?1.9<RjXsMsfbMp/eZ8K&[[(oZd/~et[1|=?="3L@}W;<Q%iB<Wdu=DI_3m&TZMc61>9Amrc*598^XFn^v3:|K&w>ff9@1}!NXll9K|1(6<A?ug@X|&a/>nV{;rAhSH)%<JTB|<Q:/_d#q3UtCAz,xhNTh5fagT*pHEE;9p8FGOE]`tmU%&sNAAAANJAAb5R:"akK>32PSrt80vYKzedC,v*V:;YmNFpp$wcI.4hCo3XB#UQ0&c*GqhrP7;=^E$rmKb}DMl"^bT1/+]8)seUI{j^ZLkGP,8+l^1_1}f$3_W&o@k0/4m9*[[J!md]8+,cPQSx2{Z_WdAO{"A$wNHT_u?xW}(lBBtDtGAAA{W!5j/wWcJ]9DAAAMckn:m;mE;!<0~^PP6~+`;W0@#I6I7DH|GmGNAN/k.EtBABAMc~lnrUgmM#{tA%$KprLJjs]s)(="Z.qP_SmMnv^l6{.e?6CAA0k1(:f:XC1+U;|2I,{z!AJj3Q0^e{=!X9RssLxm8G="x"mrmRy1(xfYK*8*f=Tr]Ye{dTgj8OkmnjnhZA#uPaT(8cTv%:=5T_=O^W<`mI]+kB&@ZepY|vhwlOHS]%s18*8>B$L&:bU!.]O$;|ZY6t}p<6.5{f""V!XrG?(yW=AMcab=kjlFN879!N|N5Az_:iLPD;Lo"xz;d23ozNBNAy49<BtAAEAKAbS_tTX`kTDa08T3OvVK,<YnXpi4W|6bCaSAAnzbN+Zim^qhHVAAAdxGAAAAAXLvDiGZJOua4/.K.S2U{CixLZ@V$cH[0f"<KFKlH~F]W5F6SBAg)*Z0S`vW:7P&V<F(Bour_AcgW)}5)mygI!}=80hv|eVJ6!*`n:KRQO`B"<K,skN_%}|B3G71FqN=r=DMW^{1}V>~sQq(iT[nr@~5a(5@9_R@iBUN&<xm.VY4|DpK!FW?~B7jz{><z7WAIAsOU_E`=*>l$R^aMX4Xy:]bs6^f|c1e#3Sr1{!bvCGqu[Q9w4z7!nf*ZP[rLA#*5dSyz;*g)oa=StoJHF*yGMbAX,+%ZbRtY4O_tm6Akh#C1zuG6mSrGH6=uMur6MMbR!xGdQH4Bca`yoUeZuE"d%kK3UHuGZ0[/Y0[5zzzZ[+uS!4]1#5QmTJXMtPDS9:U2"L&*3vcM1i]D;+O69L{v,RaR[Mt0gOB#$z/xlj:kkt"uJYBkSJkfHk"j06r;s6Uv>4Y2RY#k]1V,mEv+[Y:Y*([j#8sS7!5h1mj_:fmTG6"uvi4ahRI[Vj@YWl<:fvjdN5r6tx;#$zH6[Z~kZ0>ZBb,GN640+Ys6?5`1~cHT?R"Q}dt,/LhMhw0/+0,6kX[6z[N_{$@*{#Da}v|4x]V@F~vm];,olJP@)>zrQ8n`~Z4G3(/`PDhx8Q+aHV5+b^WLf~bowCwyX%yH*~>(9~T]2;At`,5XOl;D[;x>@78rpr^u2d"IA#.tL0FbjQt5kj$}[{dWS&f=SJcBrAnb~Qpz5x_c5(WA84Acgi|XiZ~E&:QQ:9Bjov51%Lzc9E_sK$,(#COmkqnUBiyP.SE:DDWXIAY^(Jk@KAtAfR~W8:!M8vJ^g"q]G(iys,nGl26Dc>t]AjYKlyno>YYBURFd_U`A$wc|h:+b14t!Emz%;JfZMROt/`^ChYIX=vQmvzZ==cYL,!_Q/EFlL"+=(bLl()*0isbj"4pV0XXI4fQMvIwHK:~T:Cn5|ht=xQ((bd/V{4L/FEH!OCwEtV(nff8t5W*1K]jDDbz7&wwoGAfczIMpHG,Qou5(_PPdy@k=.2dWtNKa^BK[r%+B*HCTqTWX}])l;v)yo+z(Wm)"eul5S57YMwsDzU"p?;H4AtsY8~>&buvplgoY3Jv?Q;5aT5ZOFp5FzaW]F63n;Uf:@Brs"=V=a^vjmA:n|?y(1Qf[$rng4Cvp7;56O}U;Y*m09qMmIEsO%u#Nly/0sigqd1,GI/UEdsA4:Zw,!TH~Q,Svenl`;&aWG,0QJwSk}HOb>RjrMa&99z>+i2y7=0Zb{nRPre;y6*i@ee%Dig4ve%gJ;YqYM1mO6RqhIU38$Gs3?[&yFyHM4jFb7dIfH,^59P(%.j1TiD{Xu9d*W@nm|uscxbkjuYM,[0MT"dkDMMjR,Xwb$?F#AK&#k_1meCA>U35m)TW{:80wCtdS&|WIkrn1|L#U)J;7W`x%(S?&,A9x~DOcm:=X2[KUk$C`GN@bJ)YB:RfGX5&l3c].9gxWS}4z96VQVW9BBGKl/9)lnuAM0ft].;c@<vgPJJRDVPP%urTNru_j48Jk~8gamgAGj+D8Yq,@48egU5Mwoxh%s6kn"(aCF^{c<$;@Ey)w9RUa<iN~a_{_%{icyTRBtkrJduXNFr02#s[6D.4U]quXC:~5{}$2#5m}0F5]~|M/~@mT)ru=V`Bo37ju49T!(ab~t[gPC?4]Ql_mp3"}d1qF@!s?J_Xm3o>=?&.l,Mf`F<oli1^%1^%O!S@;=U]LvhV4Z3M3_[ElIWi6_DmmH~z1:@|4{f$=8Y_~<O;*#4>K"fO$UFK|8p!*&p):[3)p7fa$XWi;*^]!yqq,#]D7J@Y{GcM!g|LeZ{r(9mi&.fkdu@N}mTwK.S!r0e3{k}37^qZ8B#MSs%J[P>=q_u@pi*3%Yf3/.pBI{*?+Rn`?E9;L(Bph)]YS.jczGL5WLSv8D8#wz(<Vo56R0@Bb{Z`&^L0mzlDVS5s1UNOhInWuq+z!gqKjMk(s*;O=Ay.MmWw3swZm@+Q^.VPx74a.I2V]z#x$o9A6yE^f%h}#BYEbM(npc_p]m:fMq3%>yVw5Pdz{WTx/g.bZ#!^x;l[P[YE[2}{jodICq<,9;(A{ko*L]fHa(rY]+=S3pkh6M*)sZ(J]k9kV(:1FIm9}<kzleT]EP`Xm>=o>D.5i96?k[.nQwKdb*slCM%_sU/,{<{DFFe8lD_?.>}g{ndEW[$+3f}U{5rM[/FJ_fkj9=b2gf^l$9/r6Po>)ukQB5F$syO`#z<p$h;"|;a]{|bej|tXY_^Ahp&e(;W{5=vAk1jpz)U]4c0#1SOM0)c}_QgJ*/k;RH5|L51nHOk<2Oi;Z)H%L(dXuuE/1A"b+s7vMo00E72j0r:.Bh*[fvq}_s>}&*05!TcbG}3A.D=(secM@S^M+<9rw$y#BlqL;VsBUN@NW2EZVWVi>9t6%"9cP;W+B;r`h6]1/8sb>#jo[lJ"3i|dWYs3s/O3gyDI|xu@;09&JDL=3!@>Zz_jCBpOtYwK4L^SikADi!HyK=>r2.4.[a.Nx6yX5cq[Q>u;>2&$kjejH^,7akYrC4cTC+Ma)sB;1W0(/i:IX_txur1#;~/f7*j}muX|#E>YQ.lA?l.,7%C3vz3R&V]WH>U,BpF6y$><;gJEmFC]q1tTqqY!n2>m&d0Vg,$*Oi<0xaJNz#&"rDyQac6xpcI>bCPS0U?mP=v6Ums^Zq,m.~{)jB|bv%p/ifC2o2905(w*o}#RJ7nw`hj]:<%PYQ#8qYTX1f3*U)?q@;bAV9/h7#1>;q{Dzsu8G%4F.SQ=$JsZ1wSFE{8~3IJh0T%%1%QT]^e)2obd41lf{ycE|eoe,zHn&u.w;8F=|NkllNuaw;Ue<CT,fSltTZu_1<OOoEVm)=oIv&c*VX:IPD|p#,d!&cBEx5m)bnkG8ZR8o.m!cue3]Ifl$)a|H%pr+7NpCr<?aUfTm2Is[u+Lpo%?neyCl)e&=`7bE<S>"mF$dfOJ2GzJm%fPSzBga?#t9ah=^S$AVjSS_.e#8Pe/|)Xj1Be+Ysx$#hlF?,=~DlQrVB8{=4#k?5[L5wSEWaN(U99$#$pulhjP%>POSB2=YoJ2?mQ4&nw_;<[cHM*amtoslkS&Ck::z7fg0VRoJD8xdGlA=!0zUh2[un!{gYa{bnR1T4b^yvl*@{U4zwOzC#@eRf>K4?y<Pao!|]edq7cNreK@%1f}pT=*|%dsrbdm%6nw#p87@^sMOxqq9h&98jF,QVIax@:0oLRFigJ)%#_G&9^[:%i0vLfE!bZV:AGlF"{<%kiAY;3:;M>y]>H>:BYspn,PeawP5I3N^d9;O~5Q&<Of|{0NZ~@ah{j!U]?79v3"#*L54I@n2X57kaCs28|P|JM,Wd;%|Mrofx0$1,V&.*)k#jvP_$|*faOKfFtJiBC{6tVr7{L5WKJ,i@ldP9<??!!U_"3v|"d`9d_1XEpdm}#2&X5Cd82lJaTh0jhInRI.<%>w(F1cnN,!B+ZU>d$K,B"HsECC=("u,J^4Qj/JvLPGR}u|.4m743^JrG&F@^u)b7&?+$rc;X?^|Xpa{2s9Pflu%c[m&LmjZ|[2/wCZ*#e9x&yqAK*jg?j@K#dmTo].c;/oapZ]jV~&c|LW_5fQ/fbjjG`lf{o]i+qulUl2odKi8ndX.Cp/MlPg,*r]L5L?;db)%^8"pG$v]5@LEK{BcgPf}P9)?8T#7}S`2l[|#LgXUHn6=(u*4v<[baP!.?*>q1esX5_n`$SzJ^a_R@>yeY%lydKqZQ}=Bf$Hs(lRk)vr@<.[Nev+LF=5Svm6CrgjxY~*,gk1Lt!6TrK1.hyP[V<|{T%)~MyAu`nndh3}GRIRMXgm#Urb8@YejcNGYDcnj7$=X}e4l4&E~`dKJk=6Q[nTm}z)K5$f>Jo:UGp,s_j_0A1"`1=<5YP+m+lzaAbp2SQ!Uf_`XEdLVul}^Ck?(A,D=f.wQ2d5QK#<nj6)vVpqs:^xaH>Bly6pEdoK[;Nh<TYnyXlHtSZ$^IL;#avE]hLh`i3i0Tq0JTQE!xe!;4i6nkHDE`22#707o)ng>$ni8vg/g$XxeSSPl#o.[0HVPU$a,[!8;qHsWI{?Kyvw|t?>U=@Ht2P`,gPWgTN0V<#7yC0f:_y3q9eubpKB{8X$lf71bq>{#)[[3M}cTGixqoN%q9&r@o@a8q:F1<eCd{lKQ9;8^tpl1VftEFu{xEUvv})2}Nk=)UfdK@y>U=O^:"B6jFpM+9`Oc<jf$W(c1!TMee,B,GpBq3VvKJK}naVHQP&MKS4OsJT{_H[*#exN+;R<V6b}y,:W6Au?$[Sd>etb;n&/^8S1fPOP&(.a(M^{:i8(xB7F&Ymf?p&ZbK!g0}itwgTZ@hgn6usv7m1QU,KeM|{uQK3t9N]/d#QH}(*O5El?,FPX>].;1m9h.`<pjH[~hE~)Vya{Iw]}AP!x0Bn~[.W&))6b&Uv0ely^fC(|{UT?ohp$"Qd&e2lf)#jz4::efEP+i:#0Vy#K3FW#1H.|&57|oyF3)Aneru~~H`S4ey7fUB&Sbpw_^i2*{`9,be#u&~hXN8eQ>Ohy$vExSC&9_J*j0_D>V^T#zl*4U?`%kG}Fl%{|21dB$$c}00dY^kb{OfVXIQ3LK.T&Pn,1/7XsEU&Xp4jCnkfj^+m~Ea1xXop=^U:_<^iKud$zY(i*Mg?.NM6H9USUzTrjM%eC(!bu:LYi9q3j,1$uRObvdaaZKU1B_i[$GP+B8Wio]L6X`c"UU|Ugk_khfukEpXs,:gptQr;`iM+yS%+zM7zqP/ad}cn@`fp?<v:K(+adKp;o+1=MnreUPRky@;Jp7ek"Wh.<^R2nmWL1$|5C33sI3(;>x_ePV2;iK)7V8]5DXAhLXJ}Nlpk[Itgt0koL92+:tmgo=I=|u/x},p8J(C[]z}1"="CR;$Ld4bsC=4u*!l!&bt}nOf6p/qIjzrt9vtZmOf/NSxD%y_4"?;lG:zE"Yzx^X*TfGVkIleCaJE!;wfPJ&Tn<YN&mmO#^YD.Z^>|SynTC)cv5H*`=Af[!8H3He(+XBNbnp(,?c:`AXN3Eo"^BVN)?Wlp)NVhM""GK0)<jBv(bF}lgVAY@1?$x>uW<6S)!Q.uF0&YA5BG<&4;Fs&w%U_RWg`q2r=[00P}ZxR<ewgCjm~cLlO{~!53sk!Uz_=o$wxJ8981({Ghj"8I]gI@oaf(s~1mxXg_i#2e7yPKf<b*N?y!W*09mfY]GlwUi,qagEEGnUMCsjH!ZdESpfOeB!hk.z+xN6D$/+;kJG)jJB]11oGK0Yv<Lt$U%E9&]z}[6^.#v7oc$8,8D,&+ZgFl3ox5CV*(j>r(H]<98`*{wLPcT_KhAy7rH{_ru2ER7:W7E,!#H0f|R4OLpD}kP@@5YW;qe&NV.`/)d(yXAU20!H?SJzv@}qGh@s![R:x+|kr>9{55r8(ZX?o[lIn}4:+7TZEcJv`j#9zH[SJJc[E~lr]|}lub#KCv(KK,ho]Va$tX?Q}x@;3$d7LaZ1/(?gL<[R0p0y[n%0Y[HJ[<kspJ8lsQkxQg8[=pg_a+<Pr1MAES,{ZljAQtqO3Z?J%=0Kg=_}B>$0XgDl(LK4/m&hKpm>a(b^5V+=%V4a%<T)W.=ghH7~<Ua*}.AsY_Sr.;_8Vxv!gtwqioi_>Q(+c~YTu(2=6$M9%Po?TD4b;VsXH&p}YoOF?,8P<4j.NmBf:!|X[:($eOo9e`?g`2pEd}*b^Es,&HT[xs,{h#*~3.>^p!dk`KO@_uT)N*Y`tdM@xe}sR3|.$t^ssxVy"z4K:vE,7s03*f<N<rfu=cyBiq0E|Q#Q$xKB=DL(s+5GSB`np*3Pf$DP~EP(jHK?!>Qi@sl/^u&8;Ug)E`*~nC(&/PH/HcL=7<3Foq`4vswDA%Wt8Yzq40lp"$}KRHtShRA2)%zxt(>:A1o&rC$d].|Na5(k;sT2t/Ju.s!%Ps,x5dX@s!}/]C=VWWR.PVqhw%{6O4bNXf!4+wj`j_"*M~${E1uqfs4~WpcH=>2bRsX.T!^odyRxDa!I/)[|3(_Uzis~PqfG>bHMSY~`UJh[M2<sb}&{]9!;+K]fN.wVz@pmqzVfXT+Hq5*RvyItED_e{nlhT$d^BBpZV]"hV(%Cuy#/6e;k9+FMbxy2)"w|I^KRc]l=Fe2ElJz$a4zV4`~WKvwI|Ofx)UNUVC]tlJS8}l.r:bLQw7<@Yz{B3X[y%58a[GVx6dAguR6j>l^`$xzk5&Wt_q?#+vX$;Y=s.OZ/N]O_K@gY?&9".wN"vM,7TwFB(1*B>`zgbpDi6O)]w,1wElsTep:$8GRVen&"0wVVC5FnTk+>!qI<#7zL?<I]$Q<[v^IK"IZ`zGKl$Q;l{nr:m[Gr@ZAHkpHC(Lm(GthqPX_9~sI+)bk|0?EKoP"+XW@d~%ocDDF}1q/xN<yK1tS5W__LO3JHP"au6*z%lv&![NN.YuC~0$Z_$U~Ek>)e*#lbQ7yqv3A?LX$2ETN7&vW2W#f6M<8ujKRD2IzeD2ZdXOBCtyJ(aRk/5D{.uWk<^a?G@tWPYF6;f;:W$,gk{>i[@N,#O.m+J&t^XIVK?$O=q@~at0eYzfY,Ntb<u*]`^tj*DIU;mK!6X*}Onc*5Wg2XLKL!bK$wD+D[x8c}^f"pfz3;cjJ4m;HSS^SQCUtkUPUi,Gz/EHCwhOlfqd%fKe8iZq_36M8hsy+:OjhZ)HlE(W&A:vjQ!S^Xn5QoRtWM>EYcyASC1x+"?u*nVY@@d(i38myy,}2]p:3ybR?q"6~u|>Rw8_S@Nc7s_p!)Q>Q".j6BkWsM9Lx(|$dh7=Gwh|Jc}5j.U+#G!<_X0seB[~U1z[Acb@)_oU9}7tH2uyP0u^rQ8&Ab6L$Abs7sUI$zCDHX(H7>h:0s]v8kE,2DzWtsE)QGP@6#@X/_]=bYco_roV&qOrKf{B$a^y""r|~#B"xd_;E~f{3{WZ,}.]Th7Nb?roWLW}CcC8O(/x*Kc").V[6W>|p2}ZO4&rO^gW^Yt~l#jF8_L;4$56z~Tr(kO`0Va:.nsL@M6+t7KMPGf$H~J0bF5dyFJPJpc9D@i5X[=p)$guU.#(s.5*FXV[glqsXB8pez$WXOH!D,HnH_x>u^4/+BJjDm=A4$H7f/CaM9#5zt<n<RLv~@w!wcuWoRS5ZRc4FB{O>i)MZbYL)w,:H!DOrn)FRQVZyW[9naGBT/`oxO3(9<?DKDfRbAZm}X<0qoFBHN{urCZxZxIHZYeDbfJ={)YECii"z*q)bBBt3z"q=PL(]X~BIH<_plBAk|O&%L},e&W;!d7(%WsWSu9>M/*wdL.WBp<AN:Y#4?<)?.V7KC_U%mzq#?1%PzXYjFdWk&X7aL_|sW_~U[<&])?~#&(B=|=W34XUcL$GLId0rL}1^,[DhZd^)MT+TJ6#<`LXEDb@~#/qA;C>@}Lr7Q[n;!"&X]BQi#!7V@W#&w*D7Y$(VX=#&"=8gj%[n/LaU/y4uY_9$BTpNP23?4"oSr@pUrn0*:7i}?h:#UVH/Mc!;CH7EA?dB?5N)3x3oKYB3e:wN/xN@%ucSctA;<sc~4kZ6C"X4L2}Cbt/Ro*T,^}Dd*^hC*]h5Lm3WSc]mz_[ph3)Q}0$a5d]rUVE1m#&[uhl;!fOYmQfBDZXZcfhUMmXOk1Ip@`PTBw8WiDPCd$LnckHQYKN0Xt4dZHB1(r!x]m_,tC965E>7Gr4&%x3rK>@E>0);Kq1ZO>8@5d5nKq3^jY7j>v;sMT+#6A&a.Qnave>:=)O,@x+O:3p@W8]o:Os_q;_ge"E7IIz1w,~0TiV4jq9%pFmk,{.c}&PMlV8v3f>b6cU8O}2oKtLwZE*BlOr>Yj1Z6ebUPmb(&%E1m07a>X_q)*#B.n++lwo,<or}%dg&8D)jR>U9bLp{lT=(7?eI,1&(/}Dh6x=(V.(T6$%~p"jEgl)ak1Th.FdWYsRYvOz*Wgerrl5]gpR2Ok{]#=N!P|mov"p^5y`)q(pRSVGS}jO+g_G`70lZ53e[R3)AGK3OgQNZ_5IB2Y39gJWGh[iAZN8c&f?Q;9z5@(f]0{=I2SQE*S_VyVv;m/pZil$1Ig=IWFta0iCDJ<2{166/X5SZ:fH3#xfMp<&A7ei4,JXk}&luOD5&A:3#eK1Uooa@Mlel/.j%Wj8!g!xYszf`yR9.2w;$o!Poa/T@Hgd1&6.$!X<WpVrO}5xs[Jz{i*!Ne.)Dls^1Y|6jdG3z_=d"3_";3fdEn<6cTh%hTe,~,NZHf&nRIMaE9A%{y58XSvdT<]0Cr++8k9+0ws:DH]KvvvrGGHrC]7#($lHCw~dUDxHFEXzX6C&i0%b#K&#d(?D;Hspp2jOGlS%Oxu7oG2Sx,^yS3x[~ec3}I.~_Jpo*5WQmhdKU4iE)`k*g0(kY7S71Xh.;IGBmG=0QRT!r.K+VVf7#m1H@c"bWtA62|vMKsXniLi[iq)4z`M8W`9K#UyWvD%WwCIP0Z26b$GdvOtQuxHD8Iu$n@NOeH1q|sGip29U]gZ@B#gb%._{@<ric#eD&"[hrEk+LqSM1,v;1&>`o=07.@]<IOZC*Ter?yI>ZoQDC7nA@IS#.hzH1B}Kks6S?OV/8h#F+$}Q/tqi1xq4pI5TE2mP8zq4*{K=H;9$Os,Eo%5q|$[PFt4P!"m+=,i!hYc;*h$&q2!<"3jIuATX+C?C)ul7{EyrVWAoAM[YH<k|uWo9`l^cyb(ImERz]j>IT)bqZ@I7*BE$?Yo!dlxp@$UT%%,}usNVhz4L_?`Z9SPBBL~DzbW,gTpj)k3>OZSUGEd>>]>_J8Ws6%jAYGmU:CQCz:uvM!;z4Yady9<ao4j="mhI&j]5{crkR=HX)aU"{4*yt8*)q]sO?vdQ6YSDRl{+_cpW<FeXya<<#b{R?29.b4Lr:1sBf_4d,Vpsn?+|r]=[h=FT_K/mEx8~.~p6eT?~w/3XuS;wC$n7aYywvhNrz[U+7>ZWKWWI]|t8HzB2w<=~<.Z&/|)ZM/MF)Bvrn8E*WE&yTs)5~o?QnWuQdZe<OOJ&jb"p**e9H(5c^bS&1=TYDR!=2*IP*/d=DjG=d5Wpu]DI@%:~[t*/d"6$X_#g_geV~&AO_7e:$VZn">hkE+SJL);&r}6CZ_+(9R~Gy`[EABg]c*uYy!8uXR=s&byMM2I}J+rLI_F4^,%Q_fJLD%Vp?qgB<(9C(8fHfx3O.]2GkHnBR!GBJtZtMS+[8=F|O9p1fB(GSK0Erq^X$A9~:V>d2(p>ac3Li:r9UQb]i<~h,S%T=wE#|,9xc=_W5l*Cp#qZw#pIGH}CEDMcJ8VE+xaDC1%sUC++zi1[FN,X=*K2[E<gNoGuKUkidf>/S/C"~vpI92_aIG8DhvHzdc1)LIc>hOrPBJ+SEvXW#H37x(HzkC{>>bG8c%VuB2~T&XMzE!AuEmIuHQ(m3CEC<Ac13W{"Ai3I]CJIHG.EKhF[vD;(nLXu;>zH9a60HJHaRHk=y8_K=={+%g(o?c9F)L7,dLlme=6or=~?@PCLMgb%r(ltCrvJpzGB?nK8qz|.#?mh^.nT/1~2%aE*,;TAaUH>CVjE?<9Bl9gP0cXBec]vQj|e#F@ThAm?q6gR|uS{hvktv.@htH!0_J#%t,bH<ZZG@6K3X]oAV3C:OOvMog5dtu&pso5+DxrBrQNMP13ke"TDp/+{uiclgf9y^:BwQtB:W8GDM;a!We92zsY?ItS.AM_MAGriNH}vBQUuC@{F8[uQ1+eO2uBD*(zKwR#:vSCE{q!?d/]aE)KhzT+7eEvZ.d[Z2]H>%@2CX#8tY):C"$CUFkt>FU!(l4,ttBDj+#&8LW~FtZ6Nt7}Emk%ruM|nJ[FN;m1%P9+$klSzl{P#WueH={aU9]BC}P`M==st*Fy%p!{QP.wX)3)=5,sBN@|WQcscO@fGK&g:)RSVBN@Mv^3T=t`X*WKjaq+ae0f^F/S+*kV|ps506U@UlG)i8_R`H<C~@2<BC(Po!`uCe_1:$27oO[jOcw+ylmJi>rUh$P``Z#h}},1Fe)ujvB2OK"")5FkE|~`T&JNmR7rQn@"6(.#z7#=j#b`IJ%.mduw)idM"A!p>m]p|Bdd0nxLv<WF)$W6[2h(">iAh60/zQDZ1<mxtQ=iYSD3qdutir$2/G:o?^.Hz`K)<uOCa8vmetvB$Mb~98MEup7|Hxqy}:/w[y;Dm`&R=!(^)WAp=4NP/+}asM~5K.~*eXc}VzWSL";hlD@}bh"kSgRc~g|oV/1~&vEE%&srY8[>JTE~A9#_PQD%W<MAE>CJ/KjCwAYNqT)p@][!Th3lhS!]#_~[T)M5d+@Qx%gshI{nr0Y!*!7Ks{!C#~<,ukzTXjZ2O2eyhF(mp[<a#JLMjAe1]${ye;llQ9U_5mTbT{kk(1S3a8*C_G_E0oLE$Uy+^vd(6"<<es^D[>3D>=pClju~mX}}v{3{(yc={!!ZW@x=nFIr6IwOSkH)bo0bnmM56U.9`8iz*Tst$[nbCaNX}tzF07@o7crI9s&4j"r38Ise=z<orooOci"X"lD@?>$C3#5q`X,)(*8M1PDOC^vQAio.0D8Tqmhb:o^56{4z]n/fUjY!?9oB;oaC}qgd0Qc([KovmeU3j,{3QnBNX8s/Nz$*P9I}rRX]O6*M"et)aF^CUTH%g$GZuE6t1aqWwX|cn}]UUS;2g"/@uFa4m)+%~JCosG^[:Q$yXQ}x^Br/^e=QO"d@M)bM3?.az|oa?py_4"#,M(}Py*81ApS(T?Uii6i*Q2JD>!|Ur*?z,k4zR;kj~@2Php{iU{g(hnFv56]Qn5sSfa`hxm}CLdjg;=q!wlo=6>3.$g:q5A74#nJ0+;%V>#/ztn!H&bylz4mn=3=KX]`?S/xRMdf1sLQ?_4dwORYFMy;:l.2DUJgghzo_=&<MgZ_$nGI(@?.9%7&*;v*a0h,U;seRr@T"^3xkA+#p,x6vcZ>_^lw^f!4stoOoLs!=/;qx6}ITDf=n[HF*VkBiXzPvZtzjl_TU9z$k]$8f4[X]W|Zn5O8J0J#w%~tr#LFdvigBe_vCdZL@7J!{x4a(wwf0S~OdDZ8LlAv{N_jENp2nGy;E9.+.!0{^m5EEK/u)H4Di@VA^PnFF{+@c`%x,`/{;qQ,H@DhJv_/KCEAwwlTMADlezundd]inUYYuu7AsocW7tWVUm7Iq,;ual0G+F$!TXma>+C.?H~)E}WE`S^Xfv1/U6pRZ/gCd67Xtl}u[{QB=4r`7s+x<4V_I+<;j",GO?]Sv$}#>UnmXdz#sIUTUd67:F`zsS6e82W(/8N4eT>*?jHMTt):/LZ3LAjKEFg3$%38J7xR+R.)@O|kRJPkqOA+wSJboK+RR!Me<Y"@vO51BQ9qB#BRa5:yG{zLkdo0`0[N3d1R&fgJzL.twETNbC|vlx(^u%MwBb!GBBI>sATNvf(H{jk:=F]!D3#1LaMb`,zL|,!=ntMyUnc)LqAh?=nc"f#`nC7UL>zCOZ%Du6B=bD"!5I.h<wb"OG%/2On;l*#4>HA8*EFC;"TnT[Q7rfdf#laPdIESU%tTA[>EKdao+gr%N;N4*3"OLCKtSC;u%o5`a(8gK|R5]`NSJ&^E{[6y]AZB^XRc9gb>]z]yG%f8]qXhPN}4qjVc7<bCE&jU/~J%a31fkR9o`S!1}^O=|&z9Ps!@Y=!DbA8.p^o]y)Fs@S?*,hb;z^qTSk67Rg*z%<#Jk9R^dap*]7_+.lV]d9q}I($/_/w15$Z+?c<x1>l$^1nP3j5xGyZwr)n,R0v%+#3,p*.J|iW,P988_%0,@p5=BTg{O0|p58kSTm|=6HU#rYD&|%"ZU]zrP%8OB;6djkD503yw9{^s_rhB{4>uqim[R4S&Ls.,0kRG1BUKd~a6.E.Of3Gh+?Xq#{i[C+vpo(qt1e8bpe179QhIQ}kv<!:@"<1<{bwaA[[(dxS;^I&Vix3rBth=YA4yQ+C6%uuS7:koN>wZbC=.:R;Q[F`Eck3|8:@GqnnX$mz:b:%>yQt:yo<Y,#fRrtMHBwLC08"t=Va0y[ipO~?m>{E+AUFKacy=`4bCd?&NGRJKwxM&_Iww_B07@uFsFse:4K8]a.7KR<:"J~HvX2xpE)nL{Eix!RRwHi>C@5w8RPmMLCR!?D2OqH0wS9)XnoSCNH=EAG}[sXb7l!I!!Q+NasvRHRaU?hL1Cc&8&%A,"VzV.<;)d6$PTFtAF<72B?ZAEb)b+Gbe1BrK_y$Tp9"[/1$I}htcaYnNo6/Ic0wG7FdYn!i5lz64zKL^VsiP>GYyQ+BlEue#8f`u,(TZ|@,Od.E3F03@Gs*svn]Y5<$Ct#b..{;EBowQtKey#;o_}6eoBzGfII}9ox[wnXGw=h7IhQHD"(G`%|gi$j&r!@aQLCJqZI?Ex`+@3&GHq4i*0k7kIf{P~4G:A!"XoZMc+$%TF$FB?U^M<W$v/1#lC5ayHtiNkfl;X]7!y6/2*`P1L;<M@JUN}QE{F@.5v{U+wAhWd:<Op7(tGaXK6h;j>Hh^1^eU<=j"RRexIYJ)^52nPo^;6Iv6`.?S+Dx`Fk8X4W:0}?jD`!;6iK{mfiggCG{b%Pcj7}x=B%{z)N]"V@3*lRmRxBH6qGAJ01sU_pp=sO%z+Vf9W#7:)Iw^WMS@eZM&8Q?)Y|)vTQ[]/eP1>Pk@,sRS`(.p}^m]1M>Yoa%{czrGbwK7Uk^jyWI7OBq_=bg*916I77K5P5XXD:.AmV6EW0:BNt"{<3HvV[Zg1Z_kSfM<$NH}O)d_,&w9&eXqYlKM7bxYVO~6%I6hRQ))qI;KA!%P9Yy1,}pF8FTHkHXN22c"`kn!hx#ebYd@<iyDWw!yt#mw)j@CI=c:*(?7Qy0K=90#{>:FALqRijL@g!bjqR*M#X,MFYygtu?J9}~h:/pQ1G}RkNd;oEUc0DP)bx>kUJW%kMnhdECj00J:>&aZ`yA<^q+)k?Mge[27mppnHNr|yMYhBEnX9!+&J86|li~X.vS*Ky^/d5wP2HrocSu"gGna0tx$wJ5r;J>ZM|Wb$$B&@MP?bltUOhA1}pu/,*wV3Rly@:fM<:F{lsFdyN$wxc]M0;HiIY!q"CR"._{(ZD*ggJ1qaRvMumPBHMY2#DF8:[4!BPN<vT/XG1Fag`vi7k_&IGQ0AAbp!d!y7:imP=WFV=Pxy}lrorGUsiT~!@%:teB*5u(.kD:y*v|z|Gll;t[9hfGue%FULg{cbG1$P}R|&rdFYxIw2xwSL*Y$"1*#8#iJ"H|OfeXM)jlYtlBkivjt!WPPP<sU5clM9l2T;#y]jVCNw%`i?{P9?1Z>x7::>SECD6xduOlXi9vxOYeR{21N#vRCo@izWu3X|L$C.TtMdtThwI/Y;A4[j/0)fRFdZ;p<%b*wz%;kh*y#nrp:e?B9Aqa3h#k2cL9698J$6J5JRUgqU%$`s>KU#xijMHwx77HNJw+Bp,K_oO|uRP^D8nv_1l.N"BRO6KXG,a!fb7k6j+[#qMejjn[m{?p2yJKgn**,KNplEgTd2!3i!+KDKZq">qn*B_#Rhws4si0SOb#OQ%.g7lTI`S4Ejj!kK+~m@W"JAj]8ISe?!_DUQogGAS;*`n%uFHBE~c48jH<THT:S%4)zp5UC1WNXyuqBhe8uX&pE*hFvmW7W2Gbd?SpNv?O/$u|Lnq>5OFTmKT2n@F"Sl:WC`chCK[9RTYJtNALE!C9J.Am4&C)x1<Qb"~Zac~7l>;x^i1c[M~zWnv5)Zd#aZd9L9?ZlF4R]A?To@<HBWn[!RlgL64]N%c+u;aFMBfuO3;,]eE6`*&pke1/4&I|%BTsrusuwy@:NGR4Y$yaYF[s(}}8r``=]xCw^shW^Sq]W`NxFW27Zr_[(GZM<%R3|6paaknN?W&Fyu;QMX/Y8PieV|wHi3ZN?{0:dVUfQd>C%S}Voy/TFmFZ=c5^=GCG&5X1$1^]$;=C0#~[Ves>D9Z*yCnG4icTslT*yT2Iz4=ryi0_b_M8OK!tU1]^5Q~R|gQyKo_cZe/:@E}Csnt<1D[LK0F4hh6$2B,AzReQ=/]/JCw?F(=*8qjK~!PPDdq71n>G=p=2gQy$.|5|3v/0=DK+)r<EFsl;6_^)ofMm#@wnyF`c!.cuNOrQC[]mmhy}Wya0G;k%4gMIAj03N~ePB5R^rNjCfMOvW/mW1g[JFCXCKLMd#tfIeC/V5EX`1k$c|@;4hc5T3A5NNB5DZtH0bZ>tTWi"<r#.WjV`+t4066[#l4?7t^LiN1&MQAlznM&mQWNC$E.F&i8<d/{jma@YiM*pp|F1qo4x+f5XN3Jn8{AD!NEoca&^9_qJgw+}PA>;*!!SurmEz@HqZqtXjH"=M;9P$9s6,FW4g3@}}.2jVJ$YRYsR])tH;XW&!oH}S|ot!i</Hd*hQ>lE|$lEnfbF$Fy:(3zXXdEN,c%$wt#}>"D{CCATDSMQw^v"yM2bkz?a=pZ1Mc,pL:G*+)M~T%[{L2"^qLos)m2[DOXX<{K6n@2_*UO=PuOUC]*bxh}`bIWn*K"l%Xq,;J!/&G:T^bYf!lf%S+&z01@1c0G#i9$O|vN*dNG`9^0:K>a|k(*LRwp((")/q}x_*u4a`mq#S4mJEdA1kLg~6FBVTlg68f:7PK>sm#*U"~vKiBb|pIaSCG?|r$0U_`KwvuO<#r!~u1O!l7IrEysgz&(o#VQCA&6LI`EXMzN8CTVb}`USIHM&;+,!33UZ)2y3__un*e$"$w*%pXd}OS`([}&i)AUaPC"0G8yPNKtz<UlsqD@6iDx,#J@HO=swMkycFi34KCV:EU7R8}jv|._rcqekE;(m=ZT_mmJZ,Vm:NpFjU9!p7~wKw}2d1;>P}GC`/nH/Q0BWdAqnuDaXx?5*hn@EJFch`T+5W3`Td!py!WF|y|;+09)M@G6`SNHO6,tJ]EEOc5|"hObZL(dqtV7t=_dnMiwW2ztBtQH2=EZ}n!=0D{|T+oVWk`ZA^k0B|HB7&@npvYz5b"^F`CpltY8_zqya#%!>.LK_@I?)T4PeY]M|e2PRxYd^f>N,a1F?zGUShei]?(?cmHH9p3;]zV>Sr,Kp:&Uf9/ftQjlWP|`]48VO9vg]nvhU!jf3c#xg]t(3oc)3xe.LTxiKfDgQ4pV|o?`DeoIArn^MWkpfvZ2PJb:)GDw&.]VWs{g}h.+^DT$]JW9W[}.L4RPb]`vWQ8b?(3DPW`J+Kr"%Ff_P3ZR2qp#^[g^NBX6KO5bTz_8]Z}:3+XP}Plz6l{B2WoA$J("Sm#LpL`Nd*zP2aM[}Cb*ZX[HzD/BE_2g>Y]n<g@RY`I.[{imAuz^Gx*hMM.bA)]v+ON]$kW+<ojG+mq2kv6N1$^uy<{5@GGSO!M3Wz,hUiVpOZe0Qm{ux5$05W;G.O7d3H*DkliaC;4%q;X(Sk]R|w(/q!^fux.Hh4x#@$]Dciae,!6oj2"k+MtU`s@68%Q4o5T@6qn,+9dNAydJ(!e,v?#&jh7:**,5h.=^60b=rO*0Bd("J$ypJGI.H6E)pJ6H1m;WeYlzktHEJNX!2*,zPi7g{HX6uB5#R/Uf.jLxNnue+jN`}@fHvBCJoZ`2YeU5`I"h&R)qh!P8kb`Im}qS(p2.;LAYE<{M40_Qfj&k[n%NBz&N71Ct/LiN!Be5CAx9HDhIuSwncjk#gDj5*Pj/XaPk)$0DIX@>"y/c*_xLa"2`xD(v=4[o3L(@<#OM@7_"St:uZL?$[RAh6Uy|us`!m<oP+]Pqn!NB6y5ZO07VNp(HT//F[WwCSJ+wJDXRL,+]uJsLgLjtuO:5Ti?>5G9nAUKi;:7#[1AfL)M3c="gF+}w$23g1PNP9S3G[7}LaiQ^X4rpd|k%a%QB3xV7ti:kj=`W%g(;pDA|B/g|/rM~EOn}}VKE;s];%e}`~Qu;TkshEI!mU1UxG2s:d4k[c5Zb=QUwYrI|*TGnP|9oYbVmKR`TWg0L1QVy8jc&9N>1L@{x,550y:l9V5xE%_,Ch.50&DT.^e}^g$s3o0wlx6_s#3b$$%/^&sWO^|[+0%n+`}i@NW_T+`1v8Y`;CodbK|;9a8Co<bZ2Q>YCQL)@ChvK_^e&Dr:3YhWnU0xIPK3.CYf.:8{YYdby+88=[;mzK`V<Q_l@2W~>[qd>.;y=y@VcmUS4@F5HKx6Ql4pTm^8>imbyrk;S2bt@v~]r<v~F9F4cenNHjw~Fd#ZBPo(tYL[/[1mE5xw[Yqg:}g=./]qeZsb8yRn3w>YmGQIh@d*fDxTpZh,y0ly%=X3`E55s.TPL=Q[A[8kBfQ@?Avoj_Hl0{lPR%4u1".c7g&aJ.Zr*qm%RT_wk;U4`Ey=6Q[$IL;Ri<~sP3i#fCq?,}?6l]a4N!YE{T+ewjKdNij"l~[8~N1"PNkn$X{8hcj+O^dYVCki@iF>9AF_2BQh_;$Fq.c|mNS:{uIscwe218I,te:?>i.ax_w62RZh3tNRycUP$FlzBqV)*x)FL6<c:YRhGBp}_#:M.B1sYp!dYc^~UL/U!+]cKDt3NpkK<p6a0{Uh]%k.UByYL.M<y#{P97e=eWP$l.aPRdkvh"+RJ}Zy3n+M6>F,Db!Q^+P_r>W.{fedzQmTh,Qujo>Z,zoXTAK|OZjr>9{(FTGWPa=igh`=NEP}_|SplFH,16G*9`OgYvGC/=;ACfaRrG.<Fb#%c&!US"^Oc_pZ1x6_T#XjWiwgwQcau)>>7veywvu1,9n:f2k]u0DNl6DmGBgnuO8mH.7]I?g_<(f)0qW/7HUPN}@"{m<P9ED5)Xz`)@Ju77#T!6FB5CY~4Q}:oqy>^A0(SQxOrd_tQ5Tu$2.l:l&?xAYn4@P}2`fQM;aGBLa,}g;>/i*dURRQnuOuL<"i!];,<Gef<]Y5BAe"_DlFP_Bcd?UZHi2l,u0?RZ7;CgX|nVWbBsfA!1n)F"zP__#+#}#?#X_b$K#3mX<L=|$)tTa#k}O8oO0@Ugr57xAxLL3oiWo04yN/ha4aDOva"!v37g35w`iEl.!lvrxaD&NIxyPPT{u>cB.x.ma07:n?GkJq|wrYy.]lp!X3RHd~|(1heHN#W,,*]*kZ=?UzO|,uOc0VH?:ZxQP.!{hsvj`Z!_nlvi2;lOGp/_XTeeaHbY>!GmQQ}VT4Y[Y;))HXB|2/F8I9w>MTiSa`7~M5ehLbfNEn/YG[Gwjm/NlFMVlMHb[SO3{@n9zj=pTJ3!Z>G0idex!H%V+N.AkjmX>;;qiJ*RAGaPjd#wSld|L]8it?ZGmxAuL,h%TcMBBf0:xc<$G!l37c&nOo"IKe,cdMUPO8.LvryS|8vzQX&iU_3{<COo*A`DIDA1Lznc]U)gL~>d#z({H]Q7Sm#$4oe}"K8;*%c9^^%b$bg(wIMm2;T0d~%t3*1/$1>AhDgTMt1[1W06BFHBI6F+vkRIYH"<77W5(bL[_*V}{68"dk=1;*?y4PyJxx6hn/@9aXot,ehp5gykRA$;rL4NQhG;Q{Drpmf_T@{2r5[.ri|hwD[~i^m!q.{_b<_N[7Hsi`ov3MOoF{]doa$}d6lbIn{Sy%{/o;s67X:#g?]dM,>2]!?gV>9be70DUEU9hGbcgo&/3c^dpr^m%)J1K59;:;3)7".I>Q>s6X$A6i<eblS#N0<JsAy`!Jn;xPKbiUb=]cv">[<ufrm9U;pO.Zvl6gc3<aC}*R9`1S*awo,<&s)j&TWYJB0N/sBMvqF3z@n},DUAT|vv(B[T44VVNU[)zK/D(a3j4ZnoV`=8]l75&9,G=#3qF6?G1fZ:7Hg6ll{U+(1c>&h^n[flIK{eLk~UMTZ3C0__]_Hjx^`qbUEydRU?J1Bgz@^z%]xu$y<sO`&1!KH15J6`IE1720rB?Fo~X~dT2Pb>r2,&VXeECSpQ}zJkK!Il&]l|7Dl^{J(#<+k;:{D^GIL818h&v!R4KI|)]B.x,~m.wUK,#x0cF<xa|+6uz}qw0_48d_pPe5]BQg(<gwX^o)`4^?N//j6#8_ia?;KQImYo1Gx/C6vD:mm4jHGW:xZ6Oa{|arLY[_^hh=]_.:t(msHV$uY.l.[`TNk}4~17>^s2^DZGV*spiBS9gY&;4<*U,<{On$qpW`^C$p^pAS547I2<pz{;2lgvSah4y|SBi>POPl75SJgc9{;>dk)eOAe?aV{t$G1x3oksOT#3M!w<Z]1i9k72@W_FyyeQ|SxF+b+xe0@zoZ=X8"#F[Bl6oQ#%&9&cKJ&E?;xeW6&d_>1Gt%DJX<w;+IRK4_zbxgDqE}H<y^ds@PR`QgOda=13om>"AX8pa"j3q,&IK$S%e"A!dJ^!@FfCZ0AYDCaJ"3jENu#0Dk;87jvmcL=8ED6@YcbE#?O~h9Z]FDG`v?W.*o=<h_gZLqBVX,B|`PjFjZuBlsKYnh*(mQxd93unBy@Eig!oIBy{>#D/uWay&MtNlBtVNA$Du`DhPvN{"HB>Y6I6W5IPcnfgLeY=i<yM;DN!%iC+cfE?],PSOz+g)V,8P"kwps>EI1;BdWfOlglSGic}1~:khg`_U%:")SFLi;PEMWPh!`d(F]F@@}6x5^#FRzKkGWB5wMvcwZ%#L<7;UI{;{BnP];#N,8;cnm^Z+R,<;eo/@jH9OXj?Ptx`1z=dMK>60%)xD0H{G5Xq+Hd4_P]Cg^H8yX5q&PN"2n)lZeXefbYz15)%*Mhb1io?}$&X8f&)yBFfj3iLAf"2R9FESTwPb:yQkiql&bO|y;4l^G<v(cEBIi/xp9JwD"[Ff0"!{/;F2d^3FG[Rq84[|^l<I6Bo.*Gp4p0}|uB,n1J)AsyTN+K1wlA$u=k"/Vt^7q!>!_LfHe$8uFgUD;fWtE4**Rp{dd5%L+t9v[4b`Ojo+M{?8k3S.X]g9L,)868Pj1o7/(lE5%Il&*YHl&?l;cBr;U.4ocx}Ci{)K2;p82y3s>=@l7{Dne_SX$%:p$e"Be`<2BSI(<wai%{h?_3v;Iq(E6XfDY@(8$duRP_v.6#GIRHrQIUDsl(i#jrN^jmN)q=M3A2i`Csx&Z%:V[!*qxKlQGVb7c9`w(8Z_qQNrdvq>Mrmg~KRG=^9=C&M{`D~_X_59Ej*QZ{,{k{Uyg8EV_gD(^.b~|FHD*$<v"#Z{pUa}EXUA"sX{SPB*n}"L)@wHN}fHiHVLpmG>b(Wlph}d~IY*M~Fc2guj?"]f)d00wJK([8P.Ra{3g#z#Kb"4Cj{P]FfL~X:Wf;VHwc&cL@H.&]F&y>ScsYe/YcGtZHcY1[$r$tzle2TE8sP$Y.sE+]]r<lcUYwcJ}](g]lp:f3wVU*(R14pHlYoD:1F6CeEwzpB&BnT][=%Oe:]ZG6/T7LgX53hLbNPiaD+EMYdbzts.uCI/>M%GYn}v~PI~w.FQ;EsT"&uvCep@Ar@;uln~Pi1K6|pMXQPenLCshJnt95^WO2U:Jxn~WE{E(,6jY[.DD|d0>B{*@j}V:oK,iFK|w9.&/_|q[tR1A4G5h1OSi;x>f,h86o%,J(lX=w)L(F68mdC:lL4N&y^y5LgPK(Iu?r=L5[P4YcEm1;?J,EQOXZg{p"t8T,8hdlT`Zh(Qrm=k(#p#AeGwntU0CdszhMt?P<HOZy"X6FaLK`=*EqgH*GFw>m77#,[#m5JMQ:x1LReBw?O2+tFX812R9E@us1IY^tC2RREeGH`C393Bu8E1Ku5}xN7uq:|5u)C<LRPvya8,a^YENb6Dh!G22&y<c6LI?xix,,nf*%K!,a*fRFqX9SFX6eE7g%~D/D2$2^iR4ZLS[bFJ$[s7rajyk@>aoRu{:7<FwL{(,,|1UvnBed%4))yI&kXcu487~%!M^(@md."0LO[k01_0:OUP}uzWaD|DEf#5Io!.N*tXUF}D[Ol4x8m2a4cUd)hzi[}H(xVim52OwE<WI$YAxz8kHGFa=v`kro_p#1K/a,Z#o#x6udl&#0+j(y4L=WiG]4rbsIeZmBQ1>02bf>t,[mf.{U^C0bmO}%!@/=vF17fJYHZL,d/7DHn_J(+lzXjS=/(^SK,I29|yX.|H[a;G:Vx9$%(1K&jy^/s#6Y<gBMIzBJEkfFgU")Zh1PSU_.n$^`S"K/`:Lg9>r~8S7&,;x:0bVfdiap|!A?93?wvUrg$CDc"?&#eIi/n&#6>EI|?=e&~zPQYG.|7j?=`?$N=rK8>ino2Xv9q}Y$u7Ac6sEZ>j$drsF=23$aDMB_hrC+m^lQ2;{g`:!E$H"Ki?o5Cez,N[yf>P75@X|otG%%CLL@h@NQbzjfuE2T&wchJrHgy3%]`NO(2$mo!$`r{eq&davwh@4bf0.D%mt"bH+>TXkeYKGx_o@2dEOk+%5[lpYKjgPsl^.;Tq?8!^c;yf/?M|brcxK#32^Z,meOF/M8W6h#7QFD41JGpI{a|DKiG[R1(Y(i>3RxHsdvnA)(_VP{NGd`UXABAcQw[2SD;uVa.}ZJB<=BYm|//h]}`tp@U3R^5V!wo~J<9<}ITal>^y%r=*~rU}N;C/NT=9jo5$b&1Dj7|qdvt7(e/0Ua(U7S<Ln>]d3|{1jM9EaEiZ11i6S.9K9H;k:#_$%{e~Vn/uNXxU[}pAt#wWt6(H!T"Q>BIqutafH+?Q#X4Am9wmxlJA*w#Rv2CgVD<#:Gki[Mw%o+ptxz|/<1(NDm$WQO)9u9YsS;X&v!TS`${NDzNxp,*?m#E9cicVti|Vh7TD!y[(<47SLCHHoBk0nlX<*DT;g$BR%GlEhkqkwkNyn{J<2Qsp4PwEvHR^24?hADSOvi&f^O3OL9v,16XmDNvW^Xa:$jUlO*.:7Ot~chYs2^R@$Np&x_$6}u*eP~Ml=MNBXX(qGA]FI$SlC)$MW6LC~9VI&+H:g6%;m)V^SmO3B+|mz]rpH4?4poiW}*K0*,(Z5QN#g^Gqi$&cH9^UKxb@EyA<{kdaUM!5Ak7B.O:$.a/rQ*B%<aY2GMyIT2*&WTq5Bx7Z5p&N%Qswx8Lthj*d/flc)z5g=bGeFdxeQR&ZCeF6B<THqyp!2"mQYYFlxG0uCyI^5l>1_f.OxZMuZbQwQKxA8Efj]+01qI&6F0*ZrL*FUER%3Hda{WD$UMtX%;"=}37p}Uq8N_vr&1WF4*IYyWYCY@}5e5lGEH]F/(^Cl)HXv=bDb.cr#VAqRg1js7wWeG/ksyK|Una9ujwFaHi(wThUBqX6S!`CnQ.2[HlJC:PZo,aI%Jd4gKqf<amu9,W:+$Mr/{2T2T~cPC}3t}z>r2URb&d3~AJor{U#Ce|HXW5_ApRah>Oy{pE&N>?:}zAk`euw:&lonocn]T9P%{.SD!lk0]0her2$OC*^6)FW=djBE]1=LIc`NrEx@3wecNptPw}pa3xOSn7}nKd@qrb>".FbsFENJrQUZE#&kFT+pYi^wr{jihC,pkx%|K<Q7Fz>Ln,LEHfzyW1rB@1qi>n8L9UoZy1Q3s&Y6kP0/mbU.iP4QSO#.%<.L6Lq_1;=.nAdM_e&NXvrcB0`!Hz/pZ</O#d.m+f!7,kW"8yh}*"zAULux]g:%8`|#jo=2yUx/90sYCL,6x[7+gB2@7uOW*yed|ByUiqC&hw#uMGJYD*zUcVRta;m!"J0}/;4VSVc6D"Q*2"O.Ny@]tRHWu"F=/Y>]V[/XGD!4If3w2x4Ow2h.ic*XzsSYSv2$X[v4wIOBS(d}e>BC<G0c.zAck9K|&;g;{le<&7Ga0?,O&,]7PQ9@?/mVk"?Ex!U@Z"F,u_v|r&y,zlzbZ)0lhz#0J$C}hG%dENy#^BCH8GL&pG@l`r^T?Frs]FKcb~N%zIDeCcfIAviS/@Gu9t{6Xt1yHEAbYu5D5)l<(aB52v5MrkhP*sab6KYC5UcojMCKSqiEMs)0GFlMH*R@RW:<czIz2MvGE%!:Fy]Nfhht,T=zjEQ*dMe(^6hPuoj_w"=tQ(U4d)#b*|/zB^>!k&Ywu~tfq*FXT*Y=1JD0FThO5O"Kss[I#^,X/eSs>)|go,Gwx*aZ0_gJ$tbNY~o2ada^dDYL#yB|e`kIkEkK0xDN5|LyDvuNJ}4"R|!$T^Oru[*<y[BGa?/iG/LYwTjAA<cjZ.T+]?$=.r/A,JWK~p^N{8CkI"zXL1u[F=ZL;E)bL8cm`(^%UanqR.fc%$)"JsO$FwmtP~k.Cj%`z"b63p]:sd+^M>|n:&y;d^}6p"$m~YS`g,HCgpf./z6pkI;gpSpkVyBCuro6*3<k<%]BN(XA*~x#Z}DW#js)<L+d{b%BPg2~/9B"$Gin{=Tx|~AHlJ89{p7*o/9kqq=MZc)9:!:CTj!Om~;!C=&C3FVGQz}`N$xx[{IU[>M)(z=[<[*S_VG~`FbC^XO(6Z@_!d3v==@1]6.SfvLVX#*5Tdegl#{pr)xwB1bU1wP<VnpZ2j(qvnY!(!@gR":RnM2Mb3uv#Tu*l(z5*vS:JGw!{j#:[=G@bf;C~5qY{!hVjz7!cvyW7M$s9HgSnu`aTu;5=T@%o;XSM]FD)=vXA$uDoqVqJ3`l1k43:w:M~F9:7$F<J[:gsF4<J7"`L2b(BY2scmX,M#ucXWDPqLs>bpMOXfkRc/kr,Qe89urL[QiiFsMDz?78cxw!+Mk(d=t#D(jFMwjLfVH}h4S{#}8#jCX*NpQ+~VT<}bHK`YPVt/,R@;Fz@G<~F~xtfr!zqX{[4&|_.A1g_atO4y;(,DGqdZw54~/>S~e_TvS5OLCVXbw0#YHR1?H{6^ueEk0ORq73}27P6gR3gH;.UQ5}kjwa1QKrEY0StZ4D[;CW!!+>Ou+.%Hq[Kw1+>q:a]HSs{_NL_ap:^Q|w`irw&M]hm4)g/3u`9RA.LXDVHid)"rIKu.DJ0P,)$`E]Rgr{`Se~]V^aYaH*k~w8kDaS1*iCR5j>k}]ISM95JgQH5Jpt;:ESjN%h>%e1T:;{7I}8j_MUD^O|)4cb@7qtk7O`<JT:mz8iov}Mn"o]%y=z+s]R_~7K>g1TMh4_:E8/+zg>lj/_^wO{f4fvfZYBY;*TdE,9xYzKe441ZlvFdAXNciLFPHOb$L|}i[<,9bqZoA&];0~uB4B1B2|Yw3tC"*+om.9+#}pm(?)@IOB1k%Z`/[vQFkrage#Bs].o&w}DQI&~_AELIyBYiKh$v;r<U2f[:e/jDjh419a<#.^*TTuJU=i0Ra=pFwKU)JyEhN)@Wab@dFWhqv7)UISn*H0+djCD@;o1}uNu>LQ1@~,od|,s>S9oW>RN*SbnUa|`]r~_7_*1Y[pzhu$&qRg(Gh!gZXy0&s{HN}%cGrmz!F=D4wH"fCsuk66`WT_|6>/6C{b3dy]4S^Lz5jN.3YhY8iZc4ZdHy>{K<O,5_G{1&4`17AlrS0>o(yX|82~.5:XNmq!{F~rD|KPxfu%L8XlP|56GVU1>;AJ{ig%#dE,G:sQ9Xih|0._T*E+6^[&v_FEP$ZWy{<JKRmIO<c/TX_QzK(7Ly/!hp0oOgEvw}z2[>b*nHYxes2Gi9]KW%VL]Lf6C]%y*jh*(L]yxLtBy1GHMCSC*DC4+gy#lpX;D*5A}p&{o.9qg])Yo]h?`Z}n!2jck>yJuhG&y#BppXz(#cK}xjtSP~7?:?}=)vQ67QObdc8Y5tRkRJrZn+Lt_83n}reJzACbml#/w~,z!E@jUzR/]{<s2:mE&GZKls[=BJ[ojl.OJorS$W1B7lfy:3WkA.xxE~U@&:5ezH0"KA2scE;,$LQ3+8DRvCA2Xa!aH1>:~+NxmXiM~:k]?#{n*m+JF+epZJ|@3TmZlHOt*_DI5M(XCXTgif>.^Le#Q]~(,;OnKgiRmOAe7FcL#Z,3=5d)@C5xi<&dx/XTbTtAb9=64J{a+8w,^8kobS7X$PLwpznD]d9%zo45[|`b[{!oY=XSTa<0(e=wyf:ORN(delDXEdhl%XAknMygIR3Dcbe!xZx+4zAE~!Uwq{BQ&4YOaE^wqO&T5Eh5]/p;nZLt5wG"A#/MLalz`QQ<bv[#G0<Pp!QAXc38q*8S(Zed$qD_t:yfY^TQ]|%)@u;gv]tD._mBoLnhBYqqii9*P9lR51R=]O8B%lEvkNXOzg$IZlPCn~X`;~oVRKs9hbq?prLTxI`.57_]bL6cEyT%"kMY^8?ld]d6d.gkop(8&;Z_J#J&~TT>d}52Dqc^k^ke`!sdo9?=]pB25g^6J8ek29]sbiaVWl)H+#Ak)jgfm;t7MbvG98kf<:+}eN%{n}|V]|"~DiCga,pJdr5~9z6M:ZeZO~3QgFPph_^;?o=qi|QWMLP9L.eCf%fI]H`c!S9S{]?UdcUeG2~W2|(E@uKcCxr?C:e<~|LaZ*[v+Q$hLRf%1GM)9H?M(MC?SOE<wE3@;g^*u(R2|ZYrA9:#h?M3s4/CGDu{E+>$#&O`nk}lPjLxlEZ%CKAR,!q<ePL51nC@lL$GXFQc=C`!xg)|`F=>c|0ZT=k@0KUR~*c$86Wz"i)tSwGK{+,T<0mS[f4n*yAj?{[$3:RT1nZ!BKw!~k/NbK]9t0KZ|2`t4bV.GyBOz$dcr8z*CYe%yw.+<xmO]4ltf<1D3p`^gz8o&Skt"c"3zwt9Gr<TvQ0thrLf;ZP5m1J|Hj<?ljh+T?FM!wl<YK=veXlyulCzTa[~xmc7xu(H{WLK(_5uMt~me+TXOL!J+9xLZY)Xoxd*uZ{`:lgl!E<CV<7;m0t^p)c[,H!1~!1{AZQ.Pjj)+LGa|UIfX3]I1$1P_t6gC>=KCv|znM:C(WO+3GqnV^oe9?P74)Ux`AM0^(AxnaK<)_x~tkK0F2b|X6?ruUMU^pVmW2GpeP6!fL3_tY@j0c9Zd[8VGE,sNCm$zwP$0J+KOHKME@#;>ZSyK9YH3@~m=FfGk/<X2ptZ.,`px[}lzU<@GrsKGP0.(8y+5C8]+~uI#C(i#,mAPVv$DYA#V;mP.Dv(:r}9v|jK0^xqpdOM^Q{j4@18oVC?b>H~W9<^vB3RHz+fX5=u!sP9p&@enOkf0KyPl}G"3D.zbF#K*#+RXyRh1?+t>WctiG;2D6dL^?^c$j%f>(1H)[7:0hm7ty^<JjGY}6_;JpGj).|4Yb`k#S9e(tz~F;r&MJBss]!HEnb7eLs&mnI/.RF.~m1nHCNOn)*%1%)I[5_B}J%*>uRxvp,+IcM>K25iL+>nFbev{d0WP/&9!ZQceL[&6;$PGZehT!3C4=btZ_Gs#HUVg{b`x[za#}!to!=shy[F"3+{gi~c3z`^YL>{rJmr1{/6BnC/4Y"u?Nqjnb2d~Yb>guXUGXhtkj2PnhU!Af;CnMDXGeI?yHfjRtlBp:=NJ=.M8MiIf<o<R<&St:+#cje{g*osq&S_2,6Bxc?p23&wXq/YAj>WdDEq&FzDpB5WJrs4`Uq{viCw2}H!c8[jx_$g88P_Jt1jyu>/+BJgEpW<:=7SwWkG^tFdnDM(*q!VH~y"&hi.>a>|Eq>=nG^OZjD,PDNmiPfWKUV*ZP:8w^tkq|hNxV(haUAjYa<kENQJWuZzn5dZj"|&a(O}%*+D,vggqSV.yvIU5j2ruKo%/t"P4X{s=O|9Fm3b9bn.kx8}XQ`~oqBA$Cwj;E2KO>itF,wTRMVhJn)SWeD(Yntr8!g3ol2E28Zf)p{E**M:4:tnSWur*sFyK^[]sQ>|wvkJLjdKmg(+Nu(SnOgX!CG/`xFS`jP2&_uhYfs5Zfr7uA&7+I;]8bAzcVg~Rugl^~Lh<vY>UCsa2"bQ=yJ.],LW~);Cnu~LqS^N0N=EfjWQzOH_rH(43vUkg3W$q0[BkK6i*isVN9*MnlyKteh|x*nY0i?o/C.B;eT0hRon2j#E48uZu/<C`R~ez]jkCva$9=g~Ab7F=M_>kH958~/^}U(eXFV9bRY+?}SQ>Xc9fT);M78RwjdzGnb~"z}TmvH>@HW_nEMg;+e4e,XL=Lsc{$/n_{os,LH`cH!K{{cvo[iyz)y_s[0v^v8(4B,LyISm?B1]i|f,Mf_(Z}pLhBupOLqtMvv){}2$>76Mz(cNgX3A)AgYul{vkXmQ:sl^m:|</`nkp|iHCtjGBK>;h{[}q4[;oyg|yMaB|PMGR_]98;_2[^n*bAl0M}|8w&rx@%,3)WZKP`/Eqix|p[}ag3J]FsprBq6TS.KHpl;seh?7>S;IWt(JXpVR]x9oRj$3+/|K`3[lu[2pl?UuF=|>8fh&MC|c]x2u]fBR=C#+JgzAY>fXtjzn9R2#1w3:(NqYe@|{05uV*vqgmvQ6DpCUIjhyF1~toftj2e34aCpsOr"0u1PouH|+x$dF!unv7zVoj,seswzlNtjvqq/RpGg@^$2t`;k5eo,L.f:ux%%&aB~kEs3Vg`OYcCWKA4E5t>an2oE<~xz1B<6la%lAxI+=idsnjBgp7eKgeH;g8VUqMEW9aG@+H>s3_qLq$qO7((oYCuKmyt}EtNzDgu&Vc(;vF?$XnOctR5X,[Cx%nP)wif$9rQQ&9x<WCl50hzIPp"y.abez!pf_+xRGZf|^{T6lyR`?mwzojCM{Ju:1bL`fH>)mpU2udYMY0/m~r9`.Ye0L1)lJH6pwr0ux.mw%NKlDrCqza9em;b.:Erw<[H#SO)&cigYkE(qu}r<0iXGGe<TB_JIeBFs3]zG>Y}6/5*+UYIZELKdlt>bF+U,XBv{D4n,6uXz.x+]Gm:cq#xIECkvyVl6}B)TTK9MA+X5QO<YWKwQ%R>]i_db][5=WK*Z(F;UQP.&?)g@.>J0zSkzAXvx<qRaF3f40+O!v1X;TW(|$hd:kJl;$jz<0J@Bd*T6?O8<L+f%S=>(%)S/1Wi3v=4l#NXH7ufPT;9q}9),"04WG,5gZ}tA]6L!oWH@Z`{AJVH}d2=OGfX~hrob}z2nNP,0&v4;QAz36EE5LM,AvLX{%m!u&L#B]=DDdDk;>=54;1DXVnj1xoH$FlVd)26E~~6J@9Kg)`m<<vx3Zu^w.fj60=_h7roziaT_]mcg.]XFjXuWD+4>)Q934C`;X$[GLNB&5F*`dA<)i5Yv1`n0|B`jYr55fr.28we}4N;I7%2|bh5wM0:=T3RpOKId#xPsnH%Mu|/d4R)d`U7ztBpE0+6YKDGj9pI(,.7@VWU.b6GNS07?XuNL?vW/g5Z}Iy.a,IU<mUUy5WcqQR7`LRz^,@Z?iU)=dXf#%+wjX,0@w*X2hRo&gjvXJuJzvw)(=%pvusU=dPjTtOK&k"jts2<e!KZGPq1l0CdK&}+:0{d<^)5qBz#CDG8T"DqLn[jJf#T"CZEG>|m6cfLXKjS@DU0xgJjc"9DGvj&8LgELyjZ`!?WqQxzi9dDh+i2/l9U*P{<W|B8x$m06p$L8M(B;7kU%!0W2xn#(G)7mUV/DW>/FJ@id2Ph&+KteWlS]o9x}bQa>c,(GG+SWA*z:6r/w/yJm|@nPOv4jhZ6RI39x0=/T@pLU8cB?y|tEqg8!@H9~/k#&~l>Vbv:S^Y,|^~*5g!,,!5?BxQMhuwl^!/^].n0^aDj6DaUPm%#_>SZo*?G#cX`+{t|"WEu![La0Ck?{O;vLShZsZQ3Z,]>P_k[YS)@8ZB,6l[EXcP5#Z<sc{+,D>BP5_QkLe)wFe6Kw48L9z6NM3H3=R]NLfuwm[ZC:WLeME_DY4(@Dwe3Sa*e$?KCAvHhb7wi9R=F:y@+xk(ZXTb,nQ)06[TMG/Q~Tb2|Gj^sTk7k0w(Wk8)k[Um3e"Y7$HWGwh.!My<c:d=02dv%[Y&K|5(t_KA?:zO]i*Z_3rtF+`nX}dg19}z[q/KrH}v|~Y9qm1J#Aq1700Q{IIcruU=XqQHZCS/Eok/C}gs?WzQi;WA0/KQ~JyW.)pRVkDE|[;1fgn|#nfgs@n7yV$#kGa)|D+7Ss~%2e2Fp,wBVnRnH2]pF^,F;Rs5dL8f>=(!Z%Tf5w=@wpup*7v6j&JFg%%>rh9BvJ/r<PlDbbK!n0hmBsK^W%e^k/B/!ifFC0:cx!5!U$MHWRk9DJxi|r=Zs6Fns894c=KWa9gd~&W<sM~U?%%MLxact|v14h;#LY3kI~?+gBl=<dQfdkR*3)]S{8:JcId8d<V3:e{JT+]_c(/"Lu#JutH$%%d2u}psh#HC^|LI(66S~kX`qHs{T&OcD)lSH98JI{axQqyXkJJF[gt5PT(jL<Ts4*]NG$2b1Bj1vdu0q`[wLxd}F^YlQZlTpPt0:7ABZEdB`Z}Ci*?@HG9lq"EgSEt>}~EJxSoCp9hYjK<a7zr1:lB/N%+Weq+sKCL]wsk`BW%Dg8Gb97.hJF!7HHy_Q@+y&$}l.t;,#?~N^G|V.ImIy"m:8~a~hZca3^Or@`DvOFaEHz0+>~m`(g#e`UkUNKfX0n+9P}1J~,>4m7(rs+>^,Mh_=rh|KEo8y~>=FpT6fF6gq%uP2S#H^a@rvrhVBLWm,0K3#`.KybGNqF&AFD/6M@U%vbO#yvQo&(<9Nm8[FO`X(MFG{`[%>|5Lj`~!oY_0s~fQ3!}#!u<<<{BZYM;/_79?K3jP,2(aF4W$F=hNnOz%tJs]8!C@!Z_3[?v*5?Jv]pr8Yuo;_X(*e%38HT{ggExf4jDXj*)GF>]%rR+Bp2%fO||pbiTk@Az#78`N0(O>Nv^0O%CI_oZ(>uJzBc3)nf1$]M!}/hZ}6}EkCJ,4WrD6|QH;.2$&Q2l7gl:q1Jwzr0DJ{ppd`,|,/#qZZAfoQ5v4LopH+PXu=#L8eT&XX*8s@:;8H7ch)go_u{M|ttj1O_dC#u0E*rQNTSTgdR#{l(K|?h:xRSz6mKzlLsL#tUb+;}/p2h4GpY6wuQWh0MA`h7p0lwz/?|85JFDkU&Z>*/d>nUb/_)2H+ACpJ1(y=Z,n8~l+".E_FYZ}Pj*cU4gQjx?b.yQBjx,ejvt7{G#5@ca9/I9o6kLr!OJ"m!#[%:pL8WH%dJ:O1sxUTO0d*4iw|l,1VLa||}nVrLFHlS%HKw@ao$3QRcd>OVIfy=Mb~d9y^M*t8tNl0dy&j)d})CNc0~4Z{@Xn8{hE`<&J/H@MaJI~)3buG>4x4P#Ku>5*:5d7o*lw11tK)cMIds=^<G#/O.&72HUIi4HiJ_7hECk{M6xoxZ<FP.4KR]%R8Ma`aHS^%)1p)MFJxlg`PO4e@D#ARI02i_I/)U2Nu)t%FjxUfASS8S6j5eBrz5_ddpq?MZlUzl]!.+:S6CGoO##yS"f~7re#8TG?/#7,(T!?eYE/r;X9wh/OFEU+K>1dkPsRYtVfq1[6VVLpV;n^Brpc(BM)`N+Qr.St@J,)shMk,(}!VL90#=HA_v^{>#0B7kF;K^Q>J={8K$9OW.ff(I}/hK3&a{%$u_A(&5ru?/"wD/RUzr!kIf+!J;C6gW<z,fF5IIKxu)E+&:6qvEV2A`JJH$GP>euu#;s:XtPItGh,w/h`c81xwWE!p?lGMC`<>RYu4m>rX7?p=ycOr($#!+D3qnBbaJgQ<`JAt%DIO[/9dLoBUp=QBR/uI+a$48yYTV"JbAGUUgi.j:C"Ys!)+q/s??PRu*qy@6p7yQHDXaXSEa"=1W{`#),Ie9xDJoPXI1(.Zrx>y+s|4|x.45*O%GCvuI3gqb=kh~d.S@WhgM</f<LNk8x%kY)z$yG{:`Y|[eQcP8Fx%zCwwNBYXFDOJs}Vj@Fx*~Vdm_>^u"nwtv^YQOFsyd,qW=pwKoYwj13N<5lj#WCb/)S}OT/g+.,ktb]ET&_uK2}7;GoXvX*a>9Uh]chaP_.Hf+`VEi|(1J%e@H@Rn?4+v/4ahB0#o!,4{y&DcMsaBsJ_>L>qVRNgdk$vmv`:n<)525>2$F,,pp$2;N5GFwd{n:#m&bYp?WGVoQE<]cgTc?0ENZ][HgYOjM#[}*/4`h)1{Y4zm=U"K].tU>(>Tv:#<XH.N)wILE)Ek%v.q&n@~vr9R*[E~e`xM,Oqg%Ax=RNXs}VCAhSAAjV6:X5C@DD9R1dyHM_i>@{ralBh$z[.2J[t,7DixkU!rt%T!5813*%buyqE0xQTVf);t$<p=R5ksOOGBlg|=yHnzlnlgnegc_7Byzfr0U0qXM?NT:wJ!P=%jVjeCQ.I6mR0xG>{%t,UuB@lB8FJG4>BI@ou_IbQKWC<|{$RFr#q+szRUZzk/XyDpVdD;l/&q##808vKls=LB=/JQ:KI:<Cm)>KdCs[ab?oP5*URO*b*DF>}BT?C&Tc2d?(%BxV[2_cL!)tHxbV2!IU7||l&f(3{KC[;_fWEp;;8<DsE.Esn)eXA:N7hppmY2;X:Hp>tmWE(k@}5<)$.ovtNIWV}_Eyx>c|3|4vx1ky0_=$@Eiw"AxoD*wz}xY;;qsXxhcPNnv|fIHh=Ha8T@vP|9e!D%PH1#UIwPuj)7v~o)`3Q9e2zJ85xVTh}EIE.`@WRI>0nlg6*u!p8b;2Vne4qbwLO1V1j/XDw>6Xbh~!)*b5rYks)i4TJwfap!C=c9W9@W#.4%P`MVqp.|D%$e9o[fA9(#TO]N%!>?jwfOh>n&`u)*iu;.7%Dg{o9@+^iV{a9+?;N{0?<)W5slj{XMTrEVq.W+(uD(H)KIO9UW4m=R_~06P91!6|f[!HJ{6.`^M3xg,v$sjQwmXU9>y8|]6:US[Tv]Q)YLv(+BdZU_s!1[obE%+_:v~OK%HPz~dEIwZXL^=CeeCAfuuYu`=v#=aWU?J&H3|x#o@L6m|f+0Ge}Ln$jraSlBm4EHEHbXxl(FMV20Cep@:Z3@V!5u|rP93_WiKoCoAD#kHa,Bgw?BLGMO(^X`7p(MvrTjdJ}[&.G:mBi4tA.BoumG~*7?^3q*aLO"wwhUOC$4X;]zLbWXOnE!e=)<[nj.VQV%p%.z!L[Oi7mN@I}pPk}"Kaypmmt!{Y=.dxZxtBonL^F*>+C^D"j!=7l*2(=vI9OAN$D^=AST6LbxJF~M2T=/S#(M5v$b*pQF"`=&2]yyj!De+fW2&#*h5!h,o]x*qG)Xp}uGBKIta_/NNdt}1fMTwrS?G9b4kuGUKC@(*BlxBV5lfvn_k0/)C5J#NiHHpMmOhACFwBYE9Z.hQ#E]e.t?$xV7K^hz}zh3(QN`H(<+[hA]Z=_@GJO&{T]69jYz{B0tb]M!_wtcyv5],tm$=Z7^XXxQ4Y&)vh"A2CF?iA<0ked*x9>v~Jgjso+{T1Lm|d;q12N!0$heI2Kjs6Vrnmj^1mOA]j<R|:e6MbDcYHgssz~r{XNAl16k02rG?FPI=x)wWNK5[tm+?_,rBz}ovL=w3ZOJ]M^H`A*"LN1pIU2H<cp0bH.IHZ_(_,`O"70:iSDC5W`X_9^q4YljAZvK4(LH{#=C0(QfW%0nWmNBuUN%UMB9RP.y8=Okoqka9}VRfcv]Kv"#vH:[G"o&C`3kH0tVE.$t{A):tL{3Y%o]~OA>DV^Hu>>R!dk*b,+n!wJ+(5%`@StmhZ^OiE%Q8Tw0[SX?goduR?Y:rK,ystT)"9#zJ@SpftTSHm$Two1ZCMq1Xv]QxtD9tN~kl<&e4=H~L1=fhvt7Nb:8z1J3:Yhw4zCp;iN*ffqE}R5ZHRptdncL.x,rvJtigA"L4IoOi5|v]*4%MyNw&F"uu6.w^+ag<=9%?6wOB2>P{5:!e:zmA`s2ZjGkOH/!wzf:x91enS4D36"tn)HTa7d.[17x%zEQqj.0:ygMAz"OSuVc!a|3($$b6t{HKwSzU#;?=IkV3xkGyGgRkwlH/LM]{Ps$F]CQ]h*/%qFs#ZJ,m0GSQPS5Ucfp:8XOJ[Jq,%ay:y1c5YR$[5O19RIU/O%*e:?%0acPdXxmxLq,q!+aLbB(#?f_h)B^Vxb*iOI.[@CtWB,p~ASY:LFyc6a^#HIB|ZA=I8c($dFHZtXS/g3G"1P,$u(*n,nf;^?6C9Ip}x6!<;%b;dMaCQV5X5KYJ5s$E;IPNF(>32[Gm@K*<H"Lbd6GMfix!)%Rt0&/jX0l3Bc7TJ+8yBZXYs^].3bD3xcvgvnXQHSchGrodLC/0KOfon5RZz#fYR:d4aj8}271$VmP!P+,J5P_%;$ecKv@U}<E),,";yGG5cRtGML7c{LxomCRpzFpxD/%BiH>D+>y{dHz5I^XDZytmz!!XJ4W=pF04"}^/2bdf2fdHm|2Ll2fd5"W,u)z"pkhh^{E+TD6k5UQi;9LHmmZ3L.5AGKaxoarPfuuUAVI|q{a`B.km&Y^jv720;abL0Eu;B:L8.jif"0e;DFAejx/wPp}yR(++J81*xWnjP9YSc"0:S:4b$F*8EB?PiX(VQI,iJ,=?[UKH8GB)5]=~B"ThLdMwE.=y60.`c[FXvjf/0aJEBmg6txdv0_7=BT6XzL$OF9qPjMkQSvH2tJ*.a`"E04%kwu#e0;id"cPb4JFDMNEr?wZRQ:;,rO65J?2}RYMTC&7zm)?&:7Sr3Mm:P)wuS$5uzkMBoDa(c0Z]wPbt/1#B5p+s+[t~S,,a`E0iTX3FF/d8B?CDRZcc*Eqa|gy<6.KW0}]&xxRZC5j_){0/WW.oJj&_K!xIuUR@(afT|`/pE]o?m<2V?XkS;Lj;bD>RW@s[X+@Tre+5}:JQ:g^1C;v~y.7Ue4(hP[SD^Xs}JbJlC*JaV~12}{_7>$|b)jqU%mk,,m~yG8UqW"|>K;qs6^lUqv_$Dx@O|_VccI}l8m^9DkddGkL*63bqAveftPv5;<sR&Ah>HJ[p3eJENG5R#c=~{rLXwWM_i)S@imXd4q0I1sgy1O(J,~;JcKvXiXy[SNQ#JR8piBW;}"XEJ;WeJB<2z7XatMO`39THn!$!#byy(Nda2aS)f(6%Am"b/;*jy+^9>}6tkV;#FfO1BuCX(w]DGkU:z$2gd#{9Zr)}a@Fpq^Ipr<BIB]IWKox#iH>_(0|{8[0{.8tk+Sa]u9V|<9a1L<lZ/~xMkWf?gr|JpJ"UHnO]r`UVI>YD:Yz<]YVQLCoVq2U]Qr:>:HZJb*$%tV[A9d<o,kOoE`):&bde]bl2C"@Fv5VqF&&Q]YYHW*M2qGc5U*hcFdK4#Dx<%J?097tHEGaEhnB/odpZaOJH7}9|6setgcYRVez>F/L#Q$Xn3&N3tB`2`^]E{vmKtDt,IV?4}y6jq=.eVj6YofKiK5wM?s{9Ql:0FGfsXYXl}8CwO<h],$&HaxVcc^OG@:GKc|+swqs]GUsPVCyHx|#"K]{SQI<a"Hd,&+vel,<N=yQR>.~yV}`}0N^+=/*m"l7RxUdW;;yKkIE>.VZeljX1.3HLXIk#wjzBlE.T8"p"<K|*;+5]j^bm..4M/u~:#ZkZ~eh[(^Q?vN2cM`?o34{xg.3P|H~=PnHhrF+Txc;cBFY)<M=RfCXNhMj,j4z.qfWK&MoA%B>qOTj2H7g({4<h8Sb00uP^PE%p[mDNqn@*;*^_(`]4n`Z>^Au)xC>@x:Wc79(2UCkD|F?DjL?,|,D@n8?j8tmE#!H&8b3#IjN;KL+@:WVzj6w3g5xJbCRul>Bx6i]%R&s(d3(M6:mK&.;{gAX+qW_u_=ahshw|_Z+e:VrMk|!L^yCro@{j}Z.&a/54g~IiLSS`~E@:Ea|60K9_bt1]~|3VMs+qY0WY(@YiGb`(+]_RoL1{RUwHf?%w@b$BM>5[#j*=y0?"<;O$`QoM~jnsJh4*"/{@w;`?/K{:6DgJD1S<URCy_i4DPtiWy0ARdRtTYzuER{T[R6F|Z6Bno$vBD&ywp@a1{<3bFvP"5hQcB?c@4FBc.,Gu48;yggpg%>.dM*PWM&e.R^fYi44Vyb^Q=(1$^M^bTIrYpUFP;=|!)l01dDje+{)zmO>5mFxVG@y[>!N6McKMbBRN%"QAI<nyWO[[C5+vB2uB(4QE(ded/jlJ7x;WWa6VmbHd2#K/FBfW,qjOn:i.FGq<&9I7U7^W@"lFT5+/(qr7oQ`[?H:ejC`c{.H6fRU%J(^5w%CulHx]%o+eWuNZZ*=7;ygVR$+X7gDKQ.X/fhrZHj}L}.{?Z{c3V;6iG3bS89QilF"5ZLHpLtBwWkA#vyq^]wxLqA4p&[}&yiurHm)Oh;CQK$`0.@Tx9W&ny<Vr|PZK?FTlf#?>K|Brfi[pNS0|omFg!orIfgi`Qb,6uT2eExl]:OErpl}rsIx`!HkO$Unw4_,v+GPuuVMBfN`*4bELkLNNDyc(WDp4Wiv5/ljyE&V>m+;Y(+`@!c~]sbUudX%Mt#LrL95dV<2vp#xz.=:eI(36(oQzdrMCjYQ5CJ^vzNHUz8t9(4dNM{tWmvuQpoG5uE]F(6qTUX!}]i%xmBmUQ9!F6V3v}x.nVK{EI?q~*+C`T%l8c*NU#Cc(v5a;]xD[gJ0Q`DR>/r<`BY6)fI6Iz$n!:^l}`Zv+2Vxr=RnM9n0C`BU/{>r`nZ]mJ7>#!4,Ha5/gm`^k9ms_lu:=A%BoB:F"@2#n}!_n?#TRV1`Q#x{x0kyZms@/N~A$GLkwdj9>l0.n][SGD%$P]*9uC73zRhXl|.k$EWnV~^!":<c,E_>$N@i*TL%I?t]cZ1q(Mi2vhgy.g7zI%U=Ck7oa(k~khe~V!jUE]~4$~?gR,$y+EV}>^1rt[|~=&B"`_t{sW^F,vD*#tvt/@Wv})olT)_y"XTK+ZqoaM[)qC_Dq5uBby,jK3_cj#*>H36>?=G>b;EZ09m@0Nr^E]qr|_D>Ke+F{!&}r?P0vPb4q@2vH=.HRD84v6v21H*.2Z]D`c:u=h&L^bLH!F6[]NZ_bxD(,|_P~!,N/q&jpHo*^pRY8tc1h[Xz!o2zEq)Y|&3s59yajLYd3pSsXC,)Rf&L,~fz$k)!~P[*IfzU5}3]mb/1p7]^M=Ivj(Vt[we;YA^_]2f(l<xIK;SPhL{)|bEN>q^FS[j~|wZ!U^RLi>i"23+v5qtW<C~u_[G^;iptJ6i,L}:k?;E.)vG;vxD,kO3|4Dy+aS"BRwOj;5$R{gxtPy^E_5NsnDNY+Bwf#o{GUw{^bWIRr:2r3kRSROzV5Du"sXHzGF~?gy3D,wzzm%%60Q^+U2(Xx[>}s42ckJ1RnBFH<r5$I8E>:|UnqG(iC`)&LVyJEwtf73(3*Q8t=Fqgqb.n~QESLsMy|>F%wmdyVq6()8MwumaY^H"F]5$cZ0yvbW|m|>wN3v>7UA.~(s!t!$}*or3ni%e|rH(WZ1~Vx~rk;~M|Lsg9RW{El=BBe>l:,.;[Ct!n8Rk5%;IUK5v%[_6/hFGiSKhw}P~32)<*R3*BVR3W4b;&*Y3I?{Nh8e8Vuw@YRD;KidDiZo{qnIU,NcqA?^b<1Fl1P{,}TR1}<0%Vkq(0b:.rP+TL?~LUb0?/RWH<9Z<f)_cV5R&|:/Y{O&ZAPXVriX17WrDhq6c]be%;[WhS?)~"oP,.ldH]l_Gb`^y(@39gh{YRDcT@o1%eB8AeAAAAAAAAuWAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAuWAAAAAAAAFBIADA;vlBAAAAAAAAAAAAAAAAAAAAAAAAAAAAJVW&B"{7Q[n)h_=}0c&OZ~]rUVVT_zN65+;C,MZGH6mtrkBtZB?~/=5%7H.&_d(TPtXRD}HNJd`Gb/Pu(|W"P3h,yM7+3IoR>y;>y1s_kIJ}1|R/]k|4aj/oSXVdS:>nA*Y)~VzpnL3D:[N6EbL,>OW:em,Z";}c*5@qd_mpE#/CIj9LHya&e(WIG/TysWws2O1U;3`>4OmFy{*U$szfR>Mwj?l`vxY:ijo_u%ku;kSi1uL<w`rF,P?J*~f/dVIW?Vqff>f^[;P:v$F2l8e&5`3o9>c!y2qZ%8_CgOlzKiIl%l5q<PGwd~`MPb!*M:[/];]Z3B/A]DW|:}YviJvLiO{4@ab#hB6fS(@B_1z["G$Yo|V!JcI[!D75HW5C+@k(!"eDQ9>VZyb1+dL;lvrXD^s&o1X>$&@NMfUX*x/(FdjuOlM2k~wZI/n&iEC#47~{*KispZUY86MXr38*?yv99~Tiy}:,$Xc[L06cR^""Z[d)3.F*ciK6^Xsy`=OjU=x9=U|}{<I?oztD/rRC)fmbE,V5?8#tqWp!bji8WOMv@hiz5S`RS)NG22M|h4;)h@?Mrc!:p$kCOR9itP1i!u;H/E2xM"]2?W>CQ^B(U|C]gZ6]cbe:U+QqA|lq):z5ye)MNTaqSzKe#}qKwF}Y)k$LDc@S=4z^p{FxU)xb3_ic{_PqJ~#tD_|>R3g65^<WPa[q@lJy6*8+A=lnr[?o)Rx`MWn|rpiIX,E}x^x+3FQ0]).oar)B<KQ|&yGkCLV8vB+A4.N]S.yd3}u4>Zyt7b8C=iX[uhM"OfE1;<uok|UD$R#9^(T^l.c+_>+Yi^yG_K.Q,yCVPBde:ETos#bNuv3G.UmBH_2,DPvDjI3VtW$lD9{|Q[Y*"s_f[r0EXcN8AR/](e"gp+QXfALWc[At`^SRv~hUKJfg_64::[R8]|)><:&m^vIyM?&N;27_xJbr3^e6]WL7BMu^ZX"q/S~B1ZDPYc1d24wW7fDl#D)tvolZQ7ZDvx,[#B7<Vts&XE]wu1FHe!*t?jChqC:n;W2Ao4YKL)CFviMDB0Y]`~D0E%86W=QdgHl1B,^mB*Vhep2Ta[??[m:#f5L[9H1M9)xD9S2xUzo<FCTyr*N#2RdR;>h|lPO6]KWpL]Xquh|]s*1Ja6DT{wWc@JnjZ,R<_3jmmu6:VF!O3cP&V4rSmqs2qkN"VGk3#6]M0TqXLD*P0nXK#P|{^*e$E@@!Z5VD2o@1PbvrA1G_N#UziZe~9J{?C`zY9}FX9llHUhfGPMR,8@gy]+Fn44rO*BPCT~l1Vu_P0)vnhV9Vlsv1!rfYUl4,E)B?$8;uqk/L7Di0DZvG"U;I@L6|8oZx;z1Em4*%wy7Z2_M2c:Xq+]J8`k,JFg6zFBXp"J>[9[(HTvh_d(xA33>PzBgf>W;O>*`R>w45#EO0jNDn=FVo.Wne]RR*St;+}*?k*Z(].&e6s!@RImToP,)YK55=O0=^J[Ya:>!ZQx?Cg3Qf#@n5Ye)ADf//OT@Bv[6EDGSDR5B{UCC`20a|*1&T4`1jN15ZB<[okZkz]d*2N{r7y)eBT`Q+77q"E6EwH=A~XuDtS2jcnx#/M5WCUJ8/>;QC*A<#v)>=NF)F/`{M%D#[a|o(18h@A5{.B%fqjlZ3!wZVv|g,4;OM<adwKgmoSXP8$:8_g:JYmo!"}2P`V*^,PuJgBSO2cGkF=W(PROTS!kK`5*9N3ivT?*AGDD#)N`;CNk(WBZO7A3ny7@n&>VG7%6C<L{=uMHAP<1/?Ci.XbaiY"(3V5o%C|Fzr;eKUKRgG,Iy&0lW:Cg;Z?UmHHR<n4Y9:[*eJ%cA5|HVCJMVIpQN8*S1.o4i=&wS$;lc5XlByD5r%Ftl9m3zGWJD1TY"1!JB8QD"BHp):%Zi1+,C!B8VPCX&}3imECUsvYTUM.w%t6YV|xt6DY<tvFx,"5NE$qmIMAE$<c6j#^(9M|hiTY?f|DDf%VNer`vA|;/3WSb!1Z7:uM#Ww0^":i2"?a30aET[nv*Xj5XF3~{H+D`CXm93+d;(dh<HV;LhAFbrnkjLC6(Lx7RHdq)dH]w?G+e/t:IR+O5cR^DLO(SCG22&U9R@5s_dH@_)Ur0bJ]pmE"+xz8C;ujLW.{(J5]Fi+l7:[|1OE5[_7/#2]"2b~0$:k&<&*<KeM[zHdhtRJwOb3w(ytp(jq0c"CY{"&nk]6<i3kXDY/od=ImE.kC*}Gcs|2)2o}$ru>}dR51H2[IS=Q,hF04H(CO89ZbL~ONo&itVfG}iZCWf|qRC7*e@+t*T,N2Iz6|L84#ZlNOG5R!=`B#W)z@MmRQg|@Ub0VU3t+I}j[`YOyA]v0DxnzVYU@@cA8WX9w<R5H,nvjL+jQ!Z&gYG8{<nZ%!Ub60O2kTi}!X/XH]BBaf(C90T_VLRjOatuyZGMQ(N0/h;?(|XZQac45wID_5,V#w`mC#r]OZ)QI?=Ec?P`cd:hKU5Jg@YQ!^n@.K;^F0O6BS:R)7+!}#Xn]+G=I]fu&+E1^`&,R*D33/>"U<&cVH9k$RvV&Syv!}".y@pZqf5"&!rH|"2dFY%`)0u2JK`RDu+fK9ro:Oly(82otMSLPq~5FMM3B&}~C$az^.7viPD/i5+8*lFg}Ase)4!t^pBDD2::>PY}/!WwGWX{:qtcB~?e3MU=Hn{8lW0yfnmgZal0&|.38p8mNl,Q"JzhI&Lp)m)p1DWV+8r~=la9@Tz0(@A7mf4RR4?t%dgM3L1?7c;`*yPi#U=qd@MH~c+<&R7UU2OFDn)`fr)|U#*0"#z7d:l5j~cOh#kWl%(hLOp=a#LtZ>4/#|az*5o`9r/|=UxejVwu*U<%f=/ZJNkVTMa.BT5J"SijNmuHTADBMOY{dMPP*wTD]Q%xtx*LN5wyeElo>S;T;(2Q#<<cE.O.ugP^&?xI_duYTKSvHT>tt[t>Ib0s:Y)A$<.z$&P.gyU@%g5;!zIBeE(D,EBeERz3]I7fAZB(G7H#VJBSJPL*Laxb=M)g<I_T3pn6u`ZZFeUf[m4Vr>2K#d<LgIKG$K>=#KsP_p`s{9O0:AW[l=}RF.Xp}HGf@(]?Mt40U9FU[A%D5W}u@RuB4r<u*xTIJ)Lw_m0A?Y_uyY~x)0,eBW[TSJ7ou5[EfXn_,@J}!idv/.<w)fvp=Izs4<c.Vy!]>wfOU]+@~g)2WR$!vNvK;uCtw`riBTKf6JY1#4/_T*v2!~K"T",nz"uXB*;s5bv?GfTcR*Z]tsv/mep/K}XsC+2qe5M`x;+<MlBYB;,;poI3:WE?]POGU!<"DD|F<3%Yc=p._8I/Gs04E#_6i<>RdR=D3z]hY*Jtm^:OYLOb=hv"H6BtR%TACT%%cp"iuKDcjLb>M#L?ZK)br8u[5hZ!2SD;Mk?^JJY/aEMPB8w$XMTZ!)PQ5`9x<A8JbY/,&DL`N/MvCkX>[CJ$ZQQb4"%Qw[v+:TzUYemi2DKp=K/Q35Gr6s00Y6uwOo9.0V([<lmHPZw[fcL_o{0V)^@SK1_VT?G9X]I;h,"/h1Z.U~7=lK)tE)I4If2r"u:{q,0}E?/AJ0:oa+ozi"),<)WX2Sc[Lnr2(zX(A{MMDYT1*D"sav=Eb=ekgAlmUvCpnn>FTX!PEIn}Ic?;F!w,_Bdgl]5=#V5[}enl&"IIaGaj:Xg:lq@sA@DvXqItE+@K5ec6@7U:NhCwfNN|_j,:OgYkwqa07AwshVFfr|/nBeKelD:uRH6m6UoHY{dJyR`Zx*yq6tx6yk:m6vxbb!BpN;z;8rT^Mq4WNVHN$EM.^8Gsa0`]`ZL_@_<zggztN`9S6:wo;Ier+X7|mzHWA)DGp~W:.B[I;3U8diw},e/Q<P#ERw<~CN?POavGW=L+rf8!?2d6"3#LVYw*F[Q}::ui8[phPB4p||6vl^}0l:z#jO!C[dR]C.jdx0}r:=/$@n0(Pl)|SQFuh{WCbeKTITHuHZHtIi*?L[_$VJVP%hwl=yS$B*zct9x!Yn#)LplFJbb(FMXVki4Lz`97B28<MU)Xutc"J<v^ZRYO0}xOJ8Z%Xxv(2rS4*@ia7MnH^e8xK`Qb%_XQvd~,#VjUYMIi5H,Q%`g3X&42/q)<?jJ)46tstyh<c&2NByB8^58|_)tasi&qn$f_y_Xn}A#sKxxY)w:_csEc@ht5?a2.2;9$3i,%14IdaR]UKXc(NOp>M~TUy[:OIaR"1GKy:OlkCObG?dxMCO]]CME!Mw)V^g?<fd:}ky(W9lok@Tq}YBkAYQ)q^8Cov!<vQ*<MkK5+{"%`ppU#DeEB@MmAQ0o$swg5FCv2wm(w1YV]=S`Z3~AZ`Xs8];X=f{zC;%s;oCeCzKZ&*Qn"/=uy/;$1|ul@_JGZPndO|RyiN1l6IY$~vPPw8E"oOv&6Xu?L0yyu]}K{}L[!0qix54u2[bcw,_}{}ZE1#Sd={K,Wu[*+6?nk4ai}Cu0,tG+(I.)rn$S0I_wWu}jmE8&Z+J5w>*ee_Unnoo_Zee]ye(@u1>3nY_Hecut9E8`Fy4S>bI+0mMxJGXOF!FbS*Rp|,1?`H{eJwDa2(!H=G,wHj_EeXA;LTc~cRh1xquZ5w+Umvo&3SQ$wV1ymS3=+zZw1xtRnAkcqZLUvL|Y5G`/hzXdvH)voV}4v[jVdT~`kR,jWxEBNF$bF"0MF]F$`DfG>R];ra=e^/KYVN!:=]j%#J!^R+}3]L?CmXnZ01l?UzSj5{u6UUV9UZnScOkCy9{}zcKvxKUt1=hrA"^kMpEZ{RwNkBK48k{ZOLV.,6wsaA&H8nHr)FgLad;Quz}+[fnU"e*yg{Svrd4iM(gx>H5~7R=}w$hGRO#olBEchgU4`cA^i]7<Z+[D;5Tkq|([.2t![S@}p#_hL/]*vceAXiqkcMQrMFWI{f?Oj*5@Y^a?~e>,VDDyi&zl#h}{S{wVGqL+6Mu^TFU2`0~ZAn;uJ*cva~(eG>`GDb334BTONpBlro0K6<z}au2o.~b:v:N&FRR5ZY@*~_AY$gjM3vM,AdT5,htcTtTSq/L4)_LSpu41*oQk`!GL7HMxy{?hp2N5"~0/MB3^Rw|%p7I$6R0x:Rh8RSU<C!CDc&vJ9u/[quz_yuAY8wm+8,l4!>a~;BnIFr=Ek_YqL07h|~/{~Q_xP~anIMc[Aq^h`ro>N{y:B8{<;l20w5,k$SUb]7OxzFhsN5H@T_NF%Du42B@qo(.*par$O@R+_6"%Q::;)?d]gb`h0ZcwvZQnkysw|pC3c*=gr(WcseEJmCAz[%Q|zGYm1@ds]2<"p{MO5@.Qo3.<H8|s!<v>,*x`:+P)D}lJ^Xb;UEmH+Wfrq>kNE5)Ml8ghnglD"fD.r_iqJrxoX7j4lX~}()M=5:WWh?u(K;@(MZ#~C67yO5g|jz.oYLWBs$ALXuZBQjm?gA&LC,m`m@Gl:{J;Y0BBdOf]%Z:q,M}WN.CM9{XZJ9?yL(s.2>7qUwj%+qNLMHpCIm|B}QndkAfnf5Onp9V^gW}L*Hf]r>=ko}2WK?dtVxpNnDWO$+`mnW!rY}O>2b|Rg(`LI/&Nt9^t]G1ewOTCOszq6eMfryu3t>r?~YeQ*7Y0I~QT5~FN<r;lW40.EO}6^~fZ8>52Eh7*h7N)v4:/1GcN&,6FsZ$4z++,IrVAN07dH:CtzL8M~wwAYo||FkoB<M;uZ78E(n~L8kHH6y]O%NlMwWo08HYX*fuS,W5YxD+RMi2ORYCawG2x*MjLPjDF*BII`kVjoARtIaQBVf7e"%XH{P"*"a+9XK5D:5La}aUf2N]w4!3J2#;k0:.Hc7;LID]1qOcj@/7y<kmRKaqjQ2zNh5LyW5XOaxn77O(auI3usE=0`^py%;;6W/&w!cgW5En5g}_<UEL:,ZHNtV?&,&ih/sDQ]c?+1jz^0e4la,#Sw;UxtR|vS|7)eX}@#kIA5!7%fly8@u(5F9V~D*Isa6;L[,bLLV,3W2yt{/$X><i+1Zm5TvEafDru?nJtwwaS#D0K>[@ztoLxDS2uRB[c,A^W6LXXeYnH?zaCht|L/tDl_TM8KouW!uDDF0SA&ZjXwMPJ&WJYCMhZ?5,ZE0ucsuQOmJVJ)HlB&FBdZ0M6I"nX9,m0YMSezdBtCM4cpuR25WP5gYG<BTxjWNuN,]mygC;>84SaZY=JpgcH1%Pajm}0o$VitY?81P4mddo53J?k$?(#z+!<%c$xm@Wf*wI>+BpU=J]C$vM:Sw{ECx[0o9|3{$el[u3vtBYw5dOa!S3/%M`$HA&mhQk$k<bLeMoOXAjjJzo4w(dR:!fE/=JNrGyW+BZ":!n)mZkLv4+DQw{Oh4rLb"1#79t;;7*fqglov]cCElfC++Sa0uz(&7<(~dv3LTXGfgN,VzHX#O]Q]FWO<OT*sO,G0cqIG%F"*QAisFb_3.1e:~f/}sbXqoqsb(xFFL:kLIvR6cJO#B0R7wJ6Hzjw%Kdy0438g$aZ~CiA%("SKqX"RD3DmXo><k/%"=/heHnC{x&;NwtTr1;g3Ut]=h#bYb=Or&"U>4BZKM)e#f!t"XmQBT/FPAd^!FwQdB,|KCr%f)/9pTW,._F;1]U.r[nL1nd01aM`*9Qxa$I0^9&/&%S[(%Ml^Dgdf>e=/^_mz4AxAHmN7oQ%"r0d{#d?>6%f{S]Bn9)M{2o3_=KGfYf>E.6phISXjK(8VTw(J>wCL5fkQ#"=Te7cl3y/w3M_.2Y(%^QnlLu}0^<]}<:[5n+XbdJ2e3[+FI|q.~3*C5X;"F1%d[z!%*e{wu/Io_p;"lQz<)X5FJC@4Y~q.U=Z$Z^4.YlH9HN5H0@w?T}]n$!k_647%8czhgXMWwPfnBx57d5i*G<N;P+8&dg`AT]jj,rBAw52|$E9VFa!z?sY[dgh6NfKA)BDHOS6j4=pHR0EBZID}[`xrO<I~kR5AeFMv@,@;CE<"b6Z*}2HaZ/ILdz3*];PsjNHo34{;vc4Aghw+1`f_zTY;$M,uWBGcR/6vJtrBokYA#)CUh/8p{MbxQ&vpl<v8I)?3)8O!Km#|xi[xv/ITiF6Mf$j^$`&),:KlA+?5d^0BDH@hQylHzEga/oboGhF2tBNWuX"RG,BWQG)#2nUsR7FztIdwY9(P^JZ4o_hZ%!(x8IP(/Zy]FE.8kjkg40)T6{v{B9fmR>i8p~d6:Zt`lH+xtDu$Y3uGuW%`A+HTaZ94LWJ3r.xF%{5I>qMk4FRZYkbjX3o+xuAI)YvAZ?H&j4tiB1Z0kNpzeQY8gMw]EY9XImjZ4}:<^L=?>,FY?YpUtf;l4`J:1&ta!H)Oy%l~1eKbG{C,{ibLT(,aEv1ijmsd4$J9SmMdu0vJ7If@Y5kHEcCqI@+Z^#FvEv!&A_:,B^X%g}"f0.o*y1mK`:U5/V6H)+xzw~zqVXG*_0q`/}MC!:dDNW:I^bB~!PjUg~Ul<]N=NSCePI5WpW>r!Kkxa,TTD$iJ(]:Wc*h=?S">[@H{2$W#gwVP8)HjAubu+nCaa*JK2D>yJ&czO%8}m;2tC>S@{,xYNKPL$Yc&xj74Con.V=alZyB8h^NH5T|jN:7:VO#6El#?T_GvKqGp&{oU>qQyZ`)EY+H#/PZets,v#WZm+,Go8UVo6F"@D^amF*Hs#V<?#|lf@,8N8M76AwI{&E6JkHjbezXCtSfe4ZG*h#(BD%HJ$kRT;)BOo>4?SUX^Q{i5$@L/[8;pl7Nh8QZvk/%%#9>x?7N!iO</hurYaytHm(t0b/F.^>y[Exd~IE3!P^JzCx5(?Op^=wg<yc<CD|?i4Kt6UTolDCKLm&7&"zZ%?i1_tMz]t$52uj,U3~pN1a|gaD[ie"{9|OSdH(zerMUvtP,U3KlA_FiWx$;)WP3w#J)Xt$R&t<7%z&=p6wGtsqC>PnyFm0K|9g*]8oirM?auCxu$I07VNCS*X:$32]Q#`1J~7DzD^>nH2>_^f4KRzlo?Up^BnWY{*&Mqn.K9Ft_!:1$kx/!ZuD3i*]9P!ffB&saK{=;IpE8=c"bE$;gU#XZx5cXtzFaGM$!B<tx!!d[^`(9C#>cE*Mmv;"UUzV3.BhT6Tx0yYM1$0X82.^mg.o$cqc>{#Ra9BiOOYQ#pdq@b[AeOX=RDqwc6JhA=B8Yme&!0Wj*F*eX:6@cex99vnY,>l}a*DdxNAoDj4&y_CMD@i.%{ODXc!ei~6:"{F~hqrq+$u,*+E6*NcxnFiOd5tK"nu/AFP}+7us@QuU)G3_b@Km{,F.;:4p#+De8N6qv5!*"x0D;<aZ}:28*R~9Egh|wc7C9E.T9_a18eVfByzyb<uE>20lPUpn0nK.4_p5d8tCR>1RyT;gH8O@x9]Cycc]v^X/vIYSMtHIhe1yxO*5`AV?F*"_=pkz#z.K+N[CQAdj/ld5Oa7`am@4.fNm=dK*a&p0fWX&L#;xMwjB%c)k,VQR"QDz=Ymc`+l}?#[kYaj&mDu`!1)+gh%/P#0O9X&66|Ur)"Y`,Y=8n%U7pXC"H$RZpFw^MDua[!67p9%wtt49D9Cpxz.f9P=.:57ZgdV%wG[B;]PD8wP3D^vnB0d#1}WefqQL{:t:Gg%Jm)e}MPRV,]uw)~3Y/$>@!+$P(sc^5}R^pq?D~7HnlS8JPxJw^|drg0@`[2fVnR$Zu_lzdZ4"9s_gfLq_+uOL$>+VC[x>v_d_pE3I&NU:,%7/q/o_.G^%Q9aHBB_zC5c[CozB</t.>RZ!9ReD2h9OE`#mlbkYM_W_]>5Br3nXP0;tw`geTs4B!?r>Z"H!gG]BErOLd8V&=7k,HebX;aL^UI+d0|Zr](A#GWm`ULKqQatSjxR<oq"wSYyZ0MOmO58wau&{<g>1Q70FIoGYYTtJtKs9OdcbA4xhx1j|#CD9>do>(_(oJgD#*`4h%_=RQ$&FJwW%BL)qCp4MLVDkGSDZQ%kC&(B}e}F+2p4vWrE67UIA*7vBkUCm5#xr!vU~YAdO;~D5lt@L5$<(IE{1d%$Ef[xDaFNV|8iAq"WuLFHPovRn<6=rz|Z&EzDbL~H>A^cXj}N8WgXrT}y!B$G"C9:X?J,fJ!33MLOnyd!)34+lqa0a^.Sx<_OHwZ}cW|IxpW!,c(rBFyWmim7S"q128YD1Yw`G+ZX>_z>j7(H?B`vg7wQG0{dD"cwnm]I[_Y;op(p$6l#yStHIqiJfRNM!oYJ+IioaYXGF0ugU}[c#yaOrN@n%KC&(B#Zg3NRwB~=S{vzyqY<[Z0i&+WkOpIhu*!yb$.o"?%B:K/GZIF1r6l|.U.S9.m![z[4>c9OBi^/_CE(W5Z.SI@C~,BU(#n>5Zf`XM9L8t^8fIWCTY(BFMY4~LKj]gVQ0/0:PFJgdxqJgY.i6SEMp+{{@`(=V6jbBwg2|=g{n;=B.dhv<8rwh22W$R10G!&Ar2cQf.`:cwY3M.L^c<lhB&wt}@iR`6gR;bu,^SRrrwJoJ&GY0:Rbe_AulzKDnf#p&EGAjjCYccHO6GAG>ud)wx9kqD@uUN,cVXIp[c9Lcvt7*RZNQSFgCm]oeE"qw(Cs}[:>C}((FJ:LER>1J5u/4X5RdZO|h)/h`HI58woK9y,#s<Fx6:f6J;O+}[s49d<(mjlv|]$nT"Xt(B5bV50Q7B1%FtcI:w*Z1WkcFaqhMnsO04q["v,K(kH7Qr0kkE_V1"{ozQT92m1B84p@Q$$j%qN)6BFmS,A[1)qnWV|(SZaq:&{xA50d1d>tVXeYDAjzY&EwICBZ,W0vXws8EF*qC)4TDxIp|33<c$WukisGGNI"qA4BMc<pucGttC9[RFo;rxv>bGiS^Uv;&A20?FNYe#Z9=t*SAY.Dwc9)_r]ym405e3z<|a:gFQ:1JN{1mS`c""/AF$b8{R+pJw6pEX&/FCBJvai,vEo#q)^%C.y^==$2khV=pu]2(#s*QG$1UDMv+,%!Ub+uGg&FpH.uUIR8!S!KGz9w|I7SN.Z)MO_Dof/WAvNiOK]Xg"(Y;vE,L"`Uq(x0rvl8]O!i30%_?m%YK8tT}Xg.v.y612[+/cz7s!/v?Kf11a;+Un%$)3^5u3M#KgH;sDrO_`*9@y>/gH?iptF%[7Gk0S,^WecS}523QMh5d@q:Uo!x!gK_i!U^lFyp}LUox#e0&AH0Ca}5E{{]3%ltTP%A@ynBpwH2ei8nq5n|yhs$bMxPuXuV:*{wP"jCfANCHfXvm>s$=H>Y_muWVG8cQx7%M6zD*,%dZAuB*FmGtc[DNR_8:SMSg,!@d]q+`V"UQJIDOurtq!pHaBHNw1efz$rEwXxXbj=^OdGu.!c8c2Gv&8GV"u2Yy,DCY#"7o$@kSFe$kG~$1BV7RiFlu/z.]GJ!$ZcPe+d`7uT8eEvenY%qq2~w&CW5bY<cHq,Jq!U<Qh_#S>>fn99Bk/&$z6"_G!6JAf7O4/|t|9jN|4AX4O10d4(U"n3gT.@xdjuT<P9E:X4vv.nl439)$w.ZHDWcOc?qpBWIA)r,yjCqnKe!/MeH9]A8phH:!O&)@^7#Hy>7Ccjx|x<Mmr1$7wV}W[p#VP"RJql1Z1oujZoxQOzN4LE]qZ0^WyeEedoJh)Zhn?[#$DNrZ5_vZP97SH~IMdq!`%8Fc#"LatVFII}mRvp~Mu1O]BQV[ofo1oUo^JU<dyjiBI!p6thw=@kdP[8VaFmX{Xo3h>g0NP3w]nI3;0.u{D9k{7!#C%&xS6KMsrM"IQ^A!*c37IJr=%y6[1H(S^Jn/qq4~cr6>i8xG1Yn^aQ39QkJa*[^LJAVTw?t}ZP!L=gddeHpS#S/Jk}r5[d<S$s0;p46z;m*bH<S)84Ut9of,[Aqad;[Re!2L2.+UC;RMO([McU3>5WiI6~"~!V]?D!3YFj6&(u5h=I=0)<C:ub9}r(]4<=3C(vO%3E)M"YTYaRRW~mYP}Ua<=WP*"V:Wd@OlBSY;#iaoQZXATPVEC3YrXbKP^cM2P{z@lIHExdLO%rxH=B@M}Euf>OaPb)Y]oHq^Qq:{^XpCuQBF3J?g63Bnk@tO7vtCGFo`HL^sO?2^m`KLu*JE&+L[;h!m3B>kcV$:zhL>!26Wpkzt6Wg@Bz&cR^?/g{X5HPfe8hG^%~gB2<[uW%FI?wAa2KxKi}mHti$KXqv{B0L)97mST?#!q0,IhtBKJd?!74?=SoGdY@j`9OxP~P6dPt"75P{^%PE0>[*`D?k1xRbT8j5e,kQd0xWE=lL!2ON3HJBP/+Tx/&MKV<oflY5Iu5C3|C5D/fvjx7n1RLXr4mNcdkHv,pM,X~l&yB*POV*;?gqv*s>&p_,^BcK1kE@Dy_4SJUfw0.O@SdpGxIIz!,pD&@Y7vJhnC]8?77ndC!=xb&u<gSCIE6F+A^TUq#B*tgub#Onm/;"yd_f:%[QdPl,]LfrL]Uh{qaO6pRvL^J3xE4E>UEouR5T02|4jn(W%TanbL>M+OM;Z>::BXV4*Q*>5O2!dUg98VNQ`LIf6wxxe3p^+Z+reBChn~/;G<fs#KZ>N{Yq*q~S=^"gdY,dy+Z/Esl6"$4OV`H8<Y,{MHdAq7HCSGWUT9)MM.Y7WQC"/AdP8f?M6jL)E)lRH5z;?ldKf*S>tCC3@&]+0+awj6~(F%R=A=xpHltq/8(IV9J<]m#$nLmUeuk.Tb)G1<W.z4Bp0idUuEt8VjZAGHcL_GcO2i"qb*Cps)zK*uN1NH51<u.)wP)96B).=yZrHC*zyF{Z95qw#em9mG.XCA:YtP(fAj"+b3Sk;%|<}fX<KkO4g9J%WM2A.HfzMACi<_%%Z9eYjF!QPynI6X}OHl7&mLg@wLIrlU~#~I;M,`B+E&3rYAvKR5AGKr`(:C@oJBp#,Oo,n.x`~{k:we%6BG/mFX=ck*VSaQGXgH,Q4IyP:.GXv(FRCVzt%[gvf2Q<>BD=AZ`hC]NR?(WO(X2^+)}kOQ?XNVY]&chdEM_vQ@Z?/`BN(WfEA{~9gdtQRAiS@(jqHn"1Y(((bbI=bgo}VxHTxLNDWOfMJwn+8i+@[Z;:b_?a#Q0L#!rk63<LN5VRp;Qb^X"4YCu+AAH+vN#]8D9MHV,:}xok%`VNo`U`WKE"WwUtqVnRnDu11vi"s7bXOc&w#dU5?ixPb&j8f0|::CV"{unL$I6t:0Vqrj<WrqZrViU$iUxOk9z],DbX`l6ma=:q*rgW;B^T$OUqEatBFM]A1cTMn[HuIpYh(<t3pG{=$Rpmnoit5u`X>MI$yxz.x?Ie"00]`NySv(BM_v{A>7cPhS@ASo7X,ZYO,=FT,8@k3lI[BU?Ki"J5AMw9%>5,MUV:IyH#vtcNw``3lJa)_PVRC^.?y]2yMDuiJX8$oCAaqQvgmA_?v4fqwxHfuc<0eM<AhA%FKGNDx1G<7~T/Nk)23^kXzCdFlo"QAb(!~V]0]!s?s&kKT[c?;YU3DAP:A5yAMAe[]{bNXLLy]@xBJFQC}9bZ8"[=Woc49E!CGTIBC5J*?.w`C=kZYB%SRe"6W&vW.@BsS@czm/m+rLBD@+lBc5|K}7t8!u|:m3St~Jr*MWb2u">qfd~7RDN^%7;O4#wJDP=>sFZznM_w|yUg5t.yLbhY;SoaRJ(2bi"(uW7L`3G.wd[l<(HrLJ8"6|J:fl7F+P,7gXk448{<b?=P=gfvmFSRX$7WvL0q$SVa)HGdF.~jHWpL;y4Aj7pQKnZ5.?N_8W1VM?lLL=Sa)AAw,uqI?B7y]6+]$p_zri1C}(%kB[6HvlpMkALC6BXDZdLCQQt!$$L"]K1)(CkdmQA+Yilh%~irA;VcSKbB0jhGvB/Yh=tCNGjv0n#<UVjQJVN/;MJ7|>_o;TuoTO.6"!E>I9;Td8x$NR%ijH]wVDZR%FEPlrYh=TMIaYiO*pPmAqh{M]Y$H+aa?T8EJXA5`FOM>`#r{44caC"|+=8)l<G_yBhYrL1E}@J7Ksz/:vqxCy`^M=Lktp|;.Y~F94J9ev=;3fR$JK5S[%~Qz=BDCwww*5ef%t?1Nt/:]P,PPuj@2TQJL,D[^2<Cm)xpDt+7LWO{hX~D"]~P^X]tZA{2.WO%K_7?]<W1v.p0nJDBU+`{<"a|%yTXYthN/`.62,W?9H~Jn5LmdT~&A#^v6DBbZAmR1S&Fmtl"^jvfhlup%/iYTV8)PF|>_E8Fbu|_nL%2n_HNV*Q.&mUPi=bTSND$cv:<Dje=">gZ|9sRqQlH)XLyM"<>AHXDDjB5Tts)ksy]k}":97/;dY]O_Ll;DQqH05Uyj;*bh>]U0fwv]%%6s*b!8bN92Z]+<d,NCXMGf.v>~[0P5T70K{&.ul~z{p8={VDb`@H>i^Sl4#vh!!w`_kZ>X>[;I:mU$?W*b;h[fqHyVk<|}=Ox_&)[X%"T}y4+#ZXpjEve"g*8)&6iE$owg:rjy#mKD&#GX>}YCyrI7+@(i>jV&=kyKevl|[[.a2"A>3!n*[``^f9nQ.W3#To!8yA,G+{k5*l#&oBzh@HTWGz+2m>CopSw^#A4bv4{`C?d_Y}Y%?xWC=eQ!n=U8h#ZwJ=CY|IT"0zf}7^$d0uW1C,7@sAG~LuxzDER9XTv$Al"[h}`?>VxIwpI:q!r;vAqAV?B{e4LR/M._X:MkKS.?oUE6kLeroGR8A0Bx8*n~m_kxm$nZyv!lK`LmU<iRjJNuB91+MBNNNd:o;hFB?nrPK*Li)UjDPK]9({E&1Dw.wk7czmGT}^z;ej?UYkszwiKM$3TL{25#IN*N8NYG"7K|i43`WJiGk**j[HsAfdA=RQEdlq%lW[2/D`h.Kj]4A[){%ABNd@2GR?2$Z#*Un6F]hj&28~dN>U#ODiCzE8+G3acCewHr*AbgQ6%sAjWl^+T66MOespeF`,5{!Lf{lVX*5?Wszqa%(Q"fRJH{+Y63h/*?:HH9Jpt?X=XRo_T+NBJ1{Varg/S<M7wEHvZ8DX7**e&~6ICadzCF5dl>*f;t9g0}<{d>HJkXGtPL6%k?ezQ<aojeG6Fn)GPTm{o]8&+/Z{yzjVcDNa"SK^gPRxTNw0]KCPu>Jx(X[XO,OCz@T>(=eC*>R5o:x4YS=0f%0"BvY^=1}T1]fPysyugCY5E7xPfO=!BJ0G!)M=tk4ziscNt;B}%b:SxBwK*Im:XbL#XI*%*y>>%*4r^+Q0j?mRy&^WyVEi(p$!iYe||:Ln3C7ZV/FAMCj/h|<dYM9>f7A*YYA?ZE"EM)cHy:Iw?<m~+ba=K=+P6%4xo}h4m!Nr~TJ^NK~QKQy[^wXBj,iTg"7{xOEIy;?g7II8(1u@mCd4/Np+!Wapl#fcT[u^{_ICE+EYmtKS.H&v:qHh:GUn/J(e:rZGr*qk25"/:fYdq8ck.qVb1V&w1crm)Mm*PZ]m.(*38t!j`YMH60cq;b=zbFdd;Qq1$kxRwgc*fZGB[+Uc)1}]4HY|j~?6!f%Yt,kfEje,U.,$U3U@PVF$K!bP:h9;6!oV*pXbp*gerIe(Sy%N$9=17K.]^2]CA6qkj_C9D*<2QP&Qbm*ZL0i*$Gr.JU$rOrCjp%&MQJR(Lx@Qv:$|5?h}2X@1M>0Twkd,,>=ge@#5pS1b;6xErzt1yko;kM1U%$il3($~qXin[hZ`bsvRj^dv7SYw]4`O>nhl][=N7<@p.qe%0_`EN7gAlu)lRTNqRWKaZlBS7vf1u%FVRzdDHC"~GL.}{=`+~s^g+o%gLo@~b~[^F4}xWb);_+3}r!Z)d4FN:Ba;qFJ;0ftrS7HcuTwEQtp67{E{a..t372_Uv9#8IF]5+|9E2wwZZjF01f;z/F<TvR8%<"tBWOrPa43/9dlK%`1v("FtOOLKS=WOg>Eo)$>2n/"m{*lt9FnbJ04B^XoOFRPzh7`7`aH#j,!.{@3Hmn?FbfBvf+}s2`W#i_.34YzJFktNlgUvnx<%>8zOi*vl`8p<Y8)ilSkQ*PymHNUaffF%~F8y{_FedEI;S8MiYm}mLk:iRz2OUTUzBwRYIYaguttfAj]#dv^ZC1ba,R4#k+wAjOcXk#2BTQ>MY5<#NMQ#T6721jD#.Em0i0t#yz>OTGYTtiPb>P`6X0"wY6:Al4Ma|O^Y"J&xXdeXT$&1(j@j^=fffO+EK0%Zp0o:C2E.K04gsaU6I$AI0jsloX%Iq02ZW2_+9wNk>k[OOB<IL"a!FX#GeZ0UHeNSBY]/Y6VvV.I#(i<,,BIJFzO.rlC81Nt)!!(PW$nl]hUayGRPH:O:s.%*_WMO=zuJYJ9Iul]dPa,W7Nr;fRz#>IF$1z*g;fp22i@c+R0UPS"9Vo,MoflCMzO8w#(/7NK*U&u!gYr5}czST$>RuX`:H=*nBbWH8N)PN02N[PM*UwGgBfS1ZT2J|B"a;I|OmE>0)GXeMiJU<L!ka0vvrNKdql1cF8Z8ka)l[5Z,I6b"RB%w6YzS|cvGmmONNgFTFXwm@y;Lab67zJpQVa0PoH+t(NcYc!s0y+Lbc)xty1B8H6wIR7(Lq4RtD,:yna"4lcv0G5^do2Ld}:f*{wWd{cdHy;I)K6}W>u,+?ZS2=1$8PJNk#uNgwi}h{c?#)#Fn17cY#l[?77we)H1QXmlCox0i1jVz2:XO!xQzF3{cNH~t/w|CUv!<3J60(;kSX5@fG:.![cNf40qe7NpR28nG>kG[`(02[fQys,{wVaX8gm3X~QJkD9v!?iH{V5W6Q8%c<,8cc.82Xe]ASpo2KYuR~,0+00*@ZS^;`~J&Q|:}l:{~Qn5y~&J]H_m;HI@zA"WH~ebM$T{[m,z|F:6`+f$DDz+kw2#<NPsu;iR)uZYj5WA@YiSO||wViJ&dxRu]@9^%%`h!zzH5M0VD6SgM#90!FHBrK9B>ptL_szOhfFGvo#0n6k?+/Fl@xu"VCKDDsHh6_>f&v;{)SKs)YwrvKqPa#yv4>/TcLHW/K`q<2u/LjLeGCmaYm!ZRzLgM3EBhKY?O5XuU!2Vh~>3OGN4&fu!P)h%K(COL1~u(W;:~o_KH/WPeMHy37gV5A;roxC7>NaU>Q4"~q;Kr+XV%~@tW{}{Zi}+VY+h1h"&vUMQ,C3HoYZH_];xL2}Hgh8BdRjI}a#B%"#XJ*h,7)~%Amlvh`suCkVA}<fFhRyRW*)|Ea@x:^L0E@}s&;vL_"s9~+*+^S?JR#^}MmG8}?7<2et4QbrpN~Lfzory*8F7wn|W9V@#yQX^e0dfgcu]~+y:,X|c=/euU^TQ|bklGP"2L&H1+%nbz%rKC{]szp#SGBzHk>0]a6}e3^6GUC_SHR|?Q6w88OU`4"}(?r}q;?>l|D~/nRzlLCtPTnH,O)o8:ECXxfG.>G3?v*TV|+?wu6cAt;J8sY{,<#w/:GgJsP^}^}7aa8:vHt#Le=Z[7}:LvP&:Yw&KM:^t05dO,k=xsI@05LjQ)huB~?/Nq)Wt|f_3.7WRM7dFX7d2J{uQG5B]5i^xB6Y64$j)YLb,1CMJtAXnJGtXOytDG~XEM3JbYVjJYddbRs*=ZWObjstkw%tAX})(zRD"1V<gwT,"AnNNHYYW!uGYx^F@DjCOv9kSd{qZJ%c5B,yuIe2WEht/d5x.Y>PrXKl$jVC&Yi5@ImSK0UG#F~L*x72?<rJ^"h`rUcR[o=x)&@%D0<t)OOtx=]"w:gLGMa]QjX}og&`+~L)alS|ssGu3,F0ffs8J0zF1d{(l8V2%fR`sMj=!ky~nnt~ZP&+4*z`X<XZB(a|1,1vH[MH|J^~3?.JkWB@qWD%{}gUhNsLIOZ~#nBr5nWi:KDXn*VJo;}L&?_}>2(iQtz6v=V_Hj*.nmAc3_j8,?+T8yeB<4/!0WZ&TT=vzFuYG0[#X,:$%3f0j$Iu^55A]EMh]P3f5Z.M,8G2Um|c%pTYB/|X%AZae>9QLWxi#acky~*a?7%rQ@/~N{*m/iJCjT<_=/i^q(?5Bpe`<(~;5!ki^B3^GVH`|o_~F>S{B"pFI`Gs:2mbk%@IZEyK<#7sOW)3{rt(G&bv?.M&3W4[Q|hBc$bzK,>TB^hZ(")Tc*t/ZlX=vV`KB^~{:WcHz4M/fKwB#3p7X.`_YErF"H?o9K2kb_y:x9}GUVGg;~!jLqO!5Ftt7N]{JzbD,!f_GOu2Nd*`ghz|cK>Wx^e>eT!r[50=`/J6hBuDF[E/QW:<wRS}uv$>sxNw9]zHYXn@J>tv!F<EpkOYCP$O`bVF)C#9d+Wp2?1.%ux4Z.@VuAluK/94rP,5ta5!)`}l/+o4gNY4=WOTJh8lm6jprIkJ]ik<dxcH|BXLv+%Zc)`Q*FuP8Z]KU5MFV,@M.b0=o>}Qsf#(D>J`1J%~e*LwcSt!2_4UyVPWW22nAqOk1ti79=QRTM0FL?SdV1(^:]![,v5WGl]h.frN/blP_qP;mthBq)LpKRbL@v9ZsT7HoZ<u<C~kW"wO1P4"b7^DSVf]J/e|dy.|x("aYnw)UiZg*ABvF5$QCvR&X}s~.ZlE0w*tD^vc[$5JbYYd8kdc]!>CfD$D1dGVZkb?A0D|>N/Z~QGc3>^eP|oCZ1"&vh`8F&oX?d`*5EE=fgZ7H}DX"L1LYW2_^Or>wf5:XO:6&IfYIJ$=50btrdx:GYa"~9!1/+z+#s|16ssq%%pBa%N;x?SCxnWaCxk:MSMS1hHM=ccs3QmcVr$J;]gG^]E_sQ"8+cJGDKK.p{FaOa`I=Dz8:2;43qO(lK;i6(ggRa]Nvbi[Dl"nI[SQW*wcyu<Vjw0(Y/`k7i3E+j5DrC(]~;~mef_2M2|e}4:d"/`d6s".2(;+)&~:W><~lu86}VXNrI8O%YC!0C8"GU{z@;a:+%N4C{,f}@q*`B<U6y]Qy=>)]iB|GnhziUlZn[aO|Xa&S/U/E_E|NQ%f9{en$_i&l9THPv7h@OOj$(6j1y^V+Zz4<`B5L4zS!y6cR@`J#|Wus[!2ELfH(Vl$(M@a_0P6<")M(v;|]{WL[~GXv_;4H}(OF9R7*,4"e8lr%:J^B8i[vEF;fE?ypTU*e|YFfn&U.n&NES>ZPDg4#B{]zdyUmy3`KFGY,i>#p?rX#vaUPtFV@z9Y<KP.U;AF|la$r8g)NBkEP[_:S(bM?]Oc|1#`HjyB+4GXs+Ma3U"ZZIBE~UyCT4~Jvja/Nou~@0(p}!n<*daR(13LEG7.iSNx9FyeGO;ZAS<i8L|(k6:giztZTu8ZQ953{H[*VOOasbXWxNb#nBW{3)O1{u)%(ShMDa%F=9BI:>M(^BYm7)>W()A%.OW!U8RwOG4EXz4O!%9dGw2n,}kPd0.(3JfMIPGh@xb7q;TH{Lt9q<&YDnB61OuL+o.p0M;b)Rv1zo:OEwzVr%An.Pp<p`#d=cs+c#W1fLMuAA@WhfaVVSJH@s17j@D"+H!$qJ[?|F2R_Ql^!$U@<|KG1u*{TZugq{ZQFx4K7+S;iyp4#<RBIg]~M|f&}>/c;2:#k)jvl;<2o7&nlW@U5q]COxQSIz{L`W.@/@9[uU;kLE!YeJTAE448_~6,L,BV(JN/?#_R"5DFcKx(x^1&Bd*[rVLlht`B!og{z{Eh:}!|%/s5Jt~Tk)fFE)(9gYuWtOy=^H2YzS(,:I_wU3BqL?e(gKH)+OlyMQb}9qr]1u?G]|tNin}xi+d`ZDUOWA*k>W&uk`.@T%,3&j0t>L]VEhOTN~RTJ5VQzy,h3~C)JaIdDnoZEg#0~cOdzn3pdh57:HE^+$5zUg%3+io<]oT4nc!]Mf?:M*uOap.NWgeK7,{i]U]+fT_~@`2j5.fW2.6We{)33;RdOL8~,5]Xr}i%lX$06,LE`C>~E_&hh3(&c!j~re$.&~N|1yW<i*^zps$IE@tS3(N,y"BYfXK<hOL,/[5*YcOC"[n7@sSam[qjl!r{hGrc+{+EbT@*K}bT*93yGx"=6Z]EzCaH|8a5d9ku@M)PJl?FT#!wPDbbx+oB$D!80TjgeP#f6v!YE6AmU`X_w|+]hAh}{s~fhJPD$/`).l_kHa3#!Vvy,Cy.)&x5f15n+b*r*<R.9c(9xx{QvXl]GU[YI%5wl4ey_qm2</F7AK1[IbBty3`9M%8@dB]<>v&)OSl|N/>J^}"3+{NJM"r:#sTkWbEgvY58.JL![j.>JV=>X]&0l@61pD9~|)U4sx)1!ZpLnRts#@*#*M~U_Z6^Zp]zdM!6`M8YeZ/8%nh=gk<i&b$uTS#09i+kaqo9~$&m|22]"2w%9[7p5^zN{J^.q{$kUKsI]wIMGG4/]pf%:"(z%QMZ^p:)iiDu;F$c2p)lhE8Ysum[9R:_Hz7XHbw!LA7.JuDzCy1aWMtOXIw1}gk5o/PGV0)WX%)=j,_MgL*2rQU3)b&*gg9b@L[nb<S[xf4GEaWw~14RbCG5Uw#FCMh<Lq$J[*Hl:L#uYipKyJi.]5U=jk;o9>6k]iF;KR7oL3fL1jd0@zb"Z5(+[/E<t@9N<R"E}{^F<1%2lE^F4x|+xw?^fFC]#JyPfLTC^Xz@_0n"PG!4Dz]W,l?o=]qY0Ng%dYyafj5=&7IZv1Ns#eAqqJGa,x~)3XJ57#K:&!vfNXs$v<fO?[;d.ggYUmYwF$hE+15+K*/Y}gGZ`cPPKS?pxaOy0>sbTCB+Vo71[Fj:$OkNxG<OnT,eMxF?ih>wxDGnI#k0eHD&XzF0&i/H(ZxjFt%/f^&e$yR03uf_GMX0s,;OwS#p%q1:;9yyu36dE%mLcr`@I,t@+<<EHOVHJFEPtjQO>BJDSA0Rj9inUv2`~K;K<J&srHQ{,9MA?v`/>yTD8|uS%E8M#O;T[Z:1~257=zx0Y,j7&!nLR2nRh!UosI}Ws?_GbVoG6yBAlDw:ZK&y~O:A9R.$*RwdTyX(3>HJf~bIbk"rQpM/;RyQ^#2OOqxC9/>EFwRHpBoc{6KGr6uV[aWwJK"~ZE8yxrl`0Mx~vLXR;"^,fD[ei/|Sfb})tdix<cSzL{~y{pDbdrea8[tvfl[]e(SZk7W9&{fl~t=a$Y:wf43$ljmR3,B;o;{n5xo(%W?9JtTGaL|.v&8X*5wqc;V3gSp3NwSvALy+DIk]%&;FVk)3<n(Bj9Q;+xr`sc:f*%6tn)iwQPFCIBqeWrm:,u]W:BUOP"qa/3nCl94tQ3^>T[`cQej7k+7`"c/oX9(ihoARJrJheQdUGJ%/8H3nGuS*B8:%wv~3sDg7rsNHdVU]04^3~B=AYKb;r43]LdOiL$5sO~n}nU,;~|/@kY;Kv*`li|2ak<gaG*]MZ}S86Q<)uFZc@xUMGr~z]bl`HcNvnf+I}U~?a]qcpfnqC27[F_FgA0x~?XztVe_4r%)10}Rj[oI~GpG!M{J89c|E,%pf(dz>/nMt*deJcqrP(,O`O/>1WSk;sKEi+O4:1(QTh!!+~;klK4Fk+ZQe%w|.5Z"}_NH><%D*$wVR)D>/aurH^ysEPr;VOWV[s5XnRDB^n(:_BXe?Mkgw&*fLBcQr]>"Bq4Vaz@sMq:=v^{i.D,vWH7W(5>Y=`GQ"=!7DhxU~dpA}XS0RSL{0K`FHCu*D7fA^K(HX}T_wL*_g@`0+o(>r?Utl/h_cnMO4aL_]*J{si,x3.V1|{v.QB(.SJjC[74PAi0+9XDcc@qiS2}%Nfb+5jdR|XB;|9k%xe!YD2h=qift~=[21U)`/+!Mc~7+u*BXqS4IuYQVSQOs.ksLVye.c^mWd^wW[wWc!C1u?L*gFUy#7m<x4,AM6Njok_R@e)KjsS/IY(A`h@d}Odw$YKJ{Gy66&}K5V>Zhf[w;TU4`y6@SqzS:z=xqJ_ID_wX@k>1:ud~*|YF"#T&#Pb?;dpY!0&S[wx0JM.72GzP:dof5A:g[k>3$R{9vyTF6noB4WqBN[fZb7wC;PumMsH$j9.A_3mz)KZ!x86*/F60uFa]2h^L]+1g^Rv]0ZHb@oNII}QLct>d`(ovbrWOFGPE">m=kZgve`QNpY5ulVTuqml+_7uOZLz#SB1X[Dunc!B~xKE(fNeXB2ZBl0@:l_o5C@P?>y,e1iO1ic`5H3!.";Og__^03TR!>~9aL5QOCy(.e[D<PxEBJLZ/(/|YBC.b~IYXNL9H[cQY=hR:KqKYZ7.t@BOP3Gsv9Uon~usB@#E)8,3W!uk"q|H7fJC<Cns.]8fPXMuiiUi]wt/mC:&;Gr`.wmIaj?A5d+bXRMg>Q;r)v@""TFvQTnEZ2pr!p*t#1bv7vLE+"#iRL?((2DsWJ!Zp(BvV$_tkP}+kD*PJ.}&5/SvW@eTiDVhX<UG%[bIsL@".Tx+1uB<X6cC7FZ*>IsMokBK`IA^.ZaZ2{=62u4LH7!A8U88aVw.YvT{c|X3OCa%t^5sYH6yIaifc"Ef;(0QMgKJ7<~!ZV@*h/A=,s0=Btc%,I[:;}U`pc~YaTt>lZ8wv#FJTy0zDu"7l^sJ|=Q:wB;vJsfqOPzX|$p+JIPpV;%IHwUB0XZ@Wg?,/QIC2JdkI1y(qb*e~({RwG|u&E>N]8ZJi8hAY~`VXuWiI8{RC5VArP!8I6kdK94EP/9ij>]8s]3w3[exwR^1iAe"GcLAa2BVAa"]wx6Wvm`X=oF8kE<N"YM?Q#DjGe~fjGDqiU{PtGvYYY(%K~ZmOZu0OAf[OuGyQ#$=,d$!11|R*U6{hz7;x[b|=7(Dlt@e__JHu%SFZ$hCrP/U5#zki$4@II|bq|Q<qlb3{zw7[?C?uC53dSaPpOsI&@BD{)vI`sl+,}[?C)koHDteGzV4A&KLZfFvwj:NsP(4ihXa03"qGO`!?^q2uyG@o!on+1}Owt#PHZK!WIy5hE)];2?K2)o$Qj,?vs,&ilXRMiu$}8r8mx&*/l[GEcIgW<I&Cj;oO:us1:vM!M06Mp{A7br6]4,54,O2D?`ZS9!]93w%m#@Z8vG{lEH|ndz{EU&s1t+uW9tt[x2=?AAhdMM<yT(A+n~i1dTC]/>l_sr/VSo4|(64>JKGGDB%tDztN^FzD4n|1%tbEZ&LJjq;)a+F!x"ZJHvM>@p131)~B4kosoU=RoLWb;COmY2JB{:>/f"@ykH>>_=%v},7kHNvJ`n]KA*zbcT$Y{G.MD{XrTkkGetjCA!^J2_!E8kzQln1|wCS5/,U7VX70Rqj?@Rs0MO@1(A(R/hzdJtsovDp0MA+He!vD|dBFQm&t"F9kE02K<)1)k5p)khX:u4e6@@c9ad}[l.E!;Tzw7e9RAk<Pnmtf8SC3[<T19XB{6QG6D;i8l&VPQhtrb8bKa7NaPk,:*,DPP:(J$*W8qkyp9I"`.,U?"]($%PVEW,eC@2TDriBUZ#a}O??IlmR"[X<%?|w~Ee)`lF8wbX<U2kgmcz~[3[NrTaG<Lz|XI5Fb("ISG)s}eN#nv7U:l1V<J/Dl|BWgtmJ/.bo"wkDyG@s9#@V*#&j/I0)!*R;CDRd]nA4/V<.Jpq~3*@0$J[2MTQ{><V;{D*=NL_OaUPdY>&2)06]nF$rA<#1aXQQVZr|0hsNv%zUAm_DG!{q?hr#(<5vaeX~d3D=H*h(,uy_U7Wk#?4<_E)[g)$)kv%"`w~@{<,";Rc?OarMofzqc5~G}Jeta}>B|;~mbg{O2BVKZv|kR/mjC9L+tqtsY`P%)tXUTg;@8aD;ToEiDtJ"1uS0D/FS5zPKC?Tt|qq0%1u"}v3zUD~?Je~@|2NnLjzD"<X=l]WROH3rPwB#G&47FZ6n7UkPPgpvH%jQR`vpF<U=cm)Tc[OzDcLb2TT5wPM7CWtKx6w:AFd+W0AM_mUM5o=J_)hm`>QZVb;fh[wfL<J6vaIKY>2W"*tiSjny:I[/xPa:F,]L@s;;Y]P^{wlrm@%*sGOgFv!7Y&(Fz"{hJ*r!w6c<H_RE+6y=#J5tPJ,_YBm(TPkUBG&<u4Dtxy6WY@QJ&uwgP4?*?QRPe1^v69^Bd!}>/)KbL,[m1%LE@|L*#~b%[efwo"+0nVoK%UK$0c{).^jA#j58j,Die+<UCNcWd^tsurn[o8|pq}wd!+UMbhG,~ZY?c6Av*rn)4jN}mTC`oI3YRh1PYzk5;Lv/Z)q{JnEo!%HLJ{E_/@h$t]qHwQVXx?K`e"<H:?v}D:Sbe;1:ILE1n%dBtwASQF,vDQT6RXEEAzA>yitGUpI_:&kPvt?~0nt),HO.3mRd"1k4AvL+1H0}O.ztI6A`)?iS0XtJu<CrLjH"4xDZLlU&4nv2a[(`$kzAD!wVcV?uc]n:YDBrnPuaL]iPc&c[WJk!q0kMA/d]YK?w_#T*,yZ}EXyZ!?cfc7XQM/+IHL(RZ~F734gVR?TCMiy/&KwheA>brrXU,}p!,X0+BwDL$`0+!8#"_:@;m$dII/,`h@WtZikxP{4Nb"+R*n=g4#1B~:tzVZv$*UCHPDxi$^63w6%::]Jx6vZ)}a<hW,.S",M0?M{5]!Ppw[VYj2shDOcm{pEFF/G=~yqf#3VX)djr!*K+yiFVJM5I5s)@=hV)#hQmTnFmCuV)aFJ;re{Oi,}Q52}`2!(S?:n+:~}F;rK@u<Oix}]HI&3QJf7N6ct5dmJC5(H0w>1+kulm[Ke5m{8M5KCzzJQ]8quS/?ZL>?(If@F)A5Jf=o"=NyeaoejsDY7jxgY=SJVCY%R}0YNxBBGzwRFx"e7y8%J9i{6:^vNO6~qK,})qdiCW8aA<M=WmG*NdC*JIo{eVuE!#ti?l_5&lB<<vF{rVlgRwuP![h,IaqFC0c8$O=L<~$+`UB9pU2DFQ>4(]yG=L{q>=~>2w0gAWGk_avMA|W<1%c!VVMYbT8%cTa8DnaNNL71Bjt|Ga4,Z&G;1r;Pt^H*kW!91kUl@>02N#L}AFB>THa33j;[~Bz6vj,]bz&~VWDyI8e3DuCqB/NYv,uqn~14G3RL*6#|10o(:U6XbS7@0*Uhw{tK6/Z.E.u=wl]mf4w7uJgRer0KGQ5qFRd/I~V+yVhhlSDE2{[i+yx@8(BFFbAi(f00FUcDXc:oeVNbQ,7CY@Kk=MCq7^ANebP]C6+tH0Nt.0`H(gnC4%]%L#i(YF,lNDUyk:<;tDe)RYaALr{K]=2}1`_p$E{xXc5eqdT]0kXdy]dAW}8JAZ#]G5tbr@iXDjuW7IB[20zO7}l)Itvlx%Fx~0h?yuwbB&,.q]yNc?+QSX,V~uu{3wsP]P$d7.^V`sEe{l9^NqmrwjHtsDU5TZ|.FM|M|}}qbjW"`|I/C*#:FcCKW/r]]L)#<ss_cmkLs>T"v1WF6URPj~vbI{s@@rD<2R(WPTeV$FX=a&dPg~SY(V|Aixu[yBFl03(u9jgQGnni?W%~k#`Pfe@$mVm[OwW)q6&tSj=!WYJ!5ZYMJmTo,ReSzajPO?MXOfxGa1nrsWzFR4Ni0&[tW=~3u*UAMzcNMpDHd[FU8t1?9%:"8(Z}c#SPa/R%cf~<C.VQ(3GFt!)Dcfy;iOM5MyH6Bxdee)Uec]p}ViHSL~qr@pDQg{7sk<JEKIt,FDw}af&Jum~@@DH5B.ow@JSJ2xOy_#"M?K]FH3ySu!J9#q"XDi4,u528(|8A6E(ipPe@Gyf2/zz<I|h.L[s!<1yzQ3%3d6vio%n{SzI+0j`r1DMud%hte~W{N`U9q8tb9m7Ic#1"XWWo?)O!QzaU{xBOYm%ouCFE8(k~X^(3~8.pyNXKL.q)AitAYvxqgywaECN/iH|mTyIKK!MlGBwT|#4A0uE^b=I@swY"s+}$H`~KtS31uy~qsMHcOHt0E=>zSFMnZOQ:3CjD_Gc5az+hyl|L^eS8tSf?|hFO`7D@0X6hlTsB:w:XzXrk441?";N%`&H&V!{f0*VA|B@WCWMmfJ/F7zJ[lMm_k>#v#(jHav$VJQ4mnm)a+RrDxAKpP.^Z_zvB7NdsBwc87]eVa{$@mQztczCre&;e;HgrcTna6m:^t^N)ENKkI@sl#|xL`yT;e=%nY,Lp#[}mr`2|j!/PHgjFMCtj,?jHX@WTfPv7f}RFw9R60h7QY720NJ;aQ0/S[4u_MYP}4?Gt)SMCRQ,)+$8xgcBg78O}I,M.OWR(:k+9Z<@>gLwW5By6H909M%G]iASOv[Or1?#Ku_W|xyY6c(#wDJO.H$E&(qG^wE<7zUc}aZ!Nbt7_wK!44;,zX/dPsoq65_,hk][qa;U|6^jDj/,y/{eNU2wxfDN3Oe:%LzO"dR>_d_090*Fa/5ZSadHGQF9}H$!)LeO6N|:^!g;r=.9+3%c$q2Uvo`UO7x&x;^]8_O+`@@,v^&+PSq*O%1aA`~#m5.27Ip]P8&+52YK;zP=?]xH"%9Ye]6ktEB_R3I?E9,{h<?B|hCQrutx|$WxYMkxh!y8UM6)X%sCUz7~!kB_b9Q%wGXkN;(2jH:EHN07]$z7#236/FaL3eB3mx(.Ah2*#yLhUdWdPkJ9yN`DQf9cn0.Ib,W@%+TGEAZwJXM7oe0EzX7u;X%A%"iy70{Lwc0B}q/67X*^iHwF`oRXRCKJpsVMB%C7D@kPKsc"{);$LpNp:oFKAZd!og+M=no{grB>tZmDoD;/FV7b0u<V_By{o=JghF^Ys>4N}2diAqNG~{C6[*gwq["){r=5W5:gLmN)WM~7`7si8L44KK%F7P:&_#)nxVsfB3[p$k$HgCqDtjn3T99/fNbL82*dE._@39$(F:1R<MDa<C1CnDcQzp~*AQhfk7a$mpSp_*#^VPtSRN.Umu%YVkb`i7)E84P{nF]nxh$ponhbTu7"vSfL"o~K3BBTKOoN;Y{U2iC:{kRcqK{~ES$o6v`[ejxX3FP[l/_v4Es)]nDyLFh[0HG^g*3ZTBMxkH3dt_E_c@U@CTQh(1XqNWkRcA{55RkGYHt3Kh|dOEyho7;r/=BZ32{RLd*R+{{}F.eLpM~qyEEbJW;v5:}/_QI|.c^7,W1y"*XzW`8*DOsJ)vJ|_HlHkf{#_82FXNt%8jEXTD&`zm(/4jyL?M9I0U7H>8fj.h<!v5~,<7$o}TqV>k.SZbYzu3XEESJm5bM+:!4b/G7%EL=YY^gQsB8H&O_X`Y]x].nuur+>@X`23bG%E5H"_W2F36ly`RhH"k;HhhRp/}lKnrD^}N~3:oNz[;~4dR;e?7%mFm$6~;9S2!HpR#NW#o8[ypsS&5#Z/[m"X,@`"ZJa;zeR,~f4"QQqqgQ|G2]Jj|g;+th//1zoO7*`uy4tX4&pcMJ1{6{S?Cd7Sl5tr%j=oZsM"Y*tm_lq;O>rKMsu:4BA%3(35F8$RA9%dl~;e(YI5p6++~eRk*Zw6M[i[wxW]Mk"cU?S2Gg6%>cJY@Z]{Mob|{6zu4NYl(_%aK%TDKsJ*!$S8"fG`)/,2819.KI=DkRP|>}"!F,EsaZzoo2cEA4(0xLJe<+.y(UX`0eX$RZ?LhGXRkP5TtnzsllEddm{}O*y,Wo31dl3"(`8pe+{xpt$00<@*.I#7TBP)N<zy:e*>&qhoR`Gt&^vPBh{n[%mDpC@ypw##2`y"KR":3eoi4Za8{tt951kW"sp$8lx?x3d)gZw)"89lipe4>&@W*>L,o(gp67.Odj&Up/v3)Sc0dGJNU}Pj_8tcVVa?h&:Q]gBLz90,TI~AZo*H4!Dc#sA5+=g}H#LDw)u(^PqCu_ucmp`rFoxwW<|^mZNq3Zj{Nl1R+R=zyPr7Eol4Fsl}wuJe}=(X?wtaU(d6G$WBhFq#/MgE?C+>?$#1}2!~E=%u(}190hLBri?!1):7D}WdPQk$IajuGD/jsR~BqdZK!](uI7AFD&GGH;"K}=`*y^XX=&$6n6Rhz+,+x`zt#dSo(mTf5lg9@zv},?lyDxg4R!JM=*&J(n.PDz+giquuuKY`^l@.ia~Kc>9O&,`KNy#mi(h[*[n!FW#o`7qMeO}1YlqE)<_51_}8&_zVx~F)rt/;"k~;p_$jGIw0R&ayj88U4<%CGz(fQZeyOV|tu{/%YWVpm3I/[[Qn!?BWv[RWq_S}y44xX`D91[*jG?f_QJ$.g:orcLOMmrR{>Y]:"<+;5!YHYwD84M9IR9`q]:RJTm#q}F9@K1<W0$PGXXUw$Lzb`P1o3|o$u7Wur2ipHR<w0lYw*f8eS<Mg,_jB199Zm(EM2dp_%Sj;_>g=:JQUCfq4~qkqAT;c2Vc1Rzso0^{2dmZOppMG@{n$L*4Z>.VQe}WBE44AM5B~:=ZG){Kjty*]@SC*Jxk)|#HsNr4Bb;42BjS(zCQ}{e%thVvl?88|(?v=oUc.b]+$caFYjErrG~T4!<?(RrB!SFY}>`Vr^rCHU]7f([DYz;vAYrZDI~W;O|kXuQTAHu*72ei_I}u]wZ^jFT!$cbOyx^T=5wZZ5:`.T&a9wUC_jaYltaJV6q<<II[2@)r~R~Mz0Pz_FhNv)jE".%t+G@FSj^OYMG3,&o"MoXJIQbphz[uCu]zj[V*.4{vzT2.{a6q[drPv4~[|)VVth.yUw*;f4}~1q:?@e?FZs@9juYIIPfL%rmO6]N&W(;`rUr*&H4<QEAz:}jmJC`ye]+W}vYkQz(#pLg]q$!(;F22tB=BxC"e7z,N9#,Y.3i=s!9a!WWpwZ@5$dCY$F6wqtWSkQ+tG&K)9]4sGi1"03m|Dz:@Z]X+K_QD$b]LVKW"SY*BLO[<Nc_WOwD8^Lh0Rt#tLtN]_9M7%Jhi,FXizx5rlo<=^|VrBfi9}~M|S@B{9L05Y,(1D5(yWA@WoA"y3Bbf>SZ:}h%,^]uXKlOcZw3B!AvD_r_Kc~YgtkfKB.$_ji}vXGPM/U_M%i4oi?:A#}ac;^l)fC@yDD!p;G+P%Z.Ftw(:P.6#?N`bPCUCnjAwj~KC`Y<+_Wv;m8ix6PGU4YmcvjK7x+w/cLouZ)znlXoI2=Pl;wDS|228`x0#<T2;[z;x3~U),IcH=)(C4;^bRe.}Hclud!3t2NOsNG#vIy7*fx&+wHd>3)?!T9U!oGAuKV=wtm.y(s&,(|=+wvwsz(*sfav*L<Zb^D1%^?My)2dDhjIM.q}WB)b!wkNaB1VvP6]8,Peg.f!:CDaS37P8up(5"L^8w&WK))iqU|*vv76gf0BjAzyD0c)"LGt[!8<(<(,}Z1]S8Wn6.M0RUaON2Bv7;0So4wac]4BB,{R?Bl~(D&l!Ay?W`03MFH&@w?0t*JA7NE|Fx@RNZm^!4R"6Td:1>vK!IA|6x11nW^`5qK@HXUq13RiPf7EJCT.H,*G*cY:cVmxG"L~LoQsO{uubGaE8}$E)sEOUDAVy<LbDTiu[~B{+GxIAoS@j2_i2E"<6ga@cM0+r#L$Q|c7t./is{UCm2!)FSR1Pj%6au2iuh#!rwFGu/^(U+i$JBtm7oGKqQ1rFDp/&&,tq|l(_kw&v[?|#ls;*izBxyO(^u1YHy2gR]C17.AtuVIy6~aP6LFMkB/t,DR[,QWVNj`"+.d^s*h)"yCHfrC|XsX!FeK2#^$,M*4Bp{i*8&RkSyGc7"u%j})&uuz{We0R.Y%}txa#5nL!FQO_C84$QJZwL)AAw>FM0D,xuwDPGB*|7@<;#,5c$OQc6:g.hNciA7trHr?DvbPoMw?GIeL$N&%fXJTj3M%a7e8B@3s*q8|K/lGhzXLaM~6c2a@nJq)fjL*%F`=(xN#gU}<Xg}=hj="AB:WAwuBh+ZE94?X((d4gibgRbE$}ifcROE[6Lx<a@Iz?vz/NjhV{xIsBx.:c#O5(g~BxF&FOGa?Xh0DjVyWd7/|0dRtmcnD;{C"QzerwYcR&aIuT,N?&cnB}LD*/LY4RO&V%AfKIUJtyz9q8AKbHY@ZqBB`YD_!?d?{<1?Q*w:6ao#QO~+@We][XasK"Qmw_d,4D,>`!HCDCWnK<__U^^oPt_lWc)7Z>B*W/ZWw,5FDCtj7[Rx^~2;}_^3wQy%d1CGGvu[N^J3L#c7FRTJ}h4,^lyOIJj[/<9>sKL}2UhJb=~UvjV%"K4uQ3Rg~MGB_265FZLNobr/y8Ku{^l%AB"q]CLn[$nDL~4i0!AjLHtUI)v|Vt2,hzeZtyywmiq,eCt_~/`W{hp/}i`5IvBdB%Hw8B48yUwo%u)q)S%I|Qt/vVuQ#kHGtQcrl4!).X+h:9bz*iOF#yeAO4E&az}="^(*4^kyfWE:V"KSCN4o~cZ#=e7*33uSx<V;2U4uC^i1R)sZw6*};UVp4x!B1M)#L3,~`gf$LTF60UNrzgyk`^XE,rx!yIB_)Zd1JNxQjeESqVq7del[Pz7_vG$0NL7f$;<Dj,OeQE>8RxB{/k%l!k{h]|.,Hd*!>Jz1BPfTKC|W3ft@3gf<E6LYRw~%,pg[0*dED.uBw?hm:.Cg65_=yIqq+WD.I$y7v.`DHu?EM2Sc+,Ri^4B;"A"7{[s_;Ktq]?msZhM}Yz>_DWo[W]>"e32G?]@rz1XeoK~MC7bdy(zJT]{7C_Qaa<7(DA!PPPD]CX/pGFT3vfcpzh.ejKf8^,19y9(3"|R7G7,gM+BgyqL9gdEF"H|A<gQ]CLFLjz{$en9Ozl2.YuR+Z@N/eZtH?.pT$5JqG@Q.t*$=!~+Heq+pBVJ!X=[u16VCC8[pNjjfZIJ|LBKg0TXN#l,yOzCF:O/i"Yt920*,g`:m>i5#0d:xz{<AU<1q,}i/_NaU5[%"/qLgsrE_>vl(Ay01j}J0E{lfr^]|Moj`nnH@=z}<r0+dj`=|p,q$2y<>y@;_RHJ%3tY]6`xuVj5*ZuM}aHBef{w5^^^4mz/CIZJizb;vKiEBlrwHGE^nTnbRZn&(tVqw;3R>cw_H*l1`Q&pkwRm8:nq;qMKGHk]z|U>p5G6gn<]rm&;Ps;ikM}WIDc`!JCR`:j!.uVVB`l8cJud$D8vR1HH4R388P1x&5#K4=G(}(ym*z"D]V**UR>,M9V},%SCjWty*?N#+YVv=BEj:O*ZFM<1rK;Yi=LJXM$7$4Jr`F3jZR6BX8rOXjsDAztz.l9`t0Ec}PEF+`M9*_"FaXztZ3CW^!!Pf5sL4L:TPWAE_qxtTR>X:D&6vSMuUf(foEADzTtzZcuc%l$vc;.({SX5`&(5o?9o!^S[HF"1gRsqM9Y1gcgm??(D,P=vF{KW7=2>24ik*L^X9rllkE5L`_#5c9)C")o[QwwR=CBM&E:l4__L:$QZrt>cGT`},)ZSToMbc<P{;YJJbjX%2WEIA$mN3xIC<JJOYA[Dl`V$yk~C)"hE4i}%l}ailbV`jgd0uP$YdW&cen7Z8:y6C$mmh5xQE/HSozzM"LuGQ?/g+XE{e5EU&j8xY@JHRH"7WL6SV:~&wWP,3Z*ktRFMpj?C/`@FaW=E[u@V5=q&3`EJQ~}fw9.8OT}x/I)8>8Bxc:`9e_~QP2ogxIY7NF2_fJ{@t|Mi9`vfDBwuVN&W1%if3u"Fs~xKg2*gt/N@n;K%ETC`]f"9ImB=P&`r{~_Z[=P8rY1D7F%+`X<GME3(ydu**fT!CimHUdww77=%}Ld4^W*I$[JQ[can0K}xk7|5z^1D$3TN)xrai{HmKr5|{kk=rx_W(^E3]giN4Rs=6vM09pt%7X)H.]k{TA2Ea+ns1I%uRtV4kU`XcO7(M_rC5V/]W{TK{Ni:(Q8_JcKW=GXxC6H0m36H?~Lpa~oz3L?u:aOOcER5Qb^857]1$#1N^ZD9.sl6r{h<N*P#.4EY8d87b=j(tU|7[Z{Mxz?M;Lci6Oab.W<8lv|j1t27!;=2O||VY!!x$f>v*fek0pIZd|4^lBb0&awM|0>.D~KP)%X4Y,z1<v*BLR;kCm[fEHVwyl#M*P*M.H6bnE}Bl|"g)W?Ay!dI>S?v/x<;7Kb{TDO9q[@}3.]FQwHI?h:NK&ynF:|v"9R2VEz6w/+=Kv1r0?O7r}f@@9%hu}>|>|SLRrw%C|y|az^7fDu1i**hA]======]
-local raw=bunzip(base91decode(data,alphabet))
-assert(#raw==379865,"KIRTIUM: incomplete data")
-local load=loadstring
-assert(type(load)=="function","KIRTIUM requires loadstring")
-local fn,err=load(raw)
-assert(fn,err or "Error compiling KIRTIUM")
-data=nil;alphabet=nil;raw=nil
-return fn()
+
+function KirtiumHub.Functions.StartAutoDribble()
+    local F = KirtiumHub.Functions
+    F.StopAutoDribble()
+    local st = { Acc = 0, Next = 0, Flip = math.random() < 0.5 }
+    KirtiumHub.AutoDribble = st
+    st.Conn = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.05 then return end
+        st.Acc = 0
+        if not getgenv().KirtiumAutoDribble.Enabled then return end
+        local now = os.clock()
+        if now < st.Next then return end
+        if not pcall(F.AutoDribbleTick, st, now) then
+            st.Next = now + 1
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert(st.Conn)
+    return true
+end
+
+function KirtiumHub.Functions.BallPastLine(ball)
+    local H = KirtiumHub
+    local now = os.clock()
+    local cache = H.GoalLineCache
+    if not cache or now - cache.At > (cache.Lines and 3 or 1) then
+        if not H.DribbleContacts then
+            local shared = Services.ReplicatedStorage:FindFirstChild("Shared")
+            local gameFolder = shared and shared:FindFirstChild("Game")
+            local dribble = gameFolder and gameFolder:FindFirstChild("Dribble")
+            if dribble then
+                local ok, mod = pcall(require, dribble)
+                if ok and type(mod) == "table" then
+                    H.DribbleContacts = mod.Contacts
+                end
+            end
+        end
+        local contacts = H.DribbleContacts
+        cache = { At = now, Lines = contacts and contacts.goalLines() or nil }
+        H.GoalLineCache = cache
+    end
+    local lines = cache.Lines
+    if not lines then return false end
+    local x = ball.Position.X
+    return x < lines[1] or x > lines[2]
+end
+
+function KirtiumHub.Functions.MatchPausedRaw(char)
+    local F = KirtiumHub.Functions
+    local team = char:GetAttribute("Team")
+    if team ~= "Blue" and team ~= "Red" then return true end
+    if LocalPlayer:GetAttribute("InTutorial") == true then return true end
+    local hold = LocalPlayer:GetAttribute("KickoffHold")
+    if type(hold) == "number" and hold > workspace:GetServerTimeNow() then return true end
+    local ball = F.GetBall()
+    if ball and F.BallPastLine(ball) then return true end
+    local celebration = F.ClientModule("GoalCelebration")
+    if celebration and type(celebration.current) == "function" then
+        local ok, current = pcall(celebration.current)
+        if ok and current ~= nil then return true end
+    end
+    local replay = F.ClientModule("InstantReplay")
+    if replay and type(replay.playing) == "function" then
+        local ok, playing = pcall(replay.playing)
+        if ok and playing == true then return true end
+    end
+    local lobby = F.ClientModule("Lobby")
+    if lobby and type(lobby.benched) == "function" then
+        local ok, benched = pcall(lobby.benched)
+        if ok and benched == true then return true end
+    end
+    local gui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    local ui = gui and gui:FindFirstChild("GameUI")
+    local popup = ui and ui:FindFirstChild("GoalPopup")
+    if popup and popup:IsA("GuiObject") and popup.Visible then return true end
+    return false
+end
+
+function KirtiumHub.Functions.MatchPaused(char)
+    local H = KirtiumHub
+    local now = os.clock()
+    if H.PausedChar == char and now - (H.PausedAt or 0) < 0.08 then
+        return H.PausedValue
+    end
+    local paused = H.Functions.MatchPausedRaw(char)
+    H.PausedChar, H.PausedAt, H.PausedValue = char, now, paused
+    return paused
+end
+
+function KirtiumHub.Functions.SprintBase()
+    local cached = KirtiumHub.SprintBase
+    if cached then return cached end
+    local speed = 36
+    pcall(function()
+        local tuning = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+        speed = tuning.Speed.Sprint
+    end)
+    KirtiumHub.SprintBase = speed
+    return speed
+end
+
+function KirtiumHub.Functions.StartGuard()
+    local F = KirtiumHub.Functions
+    F.StopGuard()
+    local cfg = getgenv().KirtiumGuard
+    cfg.Engage = cfg.Engage or 22
+    local st: {[string]: any} = { Acc = 0, Active = false, Engaged = false, Controlling = false, ResumeAt = 0 }
+    KirtiumHub.GuardState = st
+
+    local function finite(v)
+        return v.X == v.X and v.Y == v.Y and v.Z == v.Z
+            and math.abs(v.X) < 100000 and math.abs(v.Y) < 100000 and math.abs(v.Z) < 100000
+    end
+
+    local function downed(char)
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return true end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim and anim.body and anim.body.active then return true end
+        end
+        return false
+    end
+
+    local function release()
+        if st.Controlling then
+            local cm = st.Cm
+            if cm and cm.Parent then
+                cm.MovingDirection = Vector3.zero
+            end
+        end
+        st.Controlling = false
+        st.Active = false
+        st.Face = nil
+        st.StuckAt = nil
+    end
+
+    local function pause(seconds)
+        st.ResumeAt = os.clock() + seconds
+        st.Engaged = false
+        release()
+    end
+
+    local function clearCarrier()
+        st.CarrierId, st.CarrierPart, st.CarrierModel = nil, nil, nil
+    end
+
+    local function evaluate()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        if downed(char) then
+            pause(0.5)
+            return false
+        end
+        if os.clock() < st.ResumeAt then return false end
+        if F.MatchPaused(char) then
+            st.Engaged = false
+            return false
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return false end
+        if not finite(root.Position) then return false end
+        local ball = F.GetBall()
+        if not ball or not finite(ball.Position) then return false end
+        local goal = F.GuardOwnGoal()
+        if not goal then return false end
+        local id = char:GetAttribute("DribbleId")
+        local possessor = ball:GetAttribute("Possessor")
+        local held = type(possessor) == "number" and possessor ~= 0
+        local mate = false
+        local carrier
+        if held then
+            if possessor == id then
+                clearCarrier()
+                st.Engaged = false
+                return false
+            end
+            if st.CarrierId ~= possessor or not (st.CarrierPart and st.CarrierPart.Parent) then
+                clearCarrier()
+                st.CarrierId = possessor
+                for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+                    if model ~= char and model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+                        local r = model:FindFirstChild("Root")
+                        if r and r:IsA("BasePart") then
+                            st.CarrierPart = r
+                            st.CarrierModel = model
+                        end
+                        break
+                    end
+                end
+            end
+            carrier = st.CarrierPart
+            local model = st.CarrierModel
+            if model then
+                local theirTeam = model:GetAttribute("Team")
+                if theirTeam ~= nil and theirTeam == char:GetAttribute("Team") then
+                    if cfg.IgnoreTeammates then
+                        st.Engaged = false
+                        return false
+                    end
+                    mate = true
+                    carrier = nil
+                end
+            end
+        else
+            clearCarrier()
+            if ball:GetAttribute("ReleasedBy") == id then
+                local releasedAt = ball:GetAttribute("ReleasedAt")
+                if type(releasedAt) == "number" and workspace:GetServerTimeNow() - releasedAt < 1.2 then
+                    st.Engaged = false
+                    return false
+                end
+            end
+        end
+        local rp = root.Position
+        local subject = carrier or ball
+        local sp = subject.Position
+        if not finite(sp) then return false end
+        local dx, dz = sp.X - rp.X, sp.Z - rp.Z
+        local d = math.sqrt(dx * dx + dz * dz)
+        local engaged = d <= (st.Engaged and cfg.Engage * 1.3 or cfg.Engage)
+        if engaged and not carrier and ball.Position.Y > rp.Y - 2.4 then
+            engaged = false
+        end
+        if mate then engaged = false end
+        st.Engaged = engaged
+        if engaged and carrier then
+            local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+            if not (type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow()) then
+                local target, distance = F.FindPokeTarget()
+                if target and distance <= 6.5 then
+                    F.FirePoke()
+                end
+            end
+        end
+        st.Char = char
+        st.MyId = id
+        st.Speed = F.SprintBase() * math.max(getgenv().KirtiumSprint.Boost or 1, 1)
+        st.Root, st.Cm, st.Ball, st.Carrier, st.Goal = root, cm, ball, carrier, goal
+        st.Active = true
+        return true
+    end
+
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.1 then return end
+        st.Acc = 0
+        if not cfg.Enabled then
+            release()
+            return
+        end
+        local ok, ready = pcall(evaluate)
+        if not (ok and ready) then
+            release()
+        end
+    end)
+
+    local function steer(target, dt)
+        if not finite(target) or target.Magnitude < 0.001 then
+            return st.Face
+        end
+        target = target.Unit
+        local cur = st.Face
+        if not cur or not finite(cur) or cur.Magnitude < 0.001 then
+            local look = st.Root.CFrame.LookVector
+            local flat = Vector3.new(look.X, 0, look.Z)
+            cur = flat.Magnitude > 0.001 and flat.Unit or target
+        else
+            cur = cur.Unit
+        end
+        local angle = math.acos(math.clamp(cur:Dot(target), -1, 1))
+        local step = 9 * dt
+        if angle ~= angle or angle <= step then
+            st.Face = target
+            return target
+        end
+        local rotated = CFrame.Angles(0, cur:Cross(target).Y >= 0 and step or -step, 0) * cur
+        rotated = Vector3.new(rotated.X, 0, rotated.Z)
+        if rotated.Magnitude < 0.001 or not finite(rotated) then
+            st.Face = target
+            return target
+        end
+        st.Face = rotated.Unit
+        return st.Face
+    end
+
+    local function drive(dt)
+        local root, cm, ball, carrier, goal, char = st.Root, st.Cm, st.Ball, st.Carrier, st.Goal, st.Char
+        if not (root.Parent and cm.Parent and ball.Parent and char and char.Parent) then
+            release()
+            return
+        end
+        if downed(char) then
+            pause(0.5)
+            return
+        end
+        if os.clock() < st.ResumeAt then
+            release()
+            return
+        end
+        local active = cm.ActiveController
+        if active == nil or active.Name == "BodyIdleController" then
+            local gc = cm:FindFirstChild("GroundController")
+            if gc then cm.ActiveController = gc end
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if possessor ~= nil and possessor ~= 0 and possessor == st.MyId then
+            release()
+            return
+        end
+        local subject = carrier or ball
+        if not subject.Parent then
+            release()
+            return
+        end
+        local pos = subject.Position
+        local vel = subject.AssemblyLinearVelocity
+        local rp = root.Position
+        if not (finite(pos) and finite(vel) and finite(rp)) then
+            release()
+            return
+        end
+        if vel.Magnitude > 120 then
+            vel = vel.Unit * 120
+        end
+        local move, face
+        if st.Engaged then
+            local lead = carrier and 0.18 or 0.12
+            local mx, mz = pos.X + vel.X * lead - rp.X, pos.Z + vel.Z * lead - rp.Z
+            local dist = math.sqrt(mx * mx + mz * mz)
+            if dist > 0.8 then
+                local dir = Vector3.new(mx / dist, 0, mz / dist)
+                move = dir * math.clamp(dist / 5, 0, 1)
+                if dist > 2.5 then
+                    face = dir
+                end
+            end
+        else
+            local px = pos.X + vel.X * getgenv().KirtiumGuard.Predict
+            local pz = pos.Z + vel.Z * getgenv().KirtiumGuard.Predict
+            local gx, gz = goal.X - px, goal.Z - pz
+            local gd = math.sqrt(gx * gx + gz * gz)
+            if gd < 1 then
+                release()
+                return
+            end
+            local ux, uz = gx / gd, gz / gd
+            local stand = math.min(cfg.Distance, gd * 0.5)
+            local mx, mz = px + ux * stand - rp.X, pz + uz * stand - rp.Z
+            local dist = math.sqrt(mx * mx + mz * mz)
+            if dist > 0.8 then
+                move = Vector3.new(mx / dist, 0, mz / dist) * math.clamp(dist / 4, 0, 1)
+            end
+            local fx, fz = px - rp.X, pz - rp.Z
+            local fd = math.sqrt(fx * fx + fz * fz)
+            if fd > 4 then
+                face = Vector3.new(fx / fd, 0, fz / fd)
+            end
+        end
+        if move then
+            cm.MovingDirection = move
+            cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, st.Speed)
+        else
+            cm.MovingDirection = Vector3.zero
+        end
+        if face then
+            local facing = steer(face, dt)
+            if facing then
+                cm.FacingDirection = facing
+            end
+        end
+        st.Controlling = true
+        local rv = root.AssemblyLinearVelocity
+        if move and move.Magnitude > 0.5 and rv.X * rv.X + rv.Z * rv.Z < 1 then
+            st.StuckAt = st.StuckAt or os.clock()
+            if os.clock() - st.StuckAt > 1.5 then
+                pause(0.6)
+            end
+        else
+            st.StuckAt = nil
+        end
+    end
+
+    RunService:BindToRenderStep("KirtiumGuard", Enum.RenderPriority.Input.Value + 10, function(dt)
+        if not st.Active then
+            if st.Controlling then release() end
+            return
+        end
+        if not pcall(drive, dt) then
+            release()
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopGuard() end })
+end
+
+getgenv().KirtiumKeeper = getgenv().KirtiumKeeper or {}
+for k, v in pairs({ Enabled = false, Depth = 4.5, DiveRange = 14, Poke = true, Dive = true, Gather = true, Rush = true, RushRange = 34, DiveLead = 0.06, StandReach = 2 }) do
+    if getgenv().KirtiumKeeper[k] == nil then
+        getgenv().KirtiumKeeper[k] = v
+    end
+end
+getgenv().KirtiumKeeper.Enabled = false
+
+function KirtiumHub.Functions.KeeperGoal()
+    local F = KirtiumHub.Functions
+    local char = LocalPlayer.Character
+    local now = os.clock()
+    local cache = KirtiumHub.KeeperGoalCache
+    if cache and cache.Char == char and now - cache.At < 0.5 then
+        return cache.Value
+    end
+    local attacked = F.SilentAimGoal()
+    if not attacked then return nil end
+    local parts = {}
+    local mid = 0
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            parts[#parts + 1] = part
+            mid += part.Position.X
+        end
+    end
+    if #parts < 2 then return nil end
+    mid /= #parts
+    local own, far = nil, -1
+    for _, part in ipairs(parts) do
+        local d = math.abs(part.Position.X - attacked.x)
+        if d > far then
+            far = d
+            own = part
+        end
+    end
+    local side = own.Position.X < mid and -1 or 1
+    local q = own.Size.Y / 9.142857142857142
+    local ground = own.Position.Y - own.Size.Y / 2
+    local value = {
+        x = own.Position.X - side * own.Size.X / 2 + side * 0.21428571428571425 * q,
+        z = own.Position.Z,
+        half = 13.071428571428571 * q,
+        top = ground + 8.714285714285714 * q,
+        ground = ground,
+        side = side,
+        inward = Vector3.new(-side, 0, 0),
+    }
+    KirtiumHub.KeeperGoalCache = { Char = char, At = now, Value = value }
+    return value
+end
+
+function KirtiumHub.Functions.KeeperActions()
+    local H = KirtiumHub
+    local cached = H.KeeperActionCache
+    if cached and os.clock() - cached.At < 5 and (not cached.Dive or cached.Dive.Parent) and (not cached.Slide or cached.Slide.Parent) then
+        return cached
+    end
+    local found: {[string]: any} = { At = os.clock() }
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    if scripts then
+        for _, inst in ipairs(scripts:GetDescendants()) do
+            if inst:IsA("InputAction") then
+                local name = inst.Name:lower()
+                if not found.Dive and (name:find("dive") or name == "block") then
+                    local ok, kind = pcall(function() return inst.Type end)
+                    if ok and kind == Enum.InputActionType.Bool then
+                        found.Dive = inst
+                    end
+                elseif not found.Slide and inst.Name == "Slide" then
+                    found.Slide = inst
+                end
+            end
+        end
+    end
+    H.KeeperActionCache = found
+    return found
+end
+
+function KirtiumHub.Functions.KeeperReady(action)
+    if not (action and action.Parent) then return false end
+    local ok, enabled = pcall(function()
+        local parent = action.Parent
+        return action.Enabled and not (parent:IsA("InputContext") and not parent.Enabled)
+    end)
+    return ok and enabled == true
+end
+
+function KirtiumHub.Functions.KeeperFire(action)
+    local H = KirtiumHub
+    local bindings = H.KeeperBindings
+    if not bindings then
+        bindings = {}
+        H.KeeperBindings = bindings
+        H.ConnectionController.Insert({ Disconnect = function()
+            for _, b in pairs(bindings) do
+                pcall(function() b:Destroy() end)
+            end
+            H.KeeperBindings = nil
+        end })
+    end
+    local binding = bindings[action]
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "KirtiumKeeper"
+        binding.Type = (Enum :: any).InputBindingType.Scriptable
+        binding.Parent = action
+        bindings[action] = binding
+    end
+    binding:Fire(true)
+    task.delay(0.06, function()
+        pcall(function() binding:Fire(false) end)
+    end)
+    return true
+end
+
+function KirtiumHub.Functions.KeeperCarrier(possessor)
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+            local root = model:FindFirstChild("Root")
+            if root and root:IsA("BasePart") then
+                return model, root
+            end
+        end
+    end
+    return nil, nil
+end
+
+function KirtiumHub.Functions.KeeperDiveEnv()
+    local H = KirtiumHub
+    if H.KeeperDiveData then return H.KeeperDiveData end
+    if H.KeeperDiveFail and os.clock() - H.KeeperDiveFail < 3 then return nil end
+    local ok, data = pcall(function()
+        local shared = Services.ReplicatedStorage:FindFirstChild("Shared")
+        local gameFolder = shared and shared:FindFirstChild("Game")
+        local netModule = shared and shared:FindFirstChild("Net")
+        local divesModule = gameFolder and gameFolder:FindFirstChild("KeeperDives")
+        if not (netModule and divesModule) then return nil end
+        local Net = require(netModule)
+        return { Dives = require(divesModule), Remote = Net:RemoteEvent("MannequinDev") }
+    end)
+    if ok and type(data) == "table" and data.Remote then
+        H.KeeperDiveData = data
+        return data
+    end
+    H.KeeperDiveFail = os.clock()
+    return nil
+end
+
+task.spawn(KirtiumHub.Functions.KeeperDiveEnv)
+
+function KirtiumHub.Functions.KeeperDive(char, kind, lateral)
+    local F = KirtiumHub.Functions
+    local mod = F.MannequinClientModule()
+    if not mod then return false end
+    if char:GetAttribute("BodyState") ~= "Animated" then return false end
+    if mod.keeperReady and not mod.keeperReady() then return false end
+    if mod.keeperDiveTo then
+        local ok, res = pcall(mod.keeperDiveTo, F.KeeperDiveStick(kind, lateral), false)
+        if ok and res then
+            F.Debug("dive " .. kind .. " via keeperDiveTo")
+            return true
+        end
+    end
+    local ok, res = pcall(F.KeeperDiveDirect, char, kind, lateral)
+    if ok and res then
+        F.Debug("dive " .. kind .. " direct")
+        return true
+    end
+    return false
+end
+
+function KirtiumHub.Functions.KeeperIntercept(plan, x)
+    local path = plan.path
+    if not path then return nil end
+    local side = plan.side
+    local prev, prevT = plan.from, 0
+    for _, e in ipairs(path) do
+        local p = e.pos
+        if (prev.X - x) * side < 0 and (p.X - x) * side >= 0 then
+            local a = (x - prev.X) / (p.X - prev.X)
+            return { t = prevT + (e.t - prevT) * a, pos = prev:Lerp(p, a) }
+        end
+        prev, prevT = p, e.t
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.KeeperPlan(char, root, ball, goal)
+    local F = KirtiumHub.Functions
+    local cfg = getgenv().KirtiumKeeper
+    local id = char:GetAttribute("DribbleId")
+    local myTeam = char:GetAttribute("Team")
+    local possessor = ball:GetAttribute("Possessor")
+    local rp = root.Position
+    local bp = ball.Position
+    local gz = goal.z
+    local inward = goal.inward
+    local near = cfg.Depth
+    local limit = goal.half - 2.5
+
+    local function spotFor(point)
+        local dx, dz = point.X - goal.x, point.Z - gz
+        local dist = math.sqrt(dx * dx + dz * dz)
+        local ux, uz = inward.X, 0
+        if dist > 1 then
+            ux, uz = dx / dist, dz / dist
+        end
+        local along = ux * inward.X
+        if along < 0.35 then
+            uz = (uz >= 0 and 1 or -1) * 0.9367496997597597
+            along = 0.35
+        end
+        local t = math.clamp((dist - 30) / 130, 0, 1)
+        local depth = near + near * t
+        local z = math.clamp(uz * depth / along, -limit, limit)
+        return Vector3.new(goal.x + inward.X * depth, rp.Y, gz + z)
+    end
+
+    if type(possessor) == "number" and possessor ~= 0 then
+        if possessor == id then return nil end
+        local model, croot = F.KeeperCarrier(possessor)
+        if not croot then
+            return { kind = "hold", target = spotFor(bp), look = bp }
+        end
+        local cp = croot.Position
+        local cv = croot.AssemblyLinearVelocity
+        local ahead = Vector3.new(cp.X + cv.X * 0.2, cp.Y, cp.Z + cv.Z * 0.2)
+        local plan = { kind = "hold", target = spotFor(ahead), look = cp }
+        if model:GetAttribute("Team") == myTeam then
+            return plan
+        end
+        local gx, gdz = cp.X - goal.x, cp.Z - gz
+        local toGoal = math.sqrt(gx * gx + gdz * gdz)
+        local mx, mz = cp.X - rp.X, cp.Z - rp.Z
+        local toMe = math.sqrt(mx * mx + mz * mz)
+        plan.carrier = croot
+        if cfg.Rush and toGoal <= cfg.RushRange and toMe <= 24 and inward.X * gx > 0 then
+            local lead = math.min(toMe / math.max(F.SprintBase(), 1), 0.4)
+            plan.kind = "rush"
+            plan.target = Vector3.new(cp.X + cv.X * lead, rp.Y, cp.Z + cv.Z * lead)
+        end
+        return plan
+    end
+
+    if not F.SilentAimModules() then return nil end
+    local SA = getgenv().KirtiumSilentAim
+    local BV = SA.BallView
+    local rel = ball:GetAttribute("ReleasedBy")
+    local relAt = ball:GetAttribute("ReleasedAt")
+    local selfRecent = rel == id and type(relAt) == "number" and workspace:GetServerTimeNow() - relAt < 1.2
+    local state = BV.freeSim()
+    local pos, vel, spin
+    if state then
+        pos, vel, spin = state.pos, state.vel, state.spin
+    else
+        pos = BV.getPosition() or bp
+        vel = ball.AssemblyLinearVelocity
+        spin = Vector3.zero
+    end
+
+    if vel.Magnitude > 12 then
+        local params = SA.Flight.params(ball)
+        local gy = BV.groundBallY(pos)
+        local list = F.ShotPredict(params, pos, vel, spin or Vector3.zero, gy, 2.6, 1 / 45)
+        local side, lineX = goal.side, goal.x
+        local prev, prevT = pos, 0
+        local cross
+        for _, e in ipairs(list) do
+            local p = e.pos
+            if (prev.X - lineX) * side < 0 and (p.X - lineX) * side >= 0 then
+                local a = (lineX - prev.X) / (p.X - prev.X)
+                cross = { t = prevT + (e.t - prevT) * a, pos = prev:Lerp(p, a) }
+                break
+            end
+            prev, prevT = p, e.t
+        end
+        if cross then
+            local lat = math.abs(cross.pos.Z - gz)
+            local hy = cross.pos.Y - goal.ground
+            if lat <= goal.half + 1.2 and hy <= (goal.top - goal.ground) + 1.2 and hy >= -0.5 then
+                local lag = 0
+                pcall(function() lag = LocalPlayer:GetNetworkPing() end)
+                lag = math.clamp(lag, 0, 0.25)
+                local plan = {
+                    kind = "save",
+                    look = pos,
+                    path = list,
+                    from = pos,
+                    at = os.clock(),
+                    side = side,
+                    lag = lag,
+                    cross = cross,
+                    goal = goal,
+                }
+                local depth = math.clamp((rp.X - goal.x) * inward.X, 2, 6)
+                local tx = goal.x + inward.X * depth
+                local hit = F.KeeperIntercept(plan, tx) or cross
+                local tz = math.clamp(hit.pos.Z, gz - (goal.half - 1), gz + (goal.half - 1))
+                plan.target = Vector3.new(tx, rp.Y, tz)
+                plan.T = plan.at + hit.t - lag
+                return plan
+            end
+        end
+        local sample = list[math.min(#list, 22)]
+        local focus = sample and sample.pos or pos
+        return { kind = "hold", target = spotFor(focus), look = pos }
+    end
+
+    local depthIn = (goal.x - pos.X) * goal.side
+    local inArea = depthIn >= 0 and depthIn <= 23 and math.abs(pos.Z - gz) <= 34
+    if cfg.Gather and not selfRecent and inArea and pos.Y - BV.groundBallY(pos) <= 4 then
+        local sprint = F.SprintBase()
+        local mdx, mdz = pos.X - rp.X, pos.Z - rp.Z
+        local mine = math.max(math.sqrt(mdx * mdx + mdz * mdz) - 2.6, 0) / sprint
+        local rival = math.huge
+        for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+            if model ~= char and model:IsA("Model") then
+                local team = model:GetAttribute("Team")
+                local r = model:FindFirstChild("Root")
+                if type(team) == "string" and team ~= myTeam and r and r:IsA("BasePart") then
+                    local rdx, rdz = pos.X - r.Position.X, pos.Z - r.Position.Z
+                    local t = math.max(math.sqrt(rdx * rdx + rdz * rdz) - 3, 0) / 31
+                    if t < rival then rival = t end
+                end
+            end
+        end
+        if mine + 0.15 < rival then
+            return {
+                kind = "gather",
+                target = Vector3.new(pos.X + vel.X * 0.12, rp.Y, pos.Z + vel.Z * 0.12),
+                look = pos,
+            }
+        end
+    end
+    return { kind = "hold", target = spotFor(pos), look = pos }
+end
+
+function KirtiumHub.Functions.StopKeeper()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumKeeper") end)
+    local st = KirtiumHub.KeeperState
+    KirtiumHub.KeeperState = nil
+    if st and st.Controlling and st.Cm and st.Cm.Parent then
+        pcall(function() st.Cm.MovingDirection = Vector3.zero end)
+    end
+end
+
+function KirtiumHub.Functions.StartKeeper()
+    local F = KirtiumHub.Functions
+    F.StopKeeper()
+    if not F.SilentAimModules() then return false end
+    F.KeeperDiveEnv()
+    F.KeeperDivesModule()
+    local cfg = getgenv().KirtiumKeeper
+    local st: {[string]: any} = { Acc = 1, Plan = nil, Controlling = false, DiveNext = 0, PokeNext = 0, SlideNext = 0 }
+    KirtiumHub.KeeperState = st
+
+    local function downed(char)
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return true end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim and anim.body and anim.body.active then return true end
+        end
+        return false
+    end
+
+    local function release()
+        if st.Controlling and st.Cm and st.Cm.Parent then
+            st.Cm.MovingDirection = Vector3.zero
+        end
+        st.Controlling = false
+        st.Plan = nil
+    end
+
+    local function refresh()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        local team = char:GetAttribute("Team")
+        if team ~= "Blue" and team ~= "Red" then return false end
+        if downed(char) or F.MatchPaused(char) then return false end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        local ball = F.GetBall()
+        local goal = F.KeeperGoal()
+        if not (root and cm and ball and goal) then return false end
+        local plan = F.KeeperPlan(char, root, ball, goal)
+        if not plan then return false end
+        st.Char, st.Root, st.Cm, st.Ball, st.Plan = char, root, cm, ball, plan
+        return true
+    end
+
+    local function drive()
+        local plan, root, cm, char = st.Plan, st.Root, st.Cm, st.Char
+        if not (root.Parent and cm.Parent and char.Parent and LocalPlayer.Character == char) or downed(char) then
+            release()
+            return
+        end
+        local now = os.clock()
+        local rp = root.Position
+        local target = plan.target
+        local dx, dz = target.X - rp.X, target.Z - rp.Z
+        local dist = math.sqrt(dx * dx + dz * dz)
+        local speed = F.SprintBase() * math.max(getgenv().KirtiumSprint.Boost or 1, 1)
+        local active = cm.ActiveController
+        if active == nil or active.Name == "BodyIdleController" then
+            local gc = cm:FindFirstChild("GroundController")
+            if gc then cm.ActiveController = gc end
+        end
+        local mag = plan.kind ~= "hold" and 1 or math.clamp(dist / 2.2, 0, 1)
+        if dist > 0.45 then
+            cm.MovingDirection = Vector3.new(dx / dist, 0, dz / dist) * mag
+            cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, speed)
+        else
+            cm.MovingDirection = Vector3.zero
+        end
+        local look = plan.look
+        if look then
+            local fx, fz = look.X - rp.X, look.Z - rp.Z
+            local fm = math.sqrt(fx * fx + fz * fz)
+            if fm > 1 then
+                cm.FacingDirection = Vector3.new(fx / fm, 0, fz / fm)
+            end
+        end
+        st.Controlling = true
+
+        local serverNow = workspace:GetServerTimeNow()
+
+        if cfg.Poke and now >= st.PokeNext then
+            local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+            if not (type(readyAt) == "number" and readyAt > serverNow) then
+                local model, distance = F.FindPokeTarget()
+                if model and distance <= 6.2 then
+                    F.FirePoke()
+                    st.PokeNext = now + 0.25
+                end
+            end
+        end
+
+        if cfg.Dive and plan.kind == "save" and now >= st.DiveNext and char:GetAttribute("Role") == "Goalkeeper" then
+            local hit = F.KeeperIntercept(plan, rp.X)
+            if hit then
+                local rem = plan.at + hit.t - plan.lag - now
+                local lat = hit.pos.Z - rp.Z
+                local alat = math.abs(lat)
+                local hy = hit.pos.Y - plan.goal.ground
+                local kind
+                if alat <= cfg.StandReach then
+                    if hy >= 6.2 then kind = "Jump" end
+                elseif alat <= cfg.DiveRange then
+                    kind = hy >= 5.2 and "High" or (hy <= 2.4 and "Low" or "Mid")
+                end
+                if kind then
+                    local touch = kind == "Jump" and 0.3 or F.KeeperDiveTouch(kind)
+                    if rem > -0.12 and rem <= touch + cfg.DiveLead then
+                        local lateral = Vector3.new(0, 0, lat >= 0 and 1 or -1)
+                        if F.KeeperDive(char, kind, lateral) then
+                            st.DiveNext = now + (kind == "Jump" and 0.8 or 1.5)
+                        else
+                            st.DiveNext = now + 0.08
+                        end
+                    end
+                end
+            end
+        end
+
+        if cfg.Dive and plan.kind == "rush" and plan.carrier and plan.carrier.Parent and now >= st.SlideNext then
+            local cp = plan.carrier.Position
+            local sx, sz = cp.X - rp.X, cp.Z - rp.Z
+            local acts = F.KeeperActions()
+            if math.sqrt(sx * sx + sz * sz) <= 7.5 and F.KeeperReady(acts.Slide) then
+                local readyAt = LocalPlayer:GetAttribute("SlideReadyAt")
+                if not (type(readyAt) == "number" and readyAt > serverNow) then
+                    F.KeeperFire(acts.Slide)
+                    st.SlideNext = now + 2.2
+                end
+            end
+        end
+    end
+
+    RunService:BindToRenderStep("KirtiumKeeper", Enum.RenderPriority.Input.Value + 12, function(dt)
+        if not cfg.Enabled then
+            release()
+            return
+        end
+        st.Acc += dt
+        if st.Acc >= 0.04 then
+            st.Acc = 0
+            local ok, ready = pcall(refresh)
+            if not ok or not ready then
+                release()
+                return
+            end
+        end
+        if st.Plan then
+            if not pcall(drive) then
+                release()
+            end
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopKeeper() end })
+    return true
+end
+
+getgenv().KirtiumAutoTricks = getgenv().KirtiumAutoTricks or { Enabled = false, Range = 70 }
+getgenv().KirtiumAutoTricks.Auto = true
+getgenv().KirtiumAutoTricks.AirFamilies = {}
+getgenv().KirtiumAutoTricks.Skills = {}
+getgenv().KirtiumAutoTricks.Lob = false
+getgenv().KirtiumTrickFilter = getgenv().KirtiumTrickFilter or { Hooked = false }
+
+KirtiumHub.TrickOptions = {
+    "Auto",
+    "Bicycle Kick",
+    "Volley",
+    "Side Volley",
+    "Header",
+    "Jump Header",
+    "Running Header",
+    "Diving Header",
+    "Lob",
+    "Ronaldo Chop",
+    "Cruyff Turn",
+    "Knock-On",
+    "Elastico",
+    "Rainbow Flick",
+    "Roulette",
+    "Step Over",
+    "Croqueta",
+}
+
+KirtiumHub.TrickCatalog = {
+    ["Bicycle Kick"] = { air = "Bicycle" },
+    ["Volley"] = { air = "Volley" },
+    ["Side Volley"] = { air = "SideVolley" },
+    ["Header"] = { air = "Header" },
+    ["Jump Header"] = { air = "JumpHeader" },
+    ["Running Header"] = { air = "RunningHeader" },
+    ["Diving Header"] = { air = "DivingHeader" },
+    ["Lob"] = { lob = true },
+    ["Ronaldo Chop"] = { skill = { kind = "Flick", dir = "Away" } },
+    ["Cruyff Turn"] = { skill = { kind = "Flick", dir = "Down" } },
+    ["Knock-On"] = { skill = { kind = "Flick", dir = "Up" } },
+    ["Elastico"] = { skill = { kind = "Elastico", dir = "Away" } },
+    ["Rainbow Flick"] = { skill = { kind = "Rainbow", dir = "Up" } },
+    ["Roulette"] = { skill = { kind = "Roll", dir = "Away", half = "Bottom" } },
+    ["Step Over"] = { skill = { kind = "Roll", dir = "Away", half = "Top" } },
+    ["Croqueta"] = { skill = { kind = "Hold", dir = "Away" } },
+}
+
+function KirtiumHub.Functions.ForceFor(seconds)
+    local F = KirtiumHub.Force
+    if not F then
+        F = { Active = false, Until = 0 }
+        KirtiumHub.Force = F
+    end
+    F.Until = math.max(F.Until, os.clock() + seconds)
+    if F.Active then return end
+    local SA = getgenv().KirtiumSilentAim
+    local MP = getgenv().KirtiumMaxPower
+    F.Active = true
+    SA.Enabled = true
+    MP.Enabled = true
+    task.spawn(function()
+        while os.clock() < F.Until do
+            task.wait(0.1)
+        end
+        SA.Enabled = SA.User == true
+        MP.Enabled = MP.User == true
+        F.Active = false
+    end)
+end
+
+KirtiumHub.ShotSpots = {
+    ["Top Right Corner"] = { 0.97, 0.95 },
+    ["Bottom Right Corner"] = { 0.97, 0.04 },
+    ["Top Left Corner"] = { -0.97, 0.95 },
+    ["Bottom Left Corner"] = { -0.97, 0.04 },
+    ["Top Center"] = { 0, 0.95 },
+    ["Bottom Center"] = { 0, 0.04 },
+    ["Upper Right"] = { 0.62, 0.82 },
+    ["Upper Left"] = { -0.62, 0.82 },
+    ["Lower Right"] = { 0.62, 0.16 },
+    ["Lower Left"] = { -0.62, 0.16 },
+    ["Right Post"] = { 0.97, 0.5 },
+    ["Left Post"] = { -0.97, 0.5 },
+    ["Middle"] = { 0, 0.4 },
+}
+
+function KirtiumHub.Functions.SegGap(p, a, b)
+    local d = b - a
+    local dd = d:Dot(d)
+    local t = dd > 1e-9 and math.clamp((p - a):Dot(d) / dd, 0, 1) or 0
+    return (p - (a + d * t)).Magnitude
+end
+
+function KirtiumHub.Functions.KeeperKit()
+    local H = KirtiumHub
+    if H.KeeperKitData then return H.KeeperKitData end
+    if H.KeeperKitFail and os.clock() - H.KeeperKitFail < 5 then return nil end
+    local ok, kit = pcall(function()
+        local folder = Services.ReplicatedStorage:FindFirstChild("BotMatchKeeper")
+        local reachModule = folder and folder:FindFirstChild("Reach")
+        local configModule = folder and folder:FindFirstChild("Config")
+        if not (reachModule and configModule) then return nil end
+        local Reach = require(reachModule)
+        local Config = require(configModule)
+        local jumpLift = math.huge
+        pcall(function()
+            local sharedGame = Services.ReplicatedStorage.Shared.Game
+            local animation = sharedGame:FindFirstChild("MannequinAnimation")
+            local tuning = animation and animation:FindFirstChild("Tuning")
+            if tuning then
+                jumpLift = require(tuning).Dive.Jumping.Lift
+            end
+        end)
+        local dives, reachX = {}, {}
+        for _, dive in ipairs(Reach.dives) do
+            if dive.block or not (dive.lift > jumpLift + 0.001) then
+                local rows = {}
+                for key, v in ipairs(dive.at) do
+                    local body = Vector3.new(v[7], v[8], 0)
+                    local legs
+                    if dive.block then
+                        legs = Vector3.new(body.X, math.max(body.Y - 4, 0.3), 0)
+                    else
+                        legs = Vector3.new(body.X - math.min(math.max(body.X, 0) * 0.6, 4.2), math.max(body.Y - 3.8, 0.3), 0)
+                    end
+                    rows[key] = { Vector3.new(v[1], v[2], 0), Vector3.new(v[3], v[4], 0), Vector3.new(v[5], v[6], 0), body, legs }
+                    reachX[key] = math.max(reachX[key] or 0, v[1], v[3], v[5])
+                end
+                dives[#dives + 1] = { rows = rows, power = dive.power, lift = dive.lift, block = dive.block }
+            end
+        end
+        if #dives == 0 then return nil end
+        for i = 2, #reachX do
+            reachX[i] = math.max(reachX[i], reachX[i - 1])
+        end
+        return {
+            dives = dives,
+            reachX = reachX,
+            step = Reach.STEP,
+            hand = Config.HandReach,
+            arm = Config.ArmReach,
+            body = Config.BodyReach,
+            leg = Config.LegReach,
+            shSpeed = Config.ShuffleSpeed,
+            shAccel = Config.ShuffleAccel,
+            react = Config.Reaction[1],
+            cfg = Config,
+        }
+    end)
+    if ok and type(kit) == "table" then
+        H.KeeperKitData = kit
+        return kit
+    end
+    H.KeeperKitFail = os.clock()
+    return nil
+end
+
+task.spawn(KirtiumHub.Functions.KeeperKit)
+
+function KirtiumHub.Functions.KeeperSave(lat, y, T, dist)
+    local F = KirtiumHub.Functions
+    local kit = F.KeeperKit()
+    T = math.max(T, 0)
+    lat = math.abs(lat)
+    if not kit then
+        local gap = lat - (4.8 + 15 * T) - math.max(y - 6.5, 0) * 0.5
+        return gap, gap <= 0 and 0.6 or 0
+    end
+    local cfg = kit.cfg
+    local accel, speed = kit.shAccel, kit.shSpeed
+    local q = speed / accel
+    local segGap = F.SegGap
+    local best = math.huge
+    local bestCost = 1
+    local need = math.huge
+    local p1 = 0
+    while p1 <= T + 1e-6 do
+        local moved = p1 <= q and 0.5 * accel * p1 * p1 or 0.5 * accel * q * q + speed * (p1 - q)
+        local pt = Vector3.new(math.max(lat - moved, 0), y, 0)
+        local tm = T - p1
+        for _, dive in ipairs(kit.dives) do
+            local rows = dive.rows
+            local n = #rows
+            local t = math.clamp(tm / kit.step, 0, n - 1)
+            local i = math.floor(t)
+            local a = t - i
+            local r1, r2 = rows[i + 1], rows[math.min(i + 2, n)]
+            local h1, h2 = r1[1]:Lerp(r2[1], a), r1[2]:Lerp(r2[2], a)
+            local e = r1[3]:Lerp(r2[3], a)
+            local b1, b2 = r1[4]:Lerp(r2[4], a), r1[5]:Lerp(r2[5], a)
+            local g = math.min((pt - h1).Magnitude, (pt - h2).Magnitude) - kit.hand
+            g = math.min(g, segGap(pt, h1, e) - kit.arm, segGap(pt, h2, e) - kit.arm, segGap(pt, e, b1) - kit.body, segGap(pt, b1, b2) - kit.leg)
+            local cost = dive.power + cfg.HighCost * dive.lift
+            if g < best then
+                best = g
+                bestCost = cost
+            end
+            if p1 == 0 and g <= 0 and not dive.block and cost < need then
+                need = cost
+            end
+        end
+        p1 += 0.08
+    end
+    local save = 0
+    if best <= 0 then
+        if need == math.huge then need = bestCost end
+        local t = math.clamp((dist - cfg.NearShot) / (cfg.FarShot - cfg.NearShot), 0, 1)
+        save = cfg.SaveEasy - (cfg.SaveEasy - cfg.SaveHard) * math.clamp(need, 0, 1) ^ cfg.HardCurve + cfg.DistantBonus * t
+        save = math.clamp(save, 0, 1)
+        if dist >= cfg.SureFrom then save = 1 end
+    end
+    return best, save
+end
+
+function KirtiumHub.Functions.KeeperAt(goal, from, keeper, kit)
+    local cfg = kit and kit.cfg
+    if not cfg then return keeper end
+    local oX = -goal.out
+    local dx, dz = from.X - goal.x, from.Z - goal.z
+    local dist = math.sqrt(dx * dx + dz * dz)
+    local ux, uz = oX, 0
+    if dist > 1 then ux, uz = dx / dist, dz / dist end
+    if ux * oX < 0.35 then
+        local sign = uz >= 0 and 1 or -1
+        if math.abs(uz) < 0.001 then sign = 0 end
+        ux, uz = oX * 0.35, sign * 0.9367496997597597
+    end
+    local along = ux * oX
+    local t = math.clamp((dist - cfg.NearBall) / (cfg.FarBall - cfg.NearBall), 0, 1)
+    local depth = cfg.DepthNear + (cfg.DepthFar - cfg.DepthNear) * t
+    local zMax = goal.half - cfg.PostInset
+    local zOff = math.clamp(uz * depth / along, -zMax, zMax)
+    local ballDepth = (goal.x - from.X) * goal.out
+    local absZ = math.abs(from.Z - goal.z)
+    if ballDepth <= 0.5 then
+        depth = cfg.DepthTight
+    elseif absZ > 0.001 then
+        depth = math.clamp(math.abs(zOff) * ballDepth / absZ, cfg.DepthTight, depth)
+    end
+    local sx, sz = goal.x - goal.out * depth, goal.z + zOff
+    local mx, mz = sx - keeper.X, sz - keeper.Z
+    local md = math.sqrt(mx * mx + mz * mz)
+    local travel = cfg.MoveSpeed * (cfg.Reaction[1] + cfg.Reaction[2]) * 0.5
+    if md > travel then
+        local f = travel / md
+        mx, mz = mx * f, mz * f
+    end
+    return Vector3.new(keeper.X + mx, keeper.Y, keeper.Z + mz)
+end
+
+function KirtiumHub.Functions.ShotTargets(goal, lob, radius)
+    local F = KirtiumHub.Functions
+    local targets = SilentAimState.Targets
+    if targets and #targets > 0 then
+        local list = {}
+        for _, name in ipairs(targets) do
+            local p = F.ShotPoint(goal, name, radius)
+            if p then list[#list + 1] = p end
+        end
+        if #list > 0 then return list, true end
+    end
+    return F.ShotAutoList(goal, lob, radius), false
+end
+
+function KirtiumHub.Functions.PitchSolve(env, gy, from, point, speed, minA, maxA, lob, dt, bx, bz, bn, deadline, center)
+    local F = KirtiumHub.Functions
+    local dx, dz = point.X - from.X, point.Z - from.Z
+    local d = math.sqrt(dx * dx + dz * dz)
+    if d < 1 then return nil end
+    local ux, uz = dx / d, dz / d
+    local spin = Vector3.new(0, 0, 0)
+    local limitT = math.clamp(d / math.max(speed * 0.45, 6) + 0.8, 1, lob and 8 or 4.5)
+    local lo, hi, iters = minA, maxA, 11
+    if center then
+        lo, hi, iters = math.max(minA, center - 0.05), math.min(maxA, center + 0.05), 8
+    end
+    local best
+    for _ = 1, iters do
+        if deadline and best and os.clock() > deadline then break end
+        local th = (lo + hi) / 2
+        local ct = math.cos(th)
+        local vel = Vector3.new(ux * ct * speed, math.sin(th) * speed, uz * ct * speed)
+        local c, ft, blocked = F.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, dt)
+        if not c then
+            if th > 0.6 then hi = th else lo = th end
+        else
+            local err = c.Y - point.Y
+            local miss = math.abs(err)
+            if not best or miss < best.miss then
+                best = { vel = vel, miss = miss, ft = ft, blocked = blocked, c = c, th = th }
+            end
+            if miss < 0.04 then break end
+            if err > 0 then hi = th else lo = th end
+        end
+    end
+    if not best then return nil end
+    return best.vel, spin, best.miss, best.ft, best.blocked, best.c, best.th
+end
+
+function KirtiumHub.Functions.ShotBounds(env)
+    local goal = env.Goal
+    local clear = env.Radius + 0.1
+    return goal.half - clear - 1.0, goal.ground + 0.3, goal.top - clear - 0.9
+end
+
+function KirtiumHub.Functions.SilentAimKeeper(goal)
+    local keeper
+    local best = math.huge
+    for _, entry in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+        if entry.keeper and entry.model ~= goal.char and type(entry.team) == "string" and entry.team ~= goal.team then
+            local d = math.abs(entry.pos.X - goal.x)
+            if d < best then
+                best = d
+                keeper = entry.pos
+            end
+        end
+    end
+    return keeper
+end
+
+function KirtiumHub.Functions.TrickBinding(key)
+    local bindings = KirtiumHub.Bindings
+    if not bindings then
+        bindings = {}
+        KirtiumHub.Bindings = bindings
+        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+            for _, b in pairs(bindings) do
+                pcall(function() b:Destroy() end)
+            end
+        end })
+    end
+    local action = KirtiumHub.Functions.GetKickAction(key)
+    if not action then return nil end
+    local binding = bindings[key]
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "KirtiumTrick" .. key
+        binding.Type = (Enum :: any).InputBindingType.Scriptable
+        binding.Parent = action
+        bindings[key] = binding
+    end
+    return binding
+end
+
+function KirtiumHub.Functions.TrickViewApply()
+    local V = KirtiumHub.TrickView
+    local cam = workspace.CurrentCamera
+    if not (V and V.Active and cam) then return end
+    local cf = cam.CFrame
+    if not V.Saved then V.Saved = cf end
+    local pos = cf.Position
+    local target
+    if V.Mode == "away" then
+        target = pos + (V.Dir or Vector3.new(0, 0, -1)) * 20 + Vector3.new(0, 2, 0)
+    else
+        target = V.Point
+    end
+    if not target or (target - pos).Magnitude < 0.5 then return end
+    cam.CFrame = CFrame.lookAt(pos, target)
+end
+
+function KirtiumHub.Functions.InstallTrickView()
+    if KirtiumHub.TrickView then return end
+    local V: {[string]: any} = { Active = false, Mode = "goal", Until = 0 }
+    KirtiumHub.TrickView = V
+    local names = { "KirtiumViewEarly", "KirtiumViewBegin", "KirtiumViewEnd" }
+
+    local function restore()
+        local cam = workspace.CurrentCamera
+        if V.Saved and cam then
+            cam.CFrame = V.Saved
+        end
+        V.Saved = nil
+    end
+
+    for _, name in ipairs(names) do
+        pcall(function() RunService:UnbindFromRenderStep(name) end)
+    end
+    RunService:BindToRenderStep("KirtiumViewEarly", Enum.RenderPriority.First.Value, restore)
+    RunService:BindToRenderStep("KirtiumViewBegin", Enum.RenderPriority.Input.Value + 2, function()
+        if V.Active and os.clock() > V.Until then
+            V.Active = false
+        end
+        if V.Active then
+            KirtiumHub.Functions.TrickViewApply()
+        end
+    end)
+    RunService:BindToRenderStep("KirtiumViewEnd", Enum.RenderPriority.Input.Value + 9, restore)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        for _, name in ipairs(names) do
+            pcall(function() RunService:UnbindFromRenderStep(name) end)
+        end
+        restore()
+        V.Active = false
+        KirtiumHub.TrickView = nil
+    end })
+end
+
+function KirtiumHub.Functions.TrickViewSet(mode, value, seconds)
+    local F = KirtiumHub.Functions
+    F.InstallTrickView()
+    local V = KirtiumHub.TrickView
+    V.Mode = mode
+    if mode == "away" then
+        V.Dir = value
+    else
+        V.Point = value
+    end
+    V.Active = true
+    V.Until = os.clock() + seconds
+    F.TrickViewApply()
+end
+
+function KirtiumHub.Functions.TrickViewPush(st)
+    local F = KirtiumHub.Functions
+    if st.Mode == "away" and st.Goal then
+        F.TrickViewSet("away", Vector3.new(-st.Goal.out, 0, 0), 0.3)
+    elseif st.Point then
+        F.TrickViewSet("goal", st.Point, 0.3)
+    end
+end
+
+function KirtiumHub.Functions.TrickFire(key, point, hold)
+    local F = KirtiumHub.Functions
+    local binding = F.TrickBinding(key)
+    if not binding then
+        F.Debug("kick action not found")
+        return false
+    end
+    F.ForceFor(2.5)
+    KirtiumHub.TrickActive = true
+    KirtiumHub.TrickKey = key
+    F.TrickViewSet("goal", point, hold + 0.8)
+    binding:Fire(true)
+    task.delay(hold, function()
+        F.TrickViewSet("goal", point, 0.8)
+        pcall(function() binding:Fire(false) end)
+        task.delay(0.9, function()
+            KirtiumHub.TrickActive = false
+            KirtiumHub.TrickKey = nil
+        end)
+    end)
+    F.Debug("fired " .. key)
+    return true
+end
+
+function KirtiumHub.Functions.TrickReady()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local team = char:GetAttribute("Team")
+    if team ~= "Blue" and team ~= "Red" then return nil end
+    if char:GetAttribute("Role") == "Goalkeeper" then return nil end
+    local bodyState = char:GetAttribute("BodyState")
+    if bodyState ~= nil and bodyState ~= "Animated" then return nil end
+    local hold = LocalPlayer:GetAttribute("KickoffHold")
+    if type(hold) == "number" and hold > workspace:GetServerTimeNow() then return nil end
+    local root = char:FindFirstChild("Root")
+    local ball = KirtiumHub.Functions.GetBall()
+    if not (root and ball) then return nil end
+    local goal = KirtiumHub.Functions.SilentAimGoal()
+    if not goal then return nil end
+    return char, root, ball, goal
+end
+
+function KirtiumHub.Functions.AutoPossessed(st, S, T, goal, goalDist, now)
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    local forced = T.Enabled and T.Auto == false
+    local lobForced = forced and T.Lob == true
+    if not (S.Enabled or lobForced) or goalDist > S.Range or goalDist < 3 then
+        st.Next = now + 0.3
+        return
+    end
+    local from = SA.BallView.getPosition()
+    if not from then return end
+    local budget = F.Budget(0.003)
+    local shot
+    if not lobForced then
+        shot = F.ShotBest(from, "Laced", false, budget)
+        if shot and shot.fallback then shot = nil end
+    end
+    local lob
+    local gap = 0
+    if lobForced then
+        lob = F.ShotBest(from, "Lofted", true, budget)
+        if lob and lob.fallback then lob = nil end
+    elseif T.Enabled and not forced and goalDist > 14 then
+        local keeper = F.SilentAimKeeper(goal)
+        gap = keeper and math.abs(keeper.X - goal.x) or 0
+        if gap > 8 or not shot then
+            lob = F.ShotBest(from, "Lofted", true, budget)
+            if lob and lob.fallback then lob = nil end
+        end
+    end
+    local useLob = lob ~= nil and (lobForced or shot == nil or gap > 8)
+    local result = useLob and lob or shot
+    if not result then
+        F.Debug("no clear shot from here")
+        st.Next = now + 0.35
+        return
+    end
+    KirtiumHub.ShotLast = result
+    st.Next = now + 1.6
+    KirtiumHub.ShotNext = now + 1.6
+    F.TrickFire(useLob and "KickLob" or "KickStrike", result.point, getgenv().KirtiumMaxPower.Hooked and 0.06 or 0.46)
+end
+
+function KirtiumHub.Functions.AutoAir(st, T, char, root, ball, goal, goalDist, now)
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    if goalDist > T.Range then return end
+    local bp, rp = ball.Position, root.Position
+    local bdx, bdz = bp.X - rp.X, bp.Z - rp.Z
+    if bdx * bdx + bdz * bdz > 8100 then return end
+    local id = char:GetAttribute("DribbleId")
+    if ball:GetAttribute("ReleasedBy") == id then
+        local releasedAt = ball:GetAttribute("ReleasedAt")
+        if type(releasedAt) == "number" and workspace:GetServerTimeNow() - releasedAt < 0.8 then return end
+    end
+    local pos, vel = SA.BallView.freeState()
+    if not pos then return end
+    local gy = SA.BallView.groundBallY(pos)
+    if pos.Y - gy < 0.6 and math.abs(vel.Y) < 3 then return end
+    local best, bike, groundY, sampleNow, cands = F.TrickScanAir(st, root, goal)
+    if not best then return end
+    local cand, mode, family = F.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+    if not cand then return end
+    local result = F.ShotBest(cand.pos, family, false, F.Budget(0.006), -0.95)
+    if not result or result.fallback then
+        F.Debug("no clear shot from the air spot")
+        st.Next = now + 0.3
+        return
+    end
+    local binding = F.TrickBinding("KickStrike")
+    if not binding then
+        F.Debug("kick action not found")
+        return
+    end
+    st.Point = result.point
+    st.Phase = "air"
+    st.Start = now
+    st.Mode = mode
+    st.Binding = binding
+    st.Goal = goal
+    st.Cand = { t = cand.t, at = now }
+    st.ScanAt = now + 0.1
+    st.Lost = 0
+    KirtiumHub.TrickActive = true
+    KirtiumHub.ShotNext = now + 4
+    F.ForceFor(3.5)
+    F.TrickViewPush(st)
+    binding:Fire(true)
+    F.Debug("holding for " .. family)
+end
+
+function KirtiumHub.Functions.AutoStep(st, now)
+    local F = KirtiumHub.Functions
+    if st.Phase == "tail" then
+        F.TrickViewPush(st)
+        if now >= st.TailUntil then
+            st.Phase = nil
+            KirtiumHub.TrickActive = false
+            st.Next = now + 0.8
+        end
+        return
+    end
+    local release = now - st.Start >= 1.7
+    local char, root, ball, goal = F.TrickReady()
+    if char then
+        st.Goal = goal
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            release = true
+        elseif now >= st.ScanAt then
+            st.ScanAt = now + 0.1
+            local best, bike, groundY, sampleNow, cands = F.TrickScanAir(st, root, goal)
+            local cand, mode, family
+            if best then
+                cand, mode, family = F.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+            end
+            if cand then
+                st.Lost = 0
+                st.Mode = mode
+                st.Cand = { t = cand.t, at = now }
+                local result = F.ShotBest(cand.pos, family, false, F.Budget(0.004), -0.95)
+                if result then st.Point = result.point end
+            else
+                st.Lost += 1
+                if st.Lost >= 3 then release = true end
+            end
+        end
+        if st.Cand.t - (now - st.Cand.at) <= 0.55 then
+            release = true
+        end
+    else
+        release = true
+    end
+    F.TrickViewPush(st)
+    if release then
+        pcall(function() st.Binding:Fire(false) end)
+        st.Phase = "tail"
+        st.TailUntil = now + 0.5
+        KirtiumHub.ShotNext = now + 1.2
+    end
+end
+
+function KirtiumHub.Functions.AutoTick(st)
+    local F = KirtiumHub.Functions
+    local now = os.clock()
+    if st.Phase then
+        F.AutoStep(st, now)
+        return
+    end
+    local S = getgenv().KirtiumAutoShoot
+    local T = getgenv().KirtiumAutoTricks
+    if not (S.Enabled or T.Enabled) then return end
+    if now < st.Next or now < (KirtiumHub.ShotNext or 0) then return end
+    local char, root, ball, goal = F.TrickReady()
+    if not char then
+        F.Debug("not ready: no match body, ball or goal")
+        return
+    end
+    if not F.SilentAimModules() then
+        F.Debug("kick modules missing")
+        return
+    end
+    local goalDist = Vector3.new(goal.x - root.Position.X, 0, goal.z - root.Position.Z).Magnitude
+    local id = char:GetAttribute("DribbleId")
+    local possessor = ball:GetAttribute("Possessor")
+    if type(possessor) == "number" and possessor ~= 0 then
+        if possessor ~= id then return end
+        if T.Enabled and F.AutoSkill(st, char, root, goalDist, now) then return end
+        F.AutoPossessed(st, S, T, goal, goalDist, now)
+    elseif T.Enabled then
+        if now < st.ScanAt then return end
+        st.ScanAt = now + 0.2
+        F.AutoAir(st, T, char, root, ball, goal, goalDist, now)
+    end
+end
+
+function KirtiumHub.Functions.SkillModule()
+    local cached = KirtiumHub.SkillRef
+    if cached then return cached end
+    local ok, mod = pcall(function()
+        local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        local client = scripts and scripts:FindFirstChild("Client")
+        local gameFolder = client and client:FindFirstChild("Game")
+        local skill = gameFolder and gameFolder:FindFirstChild("SkillMoves")
+        local playback = skill and skill:FindFirstChild("Playback")
+        return playback and require(playback)
+    end)
+    if ok and type(mod) == "table" and type(mod.request) == "function" then
+        KirtiumHub.SkillRef = mod
+        return mod
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.SkillThreat(char, root, range)
+    local team = char:GetAttribute("Team")
+    if type(team) ~= "string" then return nil end
+    local rp = root.Position
+    local vel = root.AssemblyLinearVelocity
+    local fx, fz = vel.X, vel.Z
+    local sp = math.sqrt(fx * fx + fz * fz)
+    if sp < 3 then
+        local look = root.CFrame.LookVector
+        fx, fz = look.X, look.Z
+        sp = math.sqrt(fx * fx + fz * fz)
+        if sp < 0.001 then return nil end
+    end
+    local ux, uz = fx / sp, fz / sp
+    local best
+    for _, e in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+        if e.model ~= char and type(e.team) == "string" and e.team ~= team then
+            local dx, dz = e.pos.X - rp.X, e.pos.Z - rp.Z
+            local d = math.sqrt(dx * dx + dz * dz)
+            if d > 0.5 and d <= range then
+                local ahead = (dx * ux + dz * uz) / d
+                if ahead > -0.15 and (not best or d < best.d) then
+                    best = { d = d, ahead = ahead, side = ux * dz - uz * dx }
+                end
+            end
+        end
+    end
+    return best
+end
+
+function KirtiumHub.Functions.SkillPick(speed, d, ahead, side)
+    local away = side > 0 and "Left" or "Right"
+    local r = math.random()
+    if speed < 10 then
+        return { kind = "Flick", dir = r < 0.5 and "Left" or "Right" }
+    end
+    if d < 7 and ahead > 0.6 and speed > 18 and r < 0.25 then
+        return { kind = "Rainbow", dir = "Up" }
+    end
+    if r < 0.28 then
+        return { kind = "Elastico", dir = away }
+    elseif r < 0.5 then
+        return { kind = "Roll", dir = away, half = "Bottom" }
+    elseif r < 0.68 then
+        return { kind = "Roll", dir = away, half = "Top" }
+    elseif r < 0.84 then
+        return { kind = "Flick", dir = away }
+    end
+    return { kind = "Flick", dir = "Down" }
+end
+
+function KirtiumHub.Functions.AutoSkill(st, char, root, goalDist, now)
+    local F = KirtiumHub.Functions
+    local T = getgenv().KirtiumAutoTricks
+    local forced = T.Auto == false
+    if forced and #(T.Skills or {}) == 0 then return false end
+    if now < (st.SkillNext or 0) or goalDist < 22 then return false end
+    local threat = F.SkillThreat(char, root, T.Defender or 14)
+    if not threat then return false end
+    local play = F.SkillModule()
+    if not play then return false end
+    local busy = false
+    if type(play.busy) == "function" then
+        local ok, b = pcall(play.busy)
+        busy = ok and b == true
+    end
+    if busy then return false end
+    local vel = root.AssemblyLinearVelocity
+    local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+    local gesture
+    if forced then
+        gesture = F.SkillForced(threat.side)
+    else
+        gesture = F.SkillPick(speed, threat.d, threat.ahead, threat.side)
+    end
+    local ok, label = pcall(play.request, gesture, speed)
+    if ok and label then
+        st.SkillNext = now + 1.1 + math.random() * 0.9
+        st.Next = now + 0.6
+        F.Debug("skill " .. tostring(label))
+        return true
+    end
+    st.SkillNext = now + 0.25
+    return false
+end
+
+function KirtiumHub.Functions.AutoEngineStart()
+    local F = KirtiumHub.Functions
+    if KirtiumHub.Auto then return true end
+    if not KirtiumHub.TrickMods then
+        pcall(function()
+            local sharedGame = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+            local Kick = require(sharedGame:WaitForChild("Kick"))
+            local Dribble = require(sharedGame:WaitForChild("Dribble"))
+            local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+            KirtiumHub.TrickMods = {
+                Bicycle = Kick.Bicycle,
+                Families = Kick.Families,
+                Rules = Dribble.Rules,
+                Radius = Dribble.Rules.BALL_RADIUS,
+                GameCamera = require(gameFolder:WaitForChild("GameCamera")),
+                BallView = require(gameFolder:WaitForChild("BallView")),
+            }
+        end)
+    end
+    local st: {[string]: any} = { Acc = 0, Next = 0, ScanAt = 0, Mods = KirtiumHub.TrickMods }
+    KirtiumHub.Auto = st
+    F.InstallTrickView()
+    st.Conn = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        local slow = F.Budget(1) < 1 and 1.5 or 1
+        if st.Acc < (st.Phase and 0.04 or 0.12) * slow then return end
+        st.Acc = 0
+        local S, T = getgenv().KirtiumAutoShoot, getgenv().KirtiumAutoTricks
+        if not st.Phase and not (S.Enabled or T.Enabled) then return end
+        local ok, err = pcall(F.AutoTick, st)
+        if not ok then
+            F.Debug("error: " .. tostring(err))
+            if st.Phase == "air" then
+                pcall(function() st.Binding:Fire(false) end)
+                st.Phase = nil
+                KirtiumHub.TrickActive = false
+                st.Next = os.clock() + 1
+            end
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert(st.Conn)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        KirtiumHub.Functions.AutoEngineStop()
+    end })
+    return true
+end
+
+function KirtiumHub.Functions.AutoEngineStop()
+    local st = KirtiumHub.Auto
+    KirtiumHub.Auto = nil
+    if st then
+        if st.Conn then
+            pcall(function() st.Conn:Disconnect() end)
+        end
+        if st.Binding and st.Phase == "air" then
+            pcall(function() st.Binding:Fire(false) end)
+        end
+    end
+    KirtiumHub.Functions.ReleaseAllBindings()
+end
+
+function KirtiumHub.Functions.TrickScanAir(st, root, goal)
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    local BV = SA.BallView
+    local state, shift = BV.freeSim()
+    if not state then return nil end
+    local ball = BV.getBall()
+    if not ball then return nil end
+    local params = SA.Flight.params(ball)
+    local groundY = BV.groundBallY(state.pos)
+    local list = F.ShotPredict(params, state.pos, state.vel, state.spin, groundY, 1.2, 1 / 30)
+    local rp = root.Position
+    local rvel = root.AssemblyLinearVelocity
+    local rv = Vector3.new(rvel.X, 0, rvel.Z)
+    local mouth = { x = goal.x, z = goal.z, halfWidth = goal.half, top = goal.top, ground = goal.ground, out = goal.out }
+    local best, bike
+    local cands = {}
+    for _, e in ipairs(list) do
+        local p = e.pos
+        if (goal.x - p.X) * goal.out < 0 then break end
+        local h = p.Y - groundY
+        if e.t >= 0.2 and h >= 0.9 and h <= 14.2 then
+            local reach = rp + rv * math.min(e.t, 0.6)
+            local dx, dz = p.X - reach.X, p.Z - reach.Z
+            local r = math.min(5 + 14 * e.t, 13)
+            if dx * dx + dz * dz <= r * r then
+                local cand = { t = e.t, pos = p, h = h }
+                cands[#cands + 1] = cand
+                best = best or cand
+                if not bike and h >= 7.2 and h <= 10.6 and st.Mods and st.Mods.Bicycle.inZone(Vector3.new(p.X, 0, p.Z), { mouth }, 1.5) then
+                    bike = cand
+                end
+            end
+        end
+    end
+    if not best then return nil end
+    return best, bike, groundY, workspace:GetServerTimeNow() - shift, cands
+end
+
+function KirtiumHub.Functions.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
+    local M = st.Mods
+    if not M then return true end
+    local ok, result = pcall(function()
+        local cm = char:FindFirstChild("ControllerManager")
+        local gc = cm and cm:FindFirstChild("GroundController")
+        if not (cm and gc) then return true end
+        local look = root.CFrame.LookVector
+        local pos = root.Position
+        local vel = root.AssemblyLinearVelocity
+        local mouth = { x = goal.x, z = goal.z, halfWidth = goal.half, top = goal.top, ground = goal.ground, out = goal.out }
+        local aim = M.Bicycle.aimFor(pos, Vector3.new(-goal.out, 0, 0), mouth)
+        local locked = M.GameCamera.isLocked()
+        local data = {
+            now = sampleNow,
+            pos = Vector3.new(pos.X, 0, pos.Z),
+            vel = Vector3.new(vel.X, 0, vel.Z),
+            facing = Vector3.new(look.X, 0, look.Z),
+            leg = 2,
+            maxLead = 1.45,
+            canTurn = not locked,
+            target = cm.MovingDirection * cm.BaseMoveSpeed,
+            topSpeed = cm.BaseMoveSpeed,
+            accelTime = gc.AccelerationTime,
+            decelTime = gc.DecelerationTime,
+            turn = (not locked) and M.Rules.Turn or nil,
+            ballAt = function(t)
+                local p, v = M.BallView.freeSample(t)
+                return p, v
+            end,
+            pitchY = groundY - M.Radius,
+            aimDir = aim.dir,
+            aimPoint = aim.point,
+            family = M.Families.Bicycle,
+            zone = function(a)
+                return M.Bicycle.inZone(a, { mouth })
+            end,
+        }
+        return M.Bicycle.find(data) ~= nil
+    end)
+    return ok and result == true
+end
+
+function KirtiumHub.Functions.StartAutoTricks()
+    return KirtiumHub.Functions.AutoEngineStart()
+end
+
+function KirtiumHub.Functions.StopAutoTricks()
+    if not getgenv().KirtiumAutoShoot.Enabled then
+        KirtiumHub.Functions.AutoEngineStop()
+    end
+end
+
+getgenv().KirtiumSilentAim.Targets = {}
+getgenv().KirtiumSilentAim.TargetKey = "Auto"
+getgenv().KirtiumSilentAim.Range = 300
+KirtiumHub.ShotIgnore = { SideFoot = true, PushPass = true, VolleyPass = true, VolleyPush = true }
+KirtiumHub.ShotLobs = { Lofted = true, Chip = true }
+KirtiumHub.ShotSeeds = {}
+KirtiumHub.ShotCache = {}
+KirtiumHub.ShotCursor = {}
+KirtiumHub.ShotFamily = nil
+KirtiumHub.ShotFamilyAt = 0
+KirtiumHub.PreviewCache = nil
+KirtiumHub.ShotHint = nil
+KirtiumHub.DebugOn = false
+
+function KirtiumHub.Functions.SetSilentTargets(value)
+    local SA = getgenv().KirtiumSilentAim
+    local list = {}
+    local auto = false
+    if type(value) == "table" then
+        for k, v in pairs(value) do
+            local name = type(v) == "string" and v or (type(k) == "string" and v == true and k) or nil
+            if name then
+                if name == "Auto" then auto = true end
+                list[#list + 1] = name
+            end
+        end
+    elseif type(value) == "string" then
+        if value == "Auto" then auto = true end
+        list[1] = value
+    end
+    if auto or #list == 0 then
+        SA.Targets = {}
+        SA.TargetKey = "Auto"
+    else
+        table.sort(list)
+        SA.Targets = list
+        SA.TargetKey = table.concat(list, ",")
+    end
+    table.clear(KirtiumHub.ShotCache)
+end
+
+function KirtiumHub.Functions.Debug(message)
+    if not KirtiumHub.DebugOn then return end
+    local now = os.clock()
+    if now - (KirtiumHub.DebugAt or 0) < 1.2 then return end
+    KirtiumHub.DebugAt = now
+    warn("[kirtium.qyz] " .. tostring(message))
+end
+
+function KirtiumHub.Functions.ShotEnv()
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    if not F.SilentAimModules() then return nil end
+    local ball = SA.BallView.getBall()
+    if not ball then return nil end
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    if not SA.Radius then
+        local ok, r = pcall(function()
+            return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Dribble")).Rules.BALL_RADIUS
+        end)
+        SA.Radius = (ok and type(r) == "number") and math.clamp(r, 0.5, 2) or 1.1
+    end
+    local env = KirtiumHub.ShotEnvCache
+    local now = os.clock()
+    if not env or env.Ball ~= ball or now - env.At > 0.5 then
+        env = { Ball = ball, Params = SA.Flight.params(ball), At = now }
+        KirtiumHub.ShotEnvCache = env
+    end
+    env.Goal = goal
+    env.Radius = SA.Radius
+    return env
+end
+
+function KirtiumHub.Functions.ShotBodies(goal, lob)
+    local bx, bz, n = {}, {}, 0
+    if lob then return bx, bz, 0 end
+    for _, entry in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+        if entry.model ~= goal.char and not entry.keeper then
+            n += 1
+            bx[n] = entry.pos.X
+            bz[n] = entry.pos.Z
+        end
+    end
+    return bx, bz, n
+end
+
+function KirtiumHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA, maxA, key, bx, bz, bn, lob, stepDt, iters, deadline)
+    local F = KirtiumHub.Functions
+    local fx, fz = point.X - from.X, point.Z - from.Z
+    local d = math.sqrt(fx * fx + fz * fz)
+    if d < 2 then return nil end
+    local dx, dz = fx / d, fz / d
+    local side = Vector3.new(-dz, 0, dx)
+    local spin = Vector3.new(0, curve, 0)
+    local limitT = math.clamp(d / math.max(speed * 0.45, 6) + 0.8, 1, lob and 8 or 4.5)
+    local dt = stepDt or (lob and 1 / 45 or 1 / 60)
+    local gravity = env.Params.gravity
+    local pY = point.Y
+    local pL = point.X * side.X + point.Z * side.Z
+    local seeds = KirtiumHub.ShotSeeds
+    local seed = seeds[key]
+    if seed and ((seed[3] - from).Magnitude > 8 or math.abs(seed[4] - speed) > 2 or math.abs(seed[5] - curve) > 2) then
+        seed = nil
+    end
+    if not seed then
+        local hint = KirtiumHub.ShotHint
+        if hint
+            and hint[12] == lob
+            and (hint[3] - from).Magnitude < 8
+            and math.abs(hint[4] - speed) < 2
+            and math.abs(hint[5] - curve) < 2
+            and hint[10] * dx + hint[11] * dz > 0.7 then
+            seed = hint
+        end
+    end
+    local th, ps, a11, a12, a21, a22
+    if seed then
+        th, ps, a11, a12, a21, a22 = seed[1], seed[2], seed[6], seed[7], seed[8], seed[9]
+    else
+        local q = d / speed * 1.12
+        th = math.atan2(pY - from.Y + gravity * 0.5 * q * q, math.max(d, 1))
+        ps = 0
+        if curve ~= 0 then
+            local mag = math.min(0.5164 * math.abs(curve) / speed, 0.3) * 0.0541 * 0.213 * speed * speed * (env.Params.curve or 1)
+            local tf = d / (speed * 0.8)
+            ps = -(curve > 0 and 1 or -1) * math.clamp(0.5 * mag * tf * tf / d, 0, 0.45)
+        end
+        a11, a12, a21, a22 = d * 1.05, 0, 0, -d
+    end
+    local maxIter = iters or 8
+    local bestMiss = math.huge
+    local bestVel, bestT, bestB, bestC, bestTh, bestPs
+    local pu1, pu2, pg1, pg2
+    local nils = 0
+    for i = 1, maxIter do
+        if deadline and i > 1 and os.clock() > deadline then break end
+        th = math.clamp(th, minA, maxA)
+        local cs, sn = math.cos(ps), math.sin(ps)
+        local fdx, fdz = dx * cs + dz * sn, -dx * sn + dz * cs
+        local ct = math.cos(th)
+        local vel = Vector3.new(fdx * ct * speed, math.sin(th) * speed, fdz * ct * speed)
+        local c, ft, blocked = F.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, dt)
+        if not c then
+            nils += 1
+            pu1 = nil
+            th += (nils % 2 == 1) and 0.12 or -0.26
+        else
+            local g1 = c.Y
+            local g2 = c.X * side.X + c.Z * side.Z
+            local r1, r2 = g1 - pY, g2 - pL
+            local miss = math.sqrt(r1 * r1 + r2 * r2)
+            if miss < bestMiss then
+                bestMiss, bestVel, bestT, bestB, bestC, bestTh, bestPs = miss, vel, ft, blocked, c, th, ps
+            end
+            if miss < 0.08 then break end
+            if pu1 then
+                local du1, du2 = th - pu1, ps - pu2
+                local dd = du1 * du1 + du2 * du2
+                if dd > 1e-8 then
+                    local e1 = (g1 - pg1) - (a11 * du1 + a12 * du2)
+                    local e2 = (g2 - pg2) - (a21 * du1 + a22 * du2)
+                    a11 += e1 * du1 / dd
+                    a12 += e1 * du2 / dd
+                    a21 += e2 * du1 / dd
+                    a22 += e2 * du2 / dd
+                end
+            end
+            pu1, pu2, pg1, pg2 = th, ps, g1, g2
+            local det = a11 * a22 - a12 * a21
+            if det > -d * d * 0.05 then
+                a11, a12, a21, a22 = d * 1.05, 0, 0, -d
+                det = a11 * a22
+            end
+            local s1 = -(a22 * r1 - a12 * r2) / det
+            local s2 = -(-a21 * r1 + a11 * r2) / det
+            local m = math.max(math.abs(s1), math.abs(s2))
+            if m > 0.25 then
+                s1, s2 = s1 * 0.25 / m, s2 * 0.25 / m
+            end
+            th += s1
+            ps = math.clamp(ps + s2, -0.7, 0.7)
+        end
+    end
+    if not bestVel then return nil end
+    seeds[key] = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22 }
+    KirtiumHub.ShotHint = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22, dx, dz, lob }
+    return bestVel, spin, bestMiss, bestT, bestB, bestC
+end
+
+function KirtiumHub.Functions.ShotGate(from)
+    local goal = KirtiumHub.Functions.SilentAimGoal()
+    if not goal then return nil end
+    if (from.X - goal.x) * goal.out >= 0 then return nil end
+    local dx, dz = goal.x - from.X, goal.z - from.Z
+    local dist = math.sqrt(dx * dx + dz * dz)
+    if dist < 1.5 then return nil end
+    local range = SilentAimState.Range or 300
+    if range < 300 and dist > range then return nil end
+    return goal
+end
+
+function KirtiumHub.Functions.ShotPoint(goal, mode, radius)
+    local spot = KirtiumHub.ShotSpots[mode]
+    if not spot then return nil end
+    radius = radius or 0.84
+    local zl = goal.half - radius - 1.5
+    local y0 = goal.ground + radius + 0.15
+    local y1 = goal.top - radius - 1.3
+    return Vector3.new(goal.x, y0 + (y1 - y0) * spot[2], goal.z + goal.out * zl * spot[1])
+end
+
+function KirtiumHub.Functions.ShotAutoList(goal, lob, radius)
+    radius = radius or 0.84
+    local cache = goal.Lists
+    if not cache then
+        cache = {}
+        goal.Lists = cache
+    end
+    local slot = lob and 1 or 2
+    local hit = cache[slot]
+    if hit and hit.radius == radius then return hit.list end
+    local zl = goal.half - radius - 1.5
+    local y0 = goal.ground + radius + 0.15
+    local y1 = goal.top - radius - 1.3
+    local zs = { -0.97, -0.88, -0.76, -0.62, -0.46, -0.3, -0.12, 0.12, 0.3, 0.46, 0.62, 0.76, 0.88, 0.97 }
+    local ys = lob and { 0.55, 0.7, 0.84, 0.95 } or { 0.04, 0.16, 0.3, 0.48, 0.66, 0.82, 0.95 }
+    local list = {}
+    for _, zf in ipairs(zs) do
+        for _, yf in ipairs(ys) do
+            list[#list + 1] = Vector3.new(goal.x, y0 + (y1 - y0) * yf, goal.z + zl * zf)
+        end
+    end
+    cache[slot] = { radius = radius, list = list }
+    return list
+end
+
+function KirtiumHub.Functions.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, stepDt, kp)
+    local Flight = SilentAimState.Flight
+    local params = env.Params
+    local goal = env.Goal
+    local gx, gz, out = goal.x, goal.z, goal.out
+    local radius = env.Radius
+    local q = (goal.top - goal.ground) / 8.714285714285714
+    local pr = 0.2143 * q
+    local postZ = goal.half + pr
+    local barY = goal.top + pr
+    local reachR = radius + pr + 0.05
+    local airStep, rollStep = Flight.airStep, Flight.rollStep
+    local bounce, toGround, bounceMin = Flight.bounce, Flight.toGround, Flight.BOUNCE_MIN
+    local pos, v, s = from, vel, spin
+    local rolling = false
+    if pos.Y <= gy + 0.05 and v.Y <= bounceMin then
+        rolling = true
+        pos = Vector3.new(pos.X, gy, pos.Z)
+        v, s = toGround(v, s)
+    end
+    local dt = stepDt or 1 / 60
+    local t = 0
+    local blocked = false
+    local framed = false
+    local fx, fz = from.X, from.Z
+    local step = 0
+    while t < limitT do
+        local np, nv, ns
+        if rolling then
+            np, nv, ns = rollStep(pos, v, s, dt, params)
+            if nv.X * nv.X + nv.Z * nv.Z < 0.04 then
+                return nil, t, blocked, framed
+            end
+        else
+            np, nv, ns = airStep(pos, v, s, dt, params)
+            if np.Y < gy and nv.Y < 0 then
+                local k = math.clamp((pos.Y - gy) / math.max(pos.Y - np.Y, 1e-6), 0, 1)
+                local hp, hv, hs = airStep(pos, v, s, dt * k, params)
+                hp = Vector3.new(hp.X, gy, hp.Z)
+                local bv, bs = bounce(hv, hs, params)
+                if bv.Y < bounceMin then
+                    bv, bs = toGround(bv, bs)
+                    rolling = true
+                    np, nv, ns = rollStep(hp, bv, bs, dt * (1 - k), params)
+                else
+                    np, nv, ns = airStep(hp, bv, bs, dt * (1 - k), params)
+                end
+            end
+        end
+        if kp and not kp.t then
+            local d1 = (pos.X - kp.x) * kp.fx + (pos.Z - kp.z) * kp.fz - kp.ahead
+            local d2 = (np.X - kp.x) * kp.fx + (np.Z - kp.z) * kp.fz - kp.ahead
+            if d1 > 0 and d2 <= 0 then
+                local a = d1 / (d1 - d2)
+                kp.t = t + dt * a
+                kp.pos = pos:Lerp(np, a)
+            end
+        end
+        if (np.X - gx) * out >= 0 then
+            local dxs = np.X - pos.X
+            local a = dxs ~= 0 and math.clamp((gx - pos.X) / dxs, 0, 1) or 1
+            local cp = pos:Lerp(np, a)
+            local hx, hy, hz = np.X - pos.X, np.Y - pos.Y, np.Z - pos.Z
+            local hm = math.sqrt(hx * hx + hz * hz)
+            local ez = cp.Z - gz
+            if hm > 1e-6 and cp.Y <= barY + radius + 0.5 then
+                local uz = hz / hm
+                local ax = math.abs(hx / hm)
+                local d1 = postZ - ez
+                local d2 = -postZ - ez
+                local e1 = (d1 * uz < 0) and math.abs(d1) * ax or math.abs(d1)
+                local e2 = (d2 * uz < 0) and math.abs(d2) * ax or math.abs(d2)
+                if e1 < reachR or e2 < reachR then framed = true end
+            end
+            local hn = math.sqrt(hx * hx + hy * hy)
+            if hn > 1e-6 and math.abs(ez) <= postZ then
+                local dy = barY - cp.Y
+                local uyn = hy / hn
+                local uxn = math.abs(hx) / hn
+                local eb = (dy * uyn < 0) and math.abs(dy) * uxn or math.abs(dy)
+                if eb < reachR then framed = true end
+            end
+            return cp, t + dt * a, blocked, framed
+        end
+        if bn > 0 and not blocked and np.Y - gy < 7 then
+            step += 1
+            if step % 2 == 0 then
+                local ox, oz = np.X - fx, np.Z - fz
+                if ox * ox + oz * oz > 16 then
+                    for i = 1, bn do
+                        local ex, ez = bx[i] - np.X, bz[i] - np.Z
+                        if ex * ex + ez * ez < 5.8 then
+                            blocked = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        pos, v, s = np, nv, ns
+        t += dt
+    end
+    return nil, t, blocked, framed
+end
+
+function KirtiumHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode)
+    local F = KirtiumHub.Functions
+    local SA = SilentAimState
+    local env = F.ShotEnv()
+    if not env then return nil end
+    mode = mode or "warm"
+    local goal = env.Goal
+    local params = env.Params
+    local radius = env.Radius
+    local gy = SA.BallView.groundBallY(from)
+    local pitchY = gy - radius
+    local fam = SA.Families[family]
+    local cap = 125
+    if fam and fam.speed then
+        local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
+        cap = top * (fam.header and 1 or 1.05) * 0.97
+    end
+    local dxg, dzg = goal.x - from.X, goal.z - from.Z
+    local flatD = math.sqrt(dxg * dxg + dzg * dzg)
+    local speed = cap
+    if lob then
+        local factor = 1.2 + 0.35 * math.clamp(flatD / 90, 0, 1)
+        speed = math.clamp(math.sqrt(params.gravity * math.max(flatD, 12)) * factor, 22, cap)
+    end
+    local minA = minAngle or (lob and 0.35 or -0.9)
+    local maxA = lob and 1.3 or 0.8
+    local kit = F.KeeperKit()
+    local keeperNow = F.SilentAimKeeper(goal)
+    local kpos = keeperNow and F.KeeperAt(goal, from, keeperNow, kit) or nil
+    local kx = kpos and kpos.X or goal.x - goal.out * 6
+    local kz = kpos and kpos.Z or goal.z
+    local oX = -goal.out
+    local bx, bz, bn = F.ShotBodies(goal, lob)
+    local curveOn = SA.AutoCurve == true and not lob and flatD >= 8 and not (fam and fam.header)
+    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1), 72)
+    local zLim, yMin, yMax = F.ShotBounds(env)
+    local react = kit and math.max(kit.cfg.Reaction[1] - 0.03, 0.1) or 0.2
+    local now = os.clock()
+    local deadline = budget and (now + budget) or nil
+    local points, targeted = F.ShotTargets(goal, lob, radius)
+    local cache = KirtiumHub.ShotCache
+    local light = mode ~= "strike"
+    local simDt = lob and 1 / 45 or 1 / 60
+    if light then
+        simDt = lob and 1 / 30 or 1 / 40
+    end
+    local candIters = light and 6 or 10
+    local tol = 0.45
+    local best, fallback, loose
+
+    local function faceFor(vel)
+        local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+        local fx, fz = oX, 0
+        if m > 5 and (vel.X / m) * oX < -0.2 then
+            fx, fz = -vel.X / m, -vel.Z / m
+        end
+        local d = fx * oX
+        if d < 0.3 then
+            fx = fx + oX * (0.3 - d)
+            local l = math.sqrt(fx * fx + fz * fz)
+            fx, fz = fx / l, fz / l
+        end
+        return fx, fz
+    end
+
+    local function evaluate(p, curve, dl)
+        local vel, spin, miss, ft, blocked, c, extra
+        local key
+        if curve == 0 then
+            vel, spin, miss, ft, blocked, c, extra = F.PitchSolve(env, gy, from, p, speed, minA, maxA, lob, simDt, bx, bz, bn, dl)
+        else
+            local sign = curve > 0 and 1 or -1
+            key = ((((math.floor(p.Z * 2) + 2000) * 4096 + (math.floor(p.Y * 2) + 2000)) * 8 + (sign + 1) * 2 + (lob and 1 or 0)) * 2 + (goal.out > 0 and 1 or 0))
+            vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, p, speed, curve, minA, maxA, key, bx, bz, bn, lob, simDt, candIters, dl)
+        end
+        if not vel then return nil end
+        local dz = math.abs(c.Z - goal.z)
+        if dz > goal.half - 0.8 or c.Y < yMin or c.Y > goal.top - 0.4 then return nil end
+        local fx, fz = faceFor(vel)
+        local kp: {[string]: any} = { x = kx, z = kz, fx = fx, fz = fz, ahead = 0.8 }
+        local _, _, _, framed = F.ShotFly(env, gy, from, vel, spin, ft + 0.5, bx, bz, 0, simDt, kp)
+        local mp, mt = kp.pos or c, kp.t or ft
+        local lat = (mp.X - kx) * -fz + (mp.Z - kz) * fx
+        local gap, save = F.KeeperSave(lat, mp.Y - pitchY, mt - react, flatD)
+        local pg
+        if gap >= 1.2 then
+            pg = 1
+        elseif gap <= 0 then
+            pg = 1 - save
+        else
+            pg = (1 - save) + save * gap / 1.2
+        end
+        local edge = math.min(zLim - dz, yMax - c.Y)
+        local penalty = 1
+        if blocked then penalty *= 0.1 end
+        if framed then penalty *= 0.05 end
+        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft - miss * 8
+        return {
+            vel = vel,
+            spin = spin,
+            point = p,
+            curve = curve,
+            miss = miss,
+            time = ft,
+            blocked = blocked,
+            framed = framed,
+            cross = c,
+            key = key,
+            th = extra,
+            gap = gap,
+            pg = pg,
+            edge = edge,
+            score = score,
+            strict = edge >= 0 and miss <= tol and not framed,
+        }
+    end
+
+    local function take(e)
+        if not e then return end
+        if e.strict and not e.blocked then
+            if not best or e.score > best.score then best = e end
+        elseif e.strict or e.framed then
+            e.fallback = true
+            if not fallback or e.score > fallback.score then fallback = e end
+        elseif targeted or e.miss <= 2.5 then
+            e.fallback = true
+            e.score = -e.miss
+            if not loose or e.score > loose.score then loose = e end
+        end
+    end
+
+    local function inward(p)
+        return Vector3.new(p.X, goal.ground + (p.Y - goal.ground) * 0.82, goal.z + (p.Z - goal.z) * 0.6)
+    end
+
+    local function coarse(p)
+        local dx = p.X - from.X
+        local f = math.abs(dx) > 1 and math.clamp((kx - goal.out * 0.8 - from.X) / dx, 0, 1) or 1
+        local mz = from.Z + (p.Z - from.Z) * f
+        local my = from.Y + (p.Y - from.Y) * f
+        local ddz = p.Z - from.Z
+        local d = math.sqrt(dx * dx + ddz * ddz)
+        local tf = d / (speed * (lob and 0.6 or 0.85)) * f
+        local avail = math.max(tf - react, 0)
+        local reach
+        if kit then
+            local q = kit.shSpeed / kit.shAccel
+            local moved = avail <= q and 0.5 * kit.shAccel * avail * avail or 0.5 * kit.shAccel * q * q + kit.shSpeed * (avail - q)
+            local idx = math.clamp(math.floor(avail / kit.step) + 2, 1, #kit.reachX)
+            reach = moved + kit.reachX[idx] + kit.hand
+        else
+            reach = 4.8 + 15 * avail
+        end
+        return math.abs(mz - kz) - reach + math.max(math.abs(my - pitchY - 3.2) - 1.8, 0) * 0.6
+    end
+
+    local key = string.format("%s|%s|%d|%s|%s|%d", tostring(family), tostring(lob), math.floor(goal.x), tostring(curveOn), SA.TargetKey or "Auto", math.floor(minA * 100))
+    local plan = cache[key]
+    if plan and (now - plan.at > 2 or (plan.from - from).Magnitude > 30) then
+        plan = nil
+        cache[key] = nil
+    end
+    local settled = false
+    if plan then
+        local entry = evaluate(plan.point, plan.curve, nil)
+        if entry and entry.strict and not entry.blocked then
+            entry.score += 1
+            take(entry)
+            settled = entry.pg >= 0.95 and entry.edge >= 0.4
+        else
+            cache[key] = nil
+        end
+    end
+
+    if not settled then
+        local ranked = {}
+        for i, p in ipairs(points) do
+            ranked[i] = { point = p, score = coarse(p), i = i }
+        end
+        table.sort(ranked, function(a, b)
+            if a.score ~= b.score then return a.score > b.score end
+            return a.i < b.i
+        end)
+        local M = math.min(#ranked, targeted and #ranked or 14)
+        if M > 0 then
+            local cursors = KirtiumHub.ShotCursor
+            local count = mode == "strike" and M or (mode == "preview" and 1 or math.min(M, 3))
+            local first = mode == "strike" and 1 or (cursors[key] or 1)
+            local tried = 0
+            for j = 0, count - 1 do
+                local item = ranked[(first - 1 + j) % M + 1]
+                local dl = (mode ~= "strike" or best or fallback or loose) and deadline or nil
+                local e = evaluate(item.point, 0, dl)
+                take(e)
+                if e and e.framed then
+                    take(evaluate(inward(item.point), 0, dl))
+                end
+                if curveOn then
+                    local weak = (not e) or (not e.strict) or e.gap < 1.5 or e.blocked
+                    if j < 3 or (weak and j < 8) then
+                        take(evaluate(item.point, k, dl))
+                        take(evaluate(item.point, -k, dl))
+                        if weak then
+                            take(evaluate(item.point, k * 0.5, dl))
+                            take(evaluate(item.point, -k * 0.5, dl))
+                        end
+                    end
+                end
+                tried += 1
+                if not targeted and best and best.pg >= 0.97 and best.edge >= 0.8 then break end
+                if deadline and os.clock() > deadline and (best or fallback or loose or mode ~= "strike") then break end
+            end
+            if mode ~= "strike" then
+                cursors[key] = (first - 1 + tried) % M + 1
+            end
+        end
+    end
+
+    local result = best or fallback or loose
+    if not result then
+        cache[key] = nil
+        return nil
+    end
+    if result.strict and not result.blocked then
+        cache[key] = { point = result.point, curve = result.curve, from = from, at = now }
+    end
+
+    if mode == "strike" then
+        local vel, spin, miss, ft, blocked, c
+        if result.curve == 0 then
+            vel, spin, miss, ft, blocked, c = F.PitchSolve(env, gy, from, result.point, speed, minA, maxA, lob, 1 / 120, bx, bz, bn, nil, result.th)
+        elseif result.key then
+            vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, result.point, speed, result.curve, minA, maxA, result.key, bx, bz, bn, lob, lob and 1 / 90 or 1 / 120, 8, nil)
+        end
+        if vel and c then
+            local dz = math.abs(c.Z - goal.z)
+            if dz <= goal.half - 0.8 and c.Y >= yMin and c.Y <= goal.top - 0.4 and miss <= math.max(result.miss + 0.3, 0.6) then
+                result.vel = vel
+                result.spin = spin
+                result.miss = miss
+                result.time = ft
+                result.blocked = blocked
+                result.cross = c
+            end
+        end
+    end
+
+    result.from = from
+    result.lob = lob
+    result.goalX = goal.x
+    result.at = now
+    result.born = now
+    KirtiumHub.ShotLast = result
+    return result
+end
+
+function KirtiumHub.Functions.ShotFallback(from, family, lob)
+    local F = KirtiumHub.Functions
+    local SA = SilentAimState
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    local env = F.ShotEnv()
+    local fam = SA.Families and SA.Families[family]
+    local cap = 125
+    if fam and fam.speed then
+        local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
+        cap = top * (fam.header and 1 or 1.05) * 0.97
+    end
+    local dx, dz = goal.x - from.X, goal.z - from.Z
+    local flatD = math.sqrt(dx * dx + dz * dz)
+    if flatD < 1 then return nil end
+    local gravity = env and env.Params.gravity or 46
+    local speed = cap
+    if lob then
+        local factor = 1.2 + 0.35 * math.clamp(flatD / 90, 0, 1)
+        speed = math.clamp(math.sqrt(gravity * math.max(flatD, 12)) * factor, 22, cap)
+    end
+    local minA = lob and 0.35 or -0.9
+    local maxA = lob and 1.3 or 0.8
+    local radius = env and env.Radius or 0.84
+    local points, targeted = F.ShotTargets(goal, lob, radius)
+    local keeper = F.SilentAimKeeper(goal)
+    local kz = keeper and keeper.Z or goal.z
+    local ordered = {}
+    for i, p in ipairs(points) do
+        ordered[i] = { p = p, d = targeted and 0 or math.abs(p.Z - kz), i = i }
+    end
+    table.sort(ordered, function(a, b)
+        if a.d ~= b.d then return a.d > b.d end
+        return a.i < b.i
+    end)
+    if env and SA.BallView then
+        local gy = SA.BallView.groundBallY(from)
+        local deadline = os.clock() + F.Budget(0.012)
+        local bestVel, bestSpin, bestMiss
+        bestMiss = math.huge
+        for _, item in ipairs(ordered) do
+            local vel, spin, miss = F.PitchSolve(env, gy, from, item.p, speed, minA, maxA, lob, 1 / 45, {}, {}, 0, nil)
+            if vel and miss < bestMiss then
+                bestVel, bestSpin, bestMiss = vel, spin, miss
+            end
+            if bestMiss < 0.5 or (bestVel and os.clock() > deadline) then break end
+        end
+        if bestVel then
+            return { vel = bestVel, spin = bestSpin }
+        end
+    end
+    local p = ordered[1].p
+    local px, pz = p.X - from.X, p.Z - from.Z
+    local pd = math.sqrt(px * px + pz * pz)
+    if pd < 1 then return nil end
+    local t = pd / (speed * 0.7)
+    local ang = math.clamp(math.atan2(p.Y - from.Y + gravity * 0.5 * t * t, math.max(pd, 1)), minA, maxA)
+    local vel = Vector3.new(px / pd * math.cos(ang) * speed, math.sin(ang) * speed, pz / pd * math.cos(ang) * speed)
+    return { vel = vel, spin = Vector3.new(0, 0, 0) }
+end
+function KirtiumHub.Functions.SilentAimRedirect(from, vel, spin, family)
+    local F = KirtiumHub.Functions
+    local SA = SilentAimState
+    local stats = SA.Stats
+    if not stats then
+        stats = { calls = 0, redirected = 0, last = "" }
+        SA.Stats = stats
+    end
+    stats.calls += 1
+    if type(family) ~= "string" or KirtiumHub.ShotIgnore[family] then
+        stats.last = "ignored family " .. tostring(family)
+        return nil
+    end
+    if not F.ShotGate(from) then
+        stats.last = "gate"
+        return nil
+    end
+    local now = os.clock()
+    local last = SA.StrikeCache
+    if last and last.family == family and now - last.at < 0.35 and (last.from - from).Magnitude < 0.5 then
+        stats.redirected += 1
+        stats.last = "cached"
+        return last.vel, last.spin
+    end
+    local pend = SA.Pending
+    if pend and pend.family == family and now - pend.at < 1.2 and (pend.from - from).Magnitude < 0.8 then
+        SA.Pending = nil
+        SA.StrikeCache = { from = from, family = family, vel = pend.vel, spin = pend.spin, at = now }
+        stats.redirected += 1
+        stats.last = "plan"
+        return pend.vel, pend.spin
+    end
+    local nv, ns = F.SilentAimSolve(from, family)
+    if nv then
+        SA.StrikeCache = { from = from, family = family, vel = nv, spin = ns, at = now }
+        stats.redirected += 1
+        stats.last = "ok"
+        return nv, ns
+    end
+    stats.last = "no solution"
+    return nil
+end
+function KirtiumHub.Functions.SilentAimSolve(from, family)
+    local F = KirtiumHub.Functions
+    local SA = SilentAimState
+    local lob = KirtiumHub.ShotLobs[family] == true
+    local ok, result = pcall(F.ShotBest, from, family, lob, F.Budget(0.012), nil, "strike")
+    if not ok then
+        SA.LastError = tostring(result)
+        result = nil
+    end
+    if not (result and result.vel) then
+        local ok2, fb = pcall(F.ShotFallback, from, family, lob)
+        if ok2 then
+            result = fb
+        else
+            SA.LastError = tostring(fb)
+            result = nil
+        end
+    end
+    if result and result.vel then
+        return result.vel, result.spin
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.SilentAimPlan(plan)
+    local F = KirtiumHub.Functions
+    local SA = SilentAimState
+    local family = plan.family
+    if type(family) ~= "string" or KirtiumHub.ShotIgnore[family] then return nil end
+    local from = plan.ball
+    if not F.ShotGate(from) then return nil end
+    local vel, spin = F.SilentAimSolve(from, family)
+    if not vel then return nil end
+    SA.Pending = { from = from, family = family, vel = vel, spin = spin, at = os.clock() }
+    return vel, spin
+end
+
+function KirtiumHub.Functions.InstallPlanSync()
+    local SA = getgenv().KirtiumSilentAim
+    if SA.PlanHooked then return true end
+    if not (hookmetamethod and getnamecallmethod and setnamecallmethod and newcclosure) then return false end
+    local old
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local state = getgenv().KirtiumSilentAim
+        if state.Enabled and state.PlanSync ~= false and getnamecallmethod() == "FireServer" then
+            local plan = ...
+            if type(plan) == "table"
+                and plan.hold ~= true
+                and typeof(plan.ball) == "Vector3"
+                and type(plan.family) == "string"
+                and plan.power ~= nil
+                and plan.leg ~= nil
+                and typeof(plan.dir) == "Vector3" then
+                local H = getgenv().KirtiumHub
+                local F = H and H.Functions
+                if F then
+                    local ok, vel, spin = pcall(F.SilentAimPlan, plan)
+                    setnamecallmethod("FireServer")
+                    if ok and vel then
+                        local copy = table.clone(plan)
+                        local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                        if m > 0.001 then
+                            copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
+                        end
+                        if typeof(plan.vel) == "Vector3" then
+                            copy.vel = vel
+                        end
+                        if typeof(plan.spin) == "Vector3" and spin then
+                            copy.spin = spin
+                        end
+                        return old(self, copy, select(2, ...))
+                    end
+                end
+            end
+        end
+        return old(self, ...)
+    end))
+    SA.PlanHooked = true
+    return true
+end
+function KirtiumHub.Functions.CurrentFamily()
+    local name = KirtiumHub.ShotFamily
+    if name and os.clock() - (KirtiumHub.ShotFamilyAt or 0) < 0.6 then
+        return name
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.PreviewAim(from, vel, spin)
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    if not F.SilentAimModules() then return nil end
+    local goal = F.ShotGate(from, vel)
+    if not goal then return nil end
+    local flat = Vector3.new(vel.X, 0, vel.Z)
+    local fm = flat.Magnitude
+    local family, lob, minAngle
+    lob = false
+    local auto = KirtiumHub.Auto
+    if auto and auto.Phase == "air" then
+        local gy = SA.BallView.groundBallY(from)
+        family = auto.Mode == "away" and "Bicycle" or (from.Y - gy <= 2.4 and "Volley" or "RunningHeader")
+        minAngle = -0.95
+    elseif KirtiumHub.TrickActive then
+        family = KirtiumHub.TrickKey == "KickLob" and "Lofted" or "Laced"
+        lob = family == "Lofted"
+    else
+        family = F.CurrentFamily()
+        if family then
+            if KirtiumHub.ShotIgnore[family] then return nil end
+            lob = KirtiumHub.ShotLobs[family] == true
+        elseif fm > 1 and vel.Y / fm > 0.62 then
+            family, lob = "Lofted", true
+        else
+            family = "Laced"
+        end
+    end
+    local now = os.clock()
+    KirtiumHub.PreviewWant = { family = family, lob = lob, minAngle = minAngle, at = now }
+    local cache = KirtiumHub.PreviewCache
+    local c = cache and cache[family .. (minAngle and "|a" or "")]
+    if c and c.goalX == goal.x and now - c.at < 0.6 and (c.from - from).Magnitude < 8 then
+        return c.vel, c.spin
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.StartShotTick()
+    local F = KirtiumHub.Functions
+    F.InstallPreviewSpoof()
+    if KirtiumHub.ShotTickConn then return end
+    local acc = 0
+    local pause = 0.1
+    KirtiumHub.ShotTickConn = RunService.Heartbeat:Connect(function(dt)
+        acc += dt
+        if acc < pause then return end
+        acc = 0
+        pause = 0.1
+        local SA = SilentAimState
+        if not SA.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local id = char:GetAttribute("DribbleId")
+        local ball = F.GetBall()
+        if not ball or type(id) ~= "number" or ball:GetAttribute("Possessor") ~= id then return end
+        if not F.SilentAimModules() then return end
+        local pos = SA.BallView.getPosition()
+        if not pos or not F.ShotGate(pos) then return end
+        local want = KirtiumHub.PreviewWant
+        local family, lob, minAngle
+        if want and os.clock() - want.at < 0.5 then
+            family, lob, minAngle = want.family, want.lob, want.minAngle
+        else
+            family = F.CurrentFamily() or "Laced"
+            if KirtiumHub.ShotIgnore[family] then family = "Laced" end
+            lob = KirtiumHub.ShotLobs[family] == true
+        end
+        local t0 = os.clock()
+        local ok, result = pcall(F.ShotBest, pos, family, lob, F.Budget(0.004), minAngle, "preview")
+        local cache = KirtiumHub.PreviewCache
+        if not cache then
+            cache = {}
+            KirtiumHub.PreviewCache = cache
+        end
+        local pkey = family .. (minAngle and "|a" or "")
+        if ok and result then
+            cache[pkey] = {
+                at = os.clock(),
+                from = pos,
+                goalX = result.goalX,
+                vel = result.vel,
+                spin = result.spin,
+            }
+        else
+            cache[pkey] = nil
+        end
+        pause = math.clamp((os.clock() - t0) * 6, 0.1, 0.5)
+    end)
+    KirtiumHub.ConnectionController.Insert(KirtiumHub.ShotTickConn)
+end
+
+function KirtiumHub.Functions.InstallPickTrack()
+    local SA = getgenv().KirtiumSilentAim
+    if SA.PickHooked then return end
+    local ok, Select = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Select
+    end)
+    if not ok or type(Select) ~= "table" or type(Select.pick) ~= "function" or not hookfunction then return end
+    local orig
+    local function wrapper(self, forced)
+        local H = getgenv().KirtiumHub
+        local state = getgenv().KirtiumSilentAim
+        local input = self
+        if H and type(self) == "table" then
+            H.KickIntent = self.intent
+            H.KickIntentAt = os.clock()
+            if state.Enabled and (self.intent == "Shoot" or self.intent == "Lob") then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local root = char and char:FindFirstChild("Root")
+                    if not root then return end
+                    local p = root.Position
+                    local dir = H.Functions.KickGoalDir(p.X, p.Z)
+                    if dir then
+                        local copy = table.clone(self)
+                        copy.aimDir = dir
+                        copy.travel = dir
+                        copy.facing = dir
+                        copy.sideStepping = false
+                        input = copy
+                    end
+                end)
+            end
+        end
+        local result, second = orig(input, forced)
+        if type(result) == "table" and type(result.family) == "table" and type(result.family.name) == "string" and H then
+            H.ShotFamily = result.family.name
+            H.ShotFamilyAt = os.clock()
+        end
+        return result, second
+    end
+    local hok, res = pcall(hookfunction, Select.pick, wrapper)
+    if hok and res then
+        orig = res
+        SA.PickHooked = true
+    end
+end
+
+function KirtiumHub.Functions.InstallSilentAim()
+    local F = KirtiumHub.Functions
+    local SA = getgenv().KirtiumSilentAim
+    SA.Redirect = F.SilentAimRedirect
+    local ok, DribbleClient = pcall(function()
+        return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("DribbleClient"))
+    end)
+    if not (ok and type(DribbleClient) == "table") then
+        return false
+    end
+    if SA.HookedModule ~= DribbleClient then
+        SA.Hooked = false
+        SA.HookedModule = nil
+        SA.PickHooked = nil
+        SA.PlanAimHooked = nil
+        SA.PreviewShowHooked = nil
+        SA.PreviewShowHooking = nil
+        SA.BallView = nil
+        SA.Flight = nil
+        SA.Families = nil
+        SA.KeeperRules = nil
+        SA.Radius = nil
+        KirtiumHub.ShotEnvCache = nil
+        KirtiumHub.GoalCache = nil
+    end
+    F.SilentAimModules()
+    F.InstallPickTrack()
+    pcall(F.InstallPlanAim)
+    if not SA.Hooked then
+        local installed = 0
+        for _, name in ipairs({ "strike", "strikeFree" }) do
+            local fn = DribbleClient[name]
+            if type(fn) == "function" then
+                local orig
+                local function wrapper(from, vel, spin, family, t)
+                    if SA.Enabled and SA.Redirect and type(family) == "string" and typeof(from) == "Vector3" and typeof(vel) == "Vector3" then
+                        local rok, newVel, newSpin = pcall(SA.Redirect, from, vel, spin, family)
+                        if rok then
+                            if newVel then
+                                SA.LastVel = newVel
+                                SA.LastAt = os.clock()
+                                vel = newVel
+                                spin = newSpin or spin
+                                local H = getgenv().KirtiumHub
+                                if H then H.ShotLast = nil end
+                            end
+                        else
+                            SA.LastError = tostring(newVel)
+                        end
+                    end
+                    return orig(from, vel, spin, family, t)
+                end
+                if hookfunction then
+                    local hok, result = pcall(hookfunction, fn, wrapper)
+                    if hok and result then
+                        orig = result
+                        installed += 1
+                    end
+                else
+                    orig = fn
+                    if pcall(function() DribbleClient[name] = wrapper end) then
+                        installed += 1
+                    end
+                end
+            end
+        end
+        SA.Hooked = installed > 0
+        SA.HookedModule = SA.Hooked and DribbleClient or nil
+    end
+    pcall(F.InstallPlanSync)
+    F.StartShotTick()
+    return SA.Hooked == true
+end
+
+function KirtiumHub.Functions.KickGoalDir(x, z)
+    local F = KirtiumHub.Functions
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    if (x - goal.x) * goal.out >= 0 then return nil end
+    local dx, dz = goal.x - x, goal.z - z
+    local m = math.sqrt(dx * dx + dz * dz)
+    if m < 1.5 then return nil end
+    local range = SilentAimState.Range or 300
+    if range < 300 and m > range then return nil end
+    return Vector3.new(dx / m, 0, dz / m)
+end
+
+function KirtiumHub.Functions.InstallPlanAim()
+    local SA = getgenv().KirtiumSilentAim
+    if SA.PlanAimHooked or not hookfunction then return end
+    local ok, Plan = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Plan
+    end)
+    if not ok or type(Plan) ~= "table" or type(Plan.find) ~= "function" then return end
+    local orig
+    local function wrapper(self, ...)
+        local H = getgenv().KirtiumHub
+        local state = getgenv().KirtiumSilentAim
+        if H and state.Enabled and type(self) == "table" and typeof(self.pos) == "Vector3" then
+            local intent = H.KickIntent
+            if (intent == "Shoot" or intent == "Lob") and os.clock() - (H.KickIntentAt or 0) < 0.15 then
+                local ball = self.pos
+                if type(self.ballAt) == "function" and self.now then
+                    local bok, bp = pcall(self.ballAt, self.now)
+                    if bok and typeof(bp) == "Vector3" then ball = bp end
+                end
+                local dir = H.Functions.KickGoalDir(ball.X, ball.Z)
+                if dir then
+                    self.aimDir = dir
+                end
+            end
+        end
+        return orig(self, ...)
+    end
+    local hok, res = pcall(hookfunction, Plan.find, wrapper)
+    if hok and res then
+        orig = res
+        SA.PlanAimHooked = true
+    end
+end
+
+function KirtiumHub.Functions.InstallPreviewSpoof()
+    local SA = getgenv().KirtiumSilentAim
+    if SA.PreviewShowHooked or SA.PreviewShowHooking then return end
+    SA.PreviewShowHooking = true
+    task.spawn(function()
+        local ok, KP = pcall(function()
+            local game_ = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+            return require(game_:WaitForChild("KickPreview", 10))
+        end)
+        if not (ok and type(KP) == "table" and type(KP.show) == "function") then
+            SA.PreviewShowHooking = false
+            return
+        end
+        local orig = KP.show
+        local function wrapper(strike, ...)
+            local state = getgenv().KirtiumSilentAim
+            if state.Enabled and state.Spoof ~= false and type(strike) == "table" and typeof(strike.from) == "Vector3" and typeof(strike.vel) == "Vector3" then
+                local view = KirtiumHub.TrickView
+                local locked = view ~= nil and view.Active == true
+                local rok, nv, ns = pcall(KirtiumHub.Functions.PreviewAim, strike.from, strike.vel, strike.spin)
+                if rok and nv then
+                    local copy = table.clone(strike)
+                    copy.vel = nv
+                    copy.spin = ns or strike.spin
+                    if locked then copy.turn = false end
+                    state.PreviewLastVel = nv
+                    return orig(copy, ...)
+                end
+                if locked then
+                    local copy = table.clone(strike)
+                    copy.turn = false
+                    return orig(copy, ...)
+                end
+            end
+            return orig(strike, ...)
+        end
+        KP.show = wrapper
+        SA.PreviewShowHooked = true
+        SA.PreviewShowHooking = false
+        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+            if KP.show == wrapper then
+                KP.show = orig
+            end
+            SA.PreviewShowHooked = false
+        end })
+    end)
+end
+
+function KirtiumHub.Functions.ShotPredict(params, pos, vel, spin, gy, horizon, dt)
+    local Flight = getgenv().KirtiumSilentAim.Flight
+    local list = {}
+    local v, s = vel, spin
+    local rolling = false
+    local t = 0
+    local n = 0
+    while t < horizon do
+        local np, nv, ns
+        if rolling then
+            np, nv, ns = Flight.rollStep(pos, v, s, dt, params)
+        else
+            np, nv, ns = Flight.airStep(pos, v, s, dt, params)
+            if np.Y < gy and nv.Y < 0 then
+                np = Vector3.new(np.X, gy, np.Z)
+                local bv, bs = Flight.bounce(nv, ns, params)
+                if bv.Y < Flight.BOUNCE_MIN then
+                    bv, bs = Flight.toGround(bv, bs)
+                    rolling = true
+                end
+                nv, ns = bv, bs
+            end
+        end
+        pos, v, s = np, nv, ns
+        t += dt
+        n += 1
+        list[n] = { t = t, pos = pos }
+    end
+    return list
+end
+
+getgenv().KirtiumTracker = getgenv().KirtiumTracker or { Enabled = false, Rate = 0.25, Color = Color3.fromRGB(43, 255, 172) }
+
+function KirtiumHub.Functions.TrackerModules()
+    local T = getgenv().KirtiumTracker
+    if T.BallSim and T.World then return true end
+    pcall(function()
+        local g = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+        local bs = g:WaitForChild("BallSim")
+        T.BallSim = require(bs)
+        T.World = require(bs:WaitForChild("World"))
+    end)
+    return T.BallSim ~= nil and T.World ~= nil
+end
+
+function KirtiumHub.Functions.TrackerTrace(ev)
+    local F = KirtiumHub.Functions
+    local T = getgenv().KirtiumTracker
+    local BallSim, World = T.BallSim, T.World
+    local data = World.get()
+    if T.FrameSrc ~= data.frames then
+        local copy = {}
+        for key, frame in pairs(data.frames) do
+            copy[key] = frame.touched and setmetatable({ touched = false }, { __index = frame }) or frame
+        end
+        T.FrameSrc = data.frames
+        T.FrameCopy = copy
+    end
+    local world = { groundY = data.groundY, frames = T.FrameCopy, bodies = {} }
+    local params = World.params()
+    local flight = World.FLIGHT
+    local step = BallSim.STEP * 2
+    local gy = data.groundY
+    local goal = F.SilentAimGoal()
+    local event = BallSim.fromEvent(flight, ev, gy)
+    local pts = { { p = event.pos, t = event.t } }
+    local last = event.pos
+    local airborne = event.pos.Y - gy > 1.2
+    local landing
+    for _ = 1, 260 do
+        if BallSim.resting(event, flight) then break end
+        event = BallSim.step(flight, event, step, params, world, false, 0, nil)
+        local p = event.pos
+        if p.Y - gy > 1.2 then airborne = true end
+        local crossed = goal ~= nil and (p.X - goal.x) * goal.out >= 0
+        local touched = airborne and (p.Y - gy <= 0.06 or event.rolling)
+        if (crossed or touched or (p - last).Magnitude >= 1.8) and (p - last).Magnitude > 0.05 then
+            pts[#pts + 1] = { p = p, t = event.t }
+            last = p
+        end
+        if touched then
+            landing = Vector3.new(p.X, gy - params.radius + 0.1, p.Z)
+            break
+        end
+        if crossed or #pts > 56 then break end
+    end
+    return pts, landing
+end
+
+function KirtiumHub.Functions.StopBallTracker()
+    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallTracker") end)
+    local T = getgenv().KirtiumTracker
+    if T.Base then
+        pcall(function() T.Base:Destroy() end)
+        T.Base = nil
+    end
+end
+
+function KirtiumHub.Functions.StartBallTracker()
+    local F = KirtiumHub.Functions
+    F.StopBallTracker()
+    if not F.SilentAimModules() or not F.TrackerModules() then return false end
+    local T = getgenv().KirtiumTracker
+    local SA = getgenv().KirtiumSilentAim
+    local BV = SA.BallView
+    local COUNT = 56
+    local base = Instance.new("Part")
+    base.Name = "KirtiumTracker"
+    base.Anchored = true
+    base.CanCollide = false
+    base.CanQuery = false
+    base.CanTouch = false
+    base.CastShadow = false
+    base.Transparency = 1
+    base.Size = Vector3.new(0.1, 0.1, 0.1)
+    base.CFrame = CFrame.identity
+    base.Parent = workspace
+    T.Base = base
+
+    local function adorn(className)
+        local a = Instance.new(className)
+        a.Adornee = base
+        a.AlwaysOnTop = true
+        a.Color3 = T.Color
+        a.Visible = false
+        pcall(function() a.AdornCullingMode = Enum.AdornCullingMode.Never end)
+        a.Parent = base
+        return a
+    end
+
+    local segs = {}
+    for i = 1, COUNT do
+        local s = adorn("LineHandleAdornment")
+        s.ZIndex = 2
+        s.Thickness = 4
+        s.Transparency = 0.05
+        segs[i] = s
+    end
+    local marker = adorn("CylinderHandleAdornment")
+    marker.ZIndex = 2
+    marker.Height = 0.08
+    marker.Radius = 1.1
+    marker.InnerRadius = 0
+    marker.Transparency = 0.15
+    local ring = adorn("CylinderHandleAdornment")
+    ring.ZIndex = 1
+    ring.Height = 0.06
+    ring.Radius = 2.2
+    ring.InnerRadius = 1.6
+    ring.Transparency = 0.35
+
+    local flat = CFrame.Angles(math.pi / 2, 0, 0)
+    local applied = T.Color
+    local lastSolve = 0
+    local path, hidden, baseMoved = nil, true, false
+    local shownFrom = 1
+
+    local function hideAll()
+        path = nil
+        if hidden then return end
+        hidden = true
+        for i = 1, COUNT do
+            segs[i].Visible = false
+        end
+        marker.Visible = false
+        ring.Visible = false
+    end
+
+    local function draw(p)
+        local pts = p.pts
+        local n = math.min(#pts - 1, COUNT)
+        p.n = n
+        for i = 1, n do
+            local a, b = pts[i].p, pts[i + 1].p
+            local s = segs[i]
+            s.Length = (b - a).Magnitude
+            s.CFrame = CFrame.lookAt(a, b)
+            s.Visible = true
+        end
+        for i = n + 1, COUNT do
+            segs[i].Visible = false
+        end
+        shownFrom = 1
+        if p.landing then
+            local cf = CFrame.new(p.landing) * flat
+            marker.CFrame = cf
+            ring.CFrame = cf
+            marker.Visible = true
+            ring.Visible = true
+        else
+            marker.Visible = false
+            ring.Visible = false
+        end
+        hidden = false
+    end
+
+    local function trim(p, now)
+        local pts = p.pts
+        local first = 1
+        while first < p.n and pts[first + 1].t <= now do
+            first += 1
+        end
+        if first ~= shownFrom then
+            local lo, hi = math.min(first, shownFrom), math.min(math.max(first, shownFrom), p.n)
+            for i = lo, hi do
+                segs[i].Visible = i >= first
+            end
+            shownFrom = first
+        end
+    end
+
+    RunService:BindToRenderStep("KirtiumBallTracker", Enum.RenderPriority.Camera.Value + 40, function()
+        if not T.Enabled then
+            hideAll()
+            return
+        end
+        if T.Color ~= applied then
+            applied = T.Color
+            for i = 1, COUNT do
+                segs[i].Color3 = applied
+            end
+            marker.Color3 = applied
+            ring.Color3 = applied
+        end
+        local ball = BV.getBall()
+        local pos = BV.getPosition()
+        if not (ball and pos) then
+            hideAll()
+            return
+        end
+        local now = os.clock()
+        local state, _, ev, cp = BV.freeSim()
+        if state and ev and cp and state.vel.Magnitude > 3 then
+            local key = tostring(ev.seq) .. ":" .. tostring(ev.t)
+            if not path or path.mode ~= "free" or path.key ~= key or now - path.at > 1 then
+                local ok, pts, landing = pcall(F.TrackerTrace, cp)
+                if ok and pts then
+                    path = { mode = "free", key = key, at = now, pts = pts, landing = landing }
+                    draw(path)
+                end
+            end
+            if path and path.mode == "free" then
+                if baseMoved then
+                    base.CFrame = CFrame.identity
+                    baseMoved = false
+                end
+                trim(path, state.t)
+            else
+                hideAll()
+            end
+            return
+        end
+        if path and path.mode ~= "solve" then
+            hideAll()
+        end
+        if now - lastSolve >= math.max(T.Rate, 0.15) or not path then
+            lastSolve = now
+            local ok, result = pcall(F.ShotBest, pos, "Laced", false, F.Budget(0.004), nil, "warm")
+            if ok and result and result.vel
+                and (not path or (path.vel - result.vel).Magnitude > 0.5 or (path.from - pos).Magnitude > 6) then
+                local evt = {
+                    seq = 0,
+                    t = 0,
+                    pos = pos,
+                    vel = result.vel,
+                    spin = result.spin,
+                    kind = "kick",
+                    by = 0,
+                    pid = 0,
+                    n = 0
+                }
+                local ok2, pts, landing = pcall(F.TrackerTrace, evt)
+                if ok2 and pts then
+                    path = { mode = "solve", pts = pts, landing = landing, from = pos, vel = result.vel }
+                    draw(path)
+                end
+            end
+        end
+        if path and path.mode == "solve" then
+            if (pos - path.from).Magnitude > 40 then
+                hideAll()
+            else
+                base.CFrame = CFrame.new(pos - path.from)
+                baseMoved = true
+            end
+        else
+            hideAll()
+        end
+    end)
+    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        KirtiumHub.Functions.StopBallTracker()
+    end })
+    return true
+end
+
+function KirtiumHub.Functions.KeeperDivesModule()
+    local H = KirtiumHub
+    if H.KeeperDivesRef then return H.KeeperDivesRef end
+    local ok, mod = pcall(function()
+        local shared = Services.ReplicatedStorage:WaitForChild("Shared", 5)
+        local gameFolder = shared and shared:WaitForChild("Game", 5)
+        local inst = gameFolder and gameFolder:WaitForChild("KeeperDives", 5)
+        return inst and require(inst)
+    end)
+    if ok and type(mod) == "table" then
+        H.KeeperDivesRef = mod
+        return mod
+    end
+    return nil
+end
+
+function KirtiumHub.Functions.KeeperDiveTouch(kind)
+    local H = KirtiumHub
+    local cache = H.KeeperTouchCache
+    if not cache then
+        cache = {}
+        H.KeeperTouchCache = cache
+    end
+    if cache[kind] then return cache[kind] end
+    local mod = H.Functions.KeeperDivesModule()
+    local touch
+    if mod and type(mod.track) == "function" then
+        local ok, track = pcall(mod.track, kind)
+        if ok and type(track) == "table" and type(track.touch) == "number" then
+            touch = track.touch
+            cache[kind] = touch
+        end
+    end
+    return touch or 0.35
+end
+
+function KirtiumHub.Functions.KeeperDiveStick(kind, lateral)
+    if kind == "Jump" then return Vector2.new(0, 1) end
+    local angles = { High = 40, Mid = 0, Low = -40, Smother = -80 }
+    local a = math.rad(angles[kind] or 0)
+    local cam = workspace.CurrentCamera
+    local right = cam and cam.CFrame.RightVector or Vector3.new(1, 0, 0)
+    right = Vector3.new(right.X, 0, right.Z)
+    if right.Magnitude < 0.1 then right = Vector3.new(1, 0, 0) else right = right.Unit end
+    local sign = lateral:Dot(right) >= 0 and 1 or -1
+    return Vector2.new(sign * math.cos(a), math.sin(a))
+end
+
+function KirtiumHub.Functions.KeeperDiveDirect(char, kind, lateral)
+    local F = KirtiumHub.Functions
+    if kind == "Jump" then return false end
+    local env = F.KeeperDiveEnv()
+    local mod = F.MannequinClientModule()
+    local goal = F.KeeperGoal()
+    if not (env and mod and goal) then return false end
+    local anim = mod.getAnimator(char)
+    local body = anim and (anim.body or (anim.getBody and anim:getBody()))
+    if not body or body.active then return false end
+    local dir = lateral
+    if dir.Magnitude < 0.001 then return false end
+    dir = dir.Unit
+    local ok, started = pcall(body.keyDive, body, kind, dir, goal.inward)
+    if not (ok and started) then return false end
+    local kdive = body.kdive
+    local payload = nil
+    if kdive and kdive.animated then
+        local eok, encoded = pcall(env.Dives.encode, kdive.move)
+        if eok then payload = encoded end
+    end
+    env.Remote:FireServer("Dive" .. kind, dir, payload)
+    return true
+end
+
+function KirtiumHub.Functions.InstallTrickFilter()
+    local TF = getgenv().KirtiumTrickFilter
+    if TF.Hooked then return true end
+    if not hookfunction then return false end
+    local ok, Kick = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick"))
+    end)
+    if not ok or type(Kick) ~= "table" then return false end
+    local installed = 0
+    for _, name in ipairs({ "Plan", "Header", "Bicycle", "Dive" }) do
+        local module = Kick[name]
+        local fn = module and module.find
+        if type(fn) == "function" then
+            local orig
+            local function wrapper(self, ...)
+                local H = getgenv().KirtiumHub
+                local T = getgenv().KirtiumAutoTricks
+                local auto = H and H.Auto
+                if T
+                    and T.Enabled
+                    and T.Auto == false
+                    and auto
+                    and auto.Phase == "air"
+                    and type(self) == "table"
+                    and type(self.family) == "table"
+                    and not (T.AirFamilies and T.AirFamilies[self.family.name]) then
+                    return nil
+                end
+                return orig(self, ...)
+            end
+            local hok, res = pcall(hookfunction, fn, wrapper)
+            if hok and res then
+                orig = res
+                installed += 1
+            end
+        end
+    end
+    TF.Hooked = installed > 0
+    return TF.Hooked
+end
+
+function KirtiumHub.Functions.SetTrickSelection(value)
+    local T = getgenv().KirtiumAutoTricks
+    local catalog = KirtiumHub.TrickCatalog
+    local picked = {}
+
+    local function take(name)
+        if catalog[name] then
+            picked[name] = true
+        end
+    end
+
+    if type(value) == "table" then
+        for k, v in pairs(value) do
+            if type(v) == "string" then
+                take(v)
+            elseif v == true and type(k) == "string" then
+                take(k)
+            end
+        end
+    elseif type(value) == "string" then
+        take(value)
+    end
+
+    if next(picked) == nil then
+        T.Auto = true
+        T.AirFamilies = {}
+        T.Skills = {}
+        T.Lob = false
+        return true
+    end
+
+    local air, skills = {}, {}
+    local lob = false
+    for name in pairs(picked) do
+        local entry = catalog[name]
+        if entry.air then air[entry.air] = true end
+        if entry.lob then lob = true end
+        if entry.skill then skills[#skills + 1] = entry.skill end
+    end
+    T.Auto = false
+    T.AirFamilies = air
+    T.Skills = skills
+    T.Lob = lob
+
+    local hooked = KirtiumHub.Functions.InstallTrickFilter()
+    if next(air) ~= nil and not hooked then
+        warn("[kirtium.qyz] trick filter could not be installed, air tricks are not forced")
+    end
+    return hooked
+end
+
+function KirtiumHub.Functions.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+    local F = KirtiumHub.Functions
+    local T = getgenv().KirtiumAutoTricks
+    local checked, okBike = false, false
+
+    local function bicycle()
+        if not checked then
+            checked = true
+            okBike = bike ~= nil and st.Mods ~= nil and F.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
+        end
+        return okBike
+    end
+
+    if T.Auto ~= false then
+        if bicycle() then
+            return bike, "away", "Bicycle"
+        end
+        return best, "goal", best.h <= 2.4 and "Volley" or "RunningHeader"
+    end
+
+    local families = getgenv().KirtiumSilentAim.Families
+    local pick, pickMode, pickFamily
+    for family in pairs(T.AirFamilies or {}) do
+        local cand, mode
+        if family == "Bicycle" then
+            if bicycle() then
+                cand, mode = bike, "away"
+            end
+        else
+            local def = families and families[family]
+            local range = def and def.ballHeight
+            if range then
+                for _, c in ipairs(cands) do
+                    if c.h >= range[1] and c.h <= range[2] then
+                        cand, mode = c, "goal"
+                        break
+                    end
+                end
+            end
+        end
+        if cand and (not pick or cand.t < pick.t) then
+            pick, pickMode, pickFamily = cand, mode, family
+        end
+    end
+    return pick, pickMode, pickFamily
+end
+
+function KirtiumHub.Functions.SkillForced(side)
+    local skills = getgenv().KirtiumAutoTricks.Skills
+    local spec = skills[math.random(#skills)]
+    local away = side > 0 and "Left" or "Right"
+    return { kind = spec.kind, dir = spec.dir == "Away" and away or spec.dir, half = spec.half }
+end
+
+-- A biblioteca tem um convite antigo fixo no botão do Discord.
+-- Injeta o convite definido acima antes de compilar a biblioteca.
+local uiSource = game:HttpGet("https://raw.githubusercontent.com/wadhiaubsjdh8yhwda/a/refs/heads/main/lib")
+uiSource = uiSource:gsub('local DISCORD_INVITE = "[^"]+"', function()
+    return 'local DISCORD_INVITE = ' .. string.format("%q", DISCORD_INVITE)
+end, 1)
+-- Troca SOMENTE o ícone de marca "logo" em todos os pontos da Blossom.
+-- Os ícones das funções e abas permanecem originais.
+local logoFactoryPatch = 'local function imageFor(name)\n    if name == "logo" then return { Image = ' .. string.format("%q", HUB_LOGO) .. ' } end'
+local logoFactoryCount
+uiSource, logoFactoryCount = uiSource:gsub('local function imageFor%(name%)', function()
+    return logoFactoryPatch
+end, 1)
+if logoFactoryCount ~= 1 then
+    error('[kirtium.qyz] A biblioteca de interface mudou; nao foi possivel aplicar a logo.')
+end
+
+-- Preserva as cores originais dos demais ícones; a logo conserva as cores do PNG.
+local logoColorCount
+uiSource, logoColorCount = uiSource:gsub('bind%(picture, "ImageColor3", color%)', function()
+    return 'if name == "logo" then picture.ImageColor3 = Color3.new(1, 1, 1) else bind(picture, "ImageColor3", color) end'
+end, 1)
+if logoColorCount ~= 1 then
+    warn('[kirtium.qyz] Imagem configurada, mas a cor da logo pode ser alterada pelo tema.')
+end
+
+local lib = loadstring(uiSource)()
+
+local CurrentGameName = game.Name
+pcall(function()
+    local GameInfo = Services.MarketplaceService:GetProductInfo(game.PlaceId)
+    if GameInfo and type(GameInfo.Name) == "string" and GameInfo.Name ~= "" then
+        CurrentGameName = GameInfo.Name
+    end
+end)
+local gameName = "RagdollSoccer"
+local Window = lib.new({
+    Title = HUB_NAME, Script = HUB_NAME, Build = CurrentGameName, NotifyPosition = "Bottom Right", ConfigFolder = "kirtium.qyz/" .. gameName .. "/configs",
+})
+
+KirtiumHub.UIController.Window = Window
+
+-- Verifica se a logo personalizada foi criada como imagem pela Blossom.
+-- Se o asset não carregar, tenta a miniatura do mesmo ID e informa o motivo.
+do
+    local logo = Window.Logo
+    local picture = logo and logo.Parts and logo.Parts[1]
+    if not (picture and picture:IsA("ImageLabel")) then
+        warn("[kirtium.qyz] ERRO: o patch da biblioteca nao criou um ImageLabel para a logo.")
+    else
+        picture.Image = HUB_LOGO
+        picture.ImageColor3 = Color3.new(1, 1, 1)
+        picture.ImageTransparency = 0
+        picture.BackgroundTransparency = 1
+        picture.ScaleType = Enum.ScaleType.Fit
+        local thumb = "rbxthumb://type=Asset&id=140431954244571&w=420&h=420"
+        task.spawn(function()
+            local ok, err = pcall(function()
+                game:GetService("ContentProvider"):PreloadAsync({picture}, function(asset, status)
+                    if status ~= Enum.AssetFetchStatus.Success then
+                        warn("[kirtium.qyz] Falha ao carregar asset da logo: " .. tostring(status))
+                    end
+                end)
+            end)
+            if not ok then
+                warn("[kirtium.qyz] Erro no teste da logo: " .. tostring(err))
+            end
+        end)
+        task.delay(3, function()
+            if picture.Parent and not picture.IsLoaded then
+                local total = 0
+                for _, item in ipairs(Window.Screen:GetDescendants()) do
+                    if item:IsA("ImageLabel") and item.Image == HUB_LOGO then
+                        item.Image = thumb
+                        item.ImageColor3 = Color3.new(1, 1, 1)
+                        item.ImageTransparency = 0
+                        total += 1
+                    end
+                end
+                warn("[kirtium.qyz] O ID original nao carregou. Testando miniatura do Roblox em " .. total .. " imagens. Confira permissao, moderacao e se o ID corresponde a imagem.")
+                task.wait(3)
+                if picture.Parent then
+                    if picture.IsLoaded then
+                        print("[kirtium.qyz] Miniatura da logo carregada.")
+                    else
+                        warn("[kirtium.qyz] Nem a miniatura carregou: ID possivelmente invalido, privado ou sem acesso nesta experiencia.")
+                    end
+                end
+            else
+                print("[kirtium.qyz] Logo principal carregada corretamente.")
+            end
+        end)
+    end
+end
+
+-- A biblioteca Blossom chama makeIcon(..., "logo", ...) nas quatro áreas da interface.
+-- A substituição é feita na própria fábrica de ícones, antes de carregar a biblioteca.
+
+Window:Category("Main")
+
+local CombatTab = Window:Tab({
+    Name = "Combat",
+    Icon = "lucide:crosshair",
+})
+
+local BallTab = Window:Tab({
+    Name = "Ball",
+    Icon = "lucide:target",
+})
+
+local PlayerTab = Window:Tab({
+    Name = "Player",
+    Icon = "lucide:user-round",
+})
+
+KirtiumHub.UIController.Tabs.Combat = CombatTab
+KirtiumHub.UIController.Tabs.Player = PlayerTab
+KirtiumHub.UIController.Tabs.Ball = BallTab
+
+local SilentAimSection = CombatTab:Section({
+    Name = "Silent Aim",
+    Icon = "lucide:crosshair",
+    Side = 1,
+})
+
+SilentAimSection:Dropdown({
+    Name = "Silent Aim Target",
+    Options = { "Auto", "Top Right Corner", "Bottom Right Corner", "Top Left Corner", "Bottom Left Corner", "Top Center", "Bottom Center", "Upper Right", "Upper Left", "Lower Right", "Lower Left", "Right Post", "Left Post", "Middle" },
+    Default = { "Auto" },
+    Multi = true,
+    Callback = function(value)
+        KirtiumHub.Functions.SetSilentTargets(value)
+    end,
+})
+
+SilentAimSection:Slider({
+    Name = "Silent Aim Range",
+    Min = 20,
+    Max = 300,
+    Suffix = "st",
+    Default = 300,
+    Callback = function(value)
+        getgenv().KirtiumSilentAim.Range = value
+    end,
+})
+
+SilentAimSection:Toggle({
+    Name = "Silent Aim",
+    Keybind = Enum.KeyCode.H,
+    Default = false,
+    Callback = function(state)
+        local SA = getgenv().KirtiumSilentAim
+        local forced = KirtiumHub.Force ~= nil and KirtiumHub.Force.Active == true
+        if state then
+            local ok = KirtiumHub.Functions.InstallSilentAim()
+            if not ok then
+                SA.User = false
+                SA.Enabled = forced
+                return
+            end
+            SA.User = true
+            SA.Enabled = true
+        else
+            SA.User = false
+            SA.Enabled = forced
+        end
+    end,
+})
+
+SilentAimSection:Toggle({
+    Name = "Auto Curve",
+    Default = false,
+    Callback = function(state)
+        getgenv().KirtiumSilentAim.AutoCurve = state
+    end,
+})
+
+SilentAimSection:Slider({
+    Name = "Curve Strength",
+    Min = 50,
+    Max = 100,
+    Suffix = "%",
+    Default = 100,
+    Callback = function(value)
+        getgenv().KirtiumSilentAim.CurveAmount = value / 100
+    end,
+})
+
+local KeeperSection = BallTab:Section({
+    Name = "Goalkeeper",
+    Icon = "lucide:shield-half",
+    Side = 2,
+})
+
+KeeperSection:Toggle({
+    Name = "Auto Goalkeeper",
+    Default = false,
+    Callback = function(state)
+        local GK = getgenv().KirtiumKeeper
+        GK.Enabled = state
+        if state then
+            if not KirtiumHub.Functions.StartKeeper() then
+                GK.Enabled = false
+            end
+        else
+            KirtiumHub.Functions.StopKeeper()
+        end
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Dive / Slide",
+    Default = true,
+    Callback = function(state)
+        getgenv().KirtiumKeeper.Dive = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Rush Out",
+    Default = true,
+    Callback = function(state)
+        getgenv().KirtiumKeeper.Rush = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Gather Loose Balls",
+    Default = true,
+    Callback = function(state)
+        getgenv().KirtiumKeeper.Gather = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Poke",
+    Default = true,
+    Callback = function(state)
+        getgenv().KirtiumKeeper.Poke = state
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Depth",
+    Min = 2,
+    Max = 12,
+    Suffix = "st",
+    Default = 4.5,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().KirtiumKeeper.Depth = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Dive Range",
+    Min = 6,
+    Max = 22,
+    Suffix = "st",
+    Default = 14,
+    Callback = function(value)
+        getgenv().KirtiumKeeper.DiveRange = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Dive Timing",
+    Min = 0,
+    Max = 0.3,
+    Suffix = "s",
+    Default = 0.06,
+    Decimals = 2,
+    Callback = function(value)
+        getgenv().KirtiumKeeper.DiveLead = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Stand Reach",
+    Min = 0.5,
+    Max = 4,
+    Suffix = "st",
+    Default = 2,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().KirtiumKeeper.StandReach = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Rush Range",
+    Min = 15,
+    Max = 60,
+    Suffix = "st",
+    Default = 34,
+    Callback = function(value)
+        getgenv().KirtiumKeeper.RushRange = value
+    end,
+})
+
+local PowerSection = CombatTab:Section({
+    Name = "Power",
+    Icon = "lucide:gauge",
+    Side = 2,
+})
+
+PowerSection:Toggle({
+    Name = "Auto Max",
+    Keybind = Enum.KeyCode.B,
+    Default = false,
+    Callback = function(state)
+        local MP = getgenv().KirtiumMaxPower
+        local forced = KirtiumHub.Force ~= nil and KirtiumHub.Force.Active == true
+        if state then
+            if not KirtiumHub.Functions.InstallMaxPower() then
+                MP.User = false
+                MP.Enabled = forced
+                return
+            end
+            MP.User = true
+            MP.Enabled = true
+        else
+            MP.User = false
+            MP.Enabled = forced
+        end
+    end,
+})
+
+local SprintSection = PlayerTab:Section({
+    Name = "Sprint",
+    Icon = "lucide:footprints",
+    Side = 1,
+})
+
+SprintSection:Toggle({
+    Name = "Infinite Sprint",
+    Keybind = Enum.KeyCode.N,
+    Default = false,
+    Callback = function(state)
+        getgenv().KirtiumSprint.Infinite = state
+        KirtiumHub.Functions.RefreshRunSpeed()
+    end,
+})
+
+SprintSection:Toggle({
+    Name = "Auto Sprint",
+    Default = false,
+    Callback = function(state)
+        getgenv().KirtiumSprint.Auto = state
+        if state then
+            KirtiumHub.Functions.StartAutoSprint()
+        else
+            KirtiumHub.Functions.StopAutoSprint()
+        end
+    end,
+})
+
+SprintSection:Slider({
+    Name = "Sprint Speed",
+    Min = 100,
+    Max = 160,
+    Default = 100,
+    Suffix = "%",
+    Callback = function(value)
+        getgenv().KirtiumSprint.Boost = value / 100
+        KirtiumHub.Functions.RefreshRunSpeed()
+    end,
+})
+
+local RagdollSection = PlayerTab:Section({
+    Name = "Ragdoll",
+    Icon = "lucide:shield",
+    Side = 2,
+})
+
+RagdollSection:Toggle({
+    Name = "Anti-Tackle",
+    Default = false,
+    Callback = function(state)
+        if state and not KirtiumHub.Functions.InstallAntiRagdoll() then
+            KirtiumHub.Functions.SetAntiTackle(false)
+            return
+        end
+        KirtiumHub.Functions.SetAntiTackle(state)
+    end,
+})
+
+RagdollSection:Toggle({
+    Name = "Instant Get Up",
+    Default = false,
+    Callback = function(state)
+        if state and not KirtiumHub.Functions.InstallAntiRagdoll() then
+            KirtiumHub.Functions.SetInstantGetUp(false)
+            return
+        end
+        KirtiumHub.Functions.SetInstantGetUp(state)
+    end,
+})
+
+local PokeSection = PlayerTab:Section({
+    Name = "Poke",
+    Icon = "lucide:hand",
+    Side = 1,
+})
+
+PokeSection:Toggle({
+    Name = "Auto Poke",
+    Default = false,
+    Callback = function(state)
+        local AP = getgenv().KirtiumAutoPoke
+        AP.Enabled = state
+        if state then
+            KirtiumHub.Functions.StartAutoPoke()
+        else
+            KirtiumHub.Functions.StopAutoPoke()
+        end
+    end,
+})
+
+PokeSection:Slider({
+    Name = "Poke Range",
+    Min = 3,
+    Max = 12,
+    Suffix = "st",
+    Default = 6,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().KirtiumAutoPoke.Range = value
+    end,
+})
+
+local CooldownSection = PlayerTab:Section({
+    Name = "Cooldown",
+    Icon = "lucide:timer",
+    Side = 2,
+})
+
+CooldownSection:Toggle({
+    Name = "No Tackle / Poke Cooldown",
+    Default = false,
+    Callback = function(state)
+        local NC = getgenv().KirtiumNoCooldown
+        NC.Enabled = state
+        if state then
+            KirtiumHub.Functions.StartNoCooldown()
+        else
+            KirtiumHub.Functions.StopNoCooldown()
+        end
+    end,
+})
+
+local ShootingSection = CombatTab:Section({
+    Name = "Shooting",
+    Icon = "lucide:goal",
+    Side = 2,
+})
+
+ShootingSection:Toggle({
+    Name = "Auto Shoot",
+    Keybind = Enum.KeyCode.K,
+    Default = false,
+    Callback = function(state)
+        local AS = getgenv().KirtiumAutoShoot
+        if state then
+            if not KirtiumHub.Functions.InstallSilentAim() then
+                AS.Enabled = false
+                return
+            end
+            pcall(KirtiumHub.Functions.InstallMaxPower)
+            AS.Enabled = true
+            KirtiumHub.Functions.StartAutoShoot()
+        else
+            AS.Enabled = false
+            KirtiumHub.Functions.StopAutoShoot()
+        end
+    end,
+})
+
+ShootingSection:Slider({
+    Name = "Shoot Distance",
+    Min = 10,
+    Max = 150,
+    Default = 60,
+    Suffix = "st",
+    Callback = function(value)
+        getgenv().KirtiumAutoShoot.Range = value
+    end,
+})
+
+local ReachSection = BallTab:Section({
+    Name = "Ball Reach",
+    Icon = "lucide:move-horizontal",
+    Side = 1,
+})
+
+ReachSection:Toggle({
+    Name = "Extended Ball Reach",
+    Default = false,
+    Callback = function(state)
+        local R = getgenv().KirtiumReach
+        R.Enabled = state
+        if not KirtiumHub.Functions.ApplyBallReach() then
+            R.Enabled = false
+        end
+    end,
+})
+
+ReachSection:Slider({
+    Name = "Reach Added",
+    Min = 1,
+    Max = 8,
+    Suffix = "st",
+    Default = 3,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().KirtiumReach.Add = value
+    end,
+})
+
+local PickupSection = BallTab:Section({
+    Name = "Ball Pickup",
+    Icon = "lucide:magnet",
+    Side = 1,
+})
+
+PickupSection:Toggle({
+    Name = "Auto Pickup",
+    Default = false,
+    Callback = function(state)
+        local AP = getgenv().KirtiumAutoPickup
+        AP.Enabled = state
+        if state then
+            KirtiumHub.Functions.StartAutoPickup()
+        else
+            KirtiumHub.Functions.StopAutoPickup()
+        end
+    end,
+})
+
+PickupSection:Slider({
+    Name = "Pickup Range",
+    Min = 5,
+    Max = 60,
+    Suffix = "st",
+    Default = 25,
+    Callback = function(value)
+        getgenv().KirtiumAutoPickup.Range = value
+    end,
+})
+
+local TrackerSection = BallTab:Section({
+    Name = "Ball Tracker",
+    Icon = "lucide:radar",
+    Side = 1,
+})
+
+local TrackerToggle = TrackerSection:Toggle({
+    Name = "Ball Tracker",
+    Keybind = Enum.KeyCode.J,
+    Default = false,
+    Callback = function(state)
+        local T = getgenv().KirtiumTracker
+        T.Enabled = state
+        if state then
+            if not KirtiumHub.Functions.StartBallTracker() then
+                T.Enabled = false
+            end
+        else
+            KirtiumHub.Functions.StopBallTracker()
+        end
+    end,
+})
+
+local trackerColorCallback = function(value)
+    if typeof(value) == "Color3" then
+        getgenv().KirtiumTracker.Color = value
+    end
+end
+
+local pickerMade = false
+for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
+    if not pickerMade and TrackerToggle and type(TrackerToggle) == "table" and TrackerToggle[name] then
+        pickerMade = pcall(function()
+            TrackerToggle[name](TrackerToggle, {
+                Name = "Tracker Color",
+                Default = getgenv().KirtiumTracker.Color,
+                Callback = trackerColorCallback,
+            })
+        end)
+    end
+end
+for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
+    if not pickerMade and TrackerSection[name] then
+        pickerMade = pcall(function()
+            TrackerSection[name](TrackerSection, {
+                Name = "Tracker Color",
+                Default = getgenv().KirtiumTracker.Color,
+                Callback = trackerColorCallback,
+            })
+        end)
+    end
+end
+
+TrackerSection:Slider({
+    Name = "Tracker Refresh",
+    Min = 0.15,
+    Max = 0.6,
+    Default = 0.25,
+    Suffix = "s",
+    Decimals = 2,
+    Callback = function(value)
+        getgenv().KirtiumTracker.Rate = value
+    end,
+})
+
+local DefenseSection = CombatTab:Section({
+    Name = "Defense",
+    Icon = "lucide:shield-check",
+    Side = 2,
+})
+
+DefenseSection:Toggle({
+    Name = "Auto Guard",
+    Keybind = Enum.KeyCode.M,
+    Default = false,
+    Callback = function(state)
+        local GD = getgenv().KirtiumGuard
+        GD.Enabled = state
+        if state then
+            KirtiumHub.Functions.StartGuard()
+        else
+            KirtiumHub.Functions.StopGuard()
+        end
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Distance",
+    Min = 2,
+    Max = 20,
+    Suffix = "st",
+    Default = 8,
+    Callback = function(value)
+        getgenv().KirtiumGuard.Distance = value
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Prediction",
+    Min = 0.1,
+    Max = 1,
+    Default = 0.35,
+    Suffix = "s",
+    Decimals = 2,
+    Callback = function(value)
+        getgenv().KirtiumGuard.Predict = value
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Engage Range",
+    Min = 8,
+    Max = 45,
+    Suffix = "st",
+    Default = 22,
+    Callback = function(value)
+        getgenv().KirtiumGuard.Engage = value
+    end,
+})
+
+DefenseSection:Toggle({
+    Name = "Ignore Teammates",
+    Default = true,
+    Callback = function(state)
+        getgenv().KirtiumGuard.IgnoreTeammates = state
+    end,
+})
+
+local SkillsSection = CombatTab:Section({
+    Name = "Skills",
+    Icon = "lucide:wand-sparkles",
+    Side = 1,
+})
+
+SkillsSection:Dropdown({
+    Name = "Trick Select",
+    Options = KirtiumHub.TrickOptions,
+    Default = { "Auto" },
+    Multi = true,
+    Callback = function(value)
+        KirtiumHub.Functions.SetTrickSelection(value)
+    end,
+})
+
+SkillsSection:Toggle({
+    Name = "Auto Tricks",
+    Default = false,
+    Callback = function(state)
+        local AT = getgenv().KirtiumAutoTricks
+        if state then
+            if not KirtiumHub.Functions.InstallSilentAim() then
+                AT.Enabled = false
+                return
+            end
+            pcall(KirtiumHub.Functions.InstallMaxPower)
+            if not KirtiumHub.Functions.StartAutoTricks() then
+                AT.Enabled = false
+                return
+            end
+            AT.Enabled = true
+        else
+            AT.Enabled = false
+            KirtiumHub.Functions.StopAutoTricks()
+        end
+    end,
+})
+
+SkillsSection:Slider({
+    Name = "Tricks Range",
+    Min = 20,
+    Max = 120,
+    Default = 70,
+    Suffix = "st",
+    Callback = function(value)
+        getgenv().KirtiumAutoTricks.Range = value
+    end,
+})
+
+SkillsSection:Slider({
+    Name = "Defender Distance",
+    Min = 6,
+    Max = 30,
+    Suffix = "st",
+    Default = 14,
+    Callback = function(value)
+        getgenv().KirtiumAutoTricks.Defender = value
+    end,
+})
+
+SkillsSection:Toggle({
+    Name = "Auto Dribble",
+    Default = false,
+    Callback = function(state)
+        local AD = getgenv().KirtiumAutoDribble
+        if state then
+            if not KirtiumHub.Functions.SkillModule() then
+                AD.Enabled = false
+                return
+            end
+            AD.Enabled = true
+            KirtiumHub.Functions.StartAutoDribble()
+        else
+            AD.Enabled = false
+            KirtiumHub.Functions.StopAutoDribble()
+        end
+    end,
+})
+
+SkillsSection:Slider({
+    Name = "Dribble Range",
+    Min = 6,
+    Max = 20,
+    Suffix = "st",
+    Default = 12,
+    Callback = function(value)
+        getgenv().KirtiumAutoDribble.Range = value
+    end,
+})
+
+Window:Category("Settings")
+
+local SettingsTab = Window:Tab({
+    Name = "Settings",
+    Icon = "lucide:settings",
+})
+
+KirtiumHub.UIController.Tabs.Settings = SettingsTab
+
+Window:BuildSettings(SettingsTab)
+
+return Window
