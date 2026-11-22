@@ -1,32 +1,32 @@
-if getgenv().KirtiumHub then
-    if KirtiumHub.ConnectionController and KirtiumHub.ConnectionController.Connections then
-        for i, v in next, KirtiumHub.ConnectionController.Connections do
+if getgenv().MystrixHub then
+    if MystrixHub.ConnectionController and MystrixHub.ConnectionController.Connections then
+        for i, v in next, MystrixHub.ConnectionController.Connections do
             pcall(function() v:Disconnect() end)
-            KirtiumHub.ConnectionController.Connections[i] = nil
+            MystrixHub.ConnectionController.Connections[i] = nil
         end
     end
-    if KirtiumHub.TasksController and KirtiumHub.TasksController.Tasks then
-        for i, v in next, KirtiumHub.TasksController.Tasks do
+    if MystrixHub.TasksController and MystrixHub.TasksController.Tasks then
+        for i, v in next, MystrixHub.TasksController.Tasks do
             pcall(function() task.cancel(v) end)
-            KirtiumHub.TasksController.Tasks[i] = nil
+            MystrixHub.TasksController.Tasks[i] = nil
         end
     end
-    if KirtiumHub.UIController then
-        local UI = KirtiumHub.UIController
+    if MystrixHub.UIController then
+        local UI = MystrixHub.UIController
     end
     pcall(function()
         for _, sg in ipairs(cloneref(game:GetService("CoreGui")):GetChildren()) do
             if sg.Name == "Blossom" then sg:Destroy() end
         end
     end)
-    getgenv().KirtiumHub = nil
+    getgenv().MystrixHub = nil
     task.wait(0.2)
 end
 
 local HUB_NAME = "kirtium.qyz"
 local CURRENT_VERSION = "Leaked Open Source"
 local DISCORD_INVITE = "https://discord.gg/PEaaCvKQ2b"
-local HUB_LOGO = "rbxassetid://140431954244571"
+local HUB_LOGO = "rbxassetid://84840934484747"
 
 local Services = setmetatable({}, {
     __index = function(self, Index)
@@ -40,7 +40,7 @@ local Players = Services.Players
 local RunService = Services.RunService
 local LocalPlayer = Players.LocalPlayer
 
-getgenv().KirtiumHub = {
+getgenv().MystrixHub = {
     Meta = {
         Version = CURRENT_VERSION,
         Discord = DISCORD_INVITE,
@@ -69,21 +69,21 @@ getgenv().KirtiumHub = {
     Functions = {},
 }
 
-function KirtiumHub.ConnectionController.Insert(Connection)
-    table.insert(KirtiumHub.ConnectionController.Connections, Connection)
+function MystrixHub.ConnectionController.Insert(Connection)
+    table.insert(MystrixHub.ConnectionController.Connections, Connection)
 end
 
-function KirtiumHub.TasksController.Insert(Task)
-    table.insert(KirtiumHub.TasksController.Tasks, Task)
+function MystrixHub.TasksController.Insert(Task)
+    table.insert(MystrixHub.TasksController.Tasks, Task)
 end
 
-getgenv().KirtiumSilentAim = getgenv().KirtiumSilentAim or { Enabled = false, Hooked = false }
-getgenv().KirtiumMaxPower = getgenv().KirtiumMaxPower or { Enabled = false, Hooked = false }
-local SilentAimState = getgenv().KirtiumSilentAim
-local MaxPowerState = getgenv().KirtiumMaxPower
+getgenv().MystrixSilentAim = getgenv().MystrixSilentAim or { Enabled = false, Hooked = false }
+getgenv().MystrixMaxPower = getgenv().MystrixMaxPower or { Enabled = false, Hooked = false }
+local SilentAimState = getgenv().MystrixSilentAim
+local MaxPowerState = getgenv().MystrixMaxPower
 
-function KirtiumHub.Functions.InstallMaxPower()
-    local MP = getgenv().KirtiumMaxPower
+function MystrixHub.Functions.InstallMaxPower()
+    local MP = getgenv().MystrixMaxPower
     if MP.Hooked then return true end
     local ok, Rules = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Rules
@@ -91,7 +91,7 @@ function KirtiumHub.Functions.InstallMaxPower()
     if not ok or type(Rules) ~= "table" or type(Rules.charge) ~= "function" then return false end
     local orig
     local function wrapper(value)
-        local state = getgenv().KirtiumMaxPower
+        local state = getgenv().MystrixMaxPower
         if state and state.Enabled then return 1 end
         return orig(value)
     end
@@ -108,18 +108,18 @@ function KirtiumHub.Functions.InstallMaxPower()
     return MP.Hooked == true
 end
 
-getgenv().KirtiumReach = getgenv().KirtiumReach or { Enabled = false, Add = 3 }
-getgenv().KirtiumReach.Enabled = false
-getgenv().KirtiumAntiRagdoll = getgenv().KirtiumAntiRagdoll or {}
-getgenv().KirtiumAntiRagdoll.Enabled = false
-getgenv().KirtiumAntiRagdoll.Tackle = false
-getgenv().KirtiumAntiRagdoll.GetUp = false
-getgenv().KirtiumAntiRagdoll.Running = false
+getgenv().MystrixReach = getgenv().MystrixReach or { Enabled = false, Add = 3 }
+getgenv().MystrixReach.Enabled = false
+getgenv().MystrixAntiRagdoll = getgenv().MystrixAntiRagdoll or {}
+getgenv().MystrixAntiRagdoll.Enabled = false
+getgenv().MystrixAntiRagdoll.Tackle = false
+getgenv().MystrixAntiRagdoll.GetUp = false
+getgenv().MystrixAntiRagdoll.Running = false
 
-function KirtiumHub.Functions.InstallAntiRagdoll()
-    local AR = getgenv().KirtiumAntiRagdoll
+function MystrixHub.Functions.InstallAntiRagdoll()
+    local AR = getgenv().MystrixAntiRagdoll
     if AR.Hooked2 then return true end
-    local mod = KirtiumHub.Functions.MannequinClientModule()
+    local mod = MystrixHub.Functions.MannequinClientModule()
     if not mod then return false end
     local okT, Tuning = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
@@ -133,8 +133,8 @@ function KirtiumHub.Functions.InstallAntiRagdoll()
     return true
 end
 
-function KirtiumHub.Functions.RecoveredRemote()
-    local AR = getgenv().KirtiumAntiRagdoll
+function MystrixHub.Functions.RecoveredRemote()
+    local AR = getgenv().MystrixAntiRagdoll
     if AR.Remote then return AR.Remote end
     local ok, remote = pcall(function()
         local Net = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
@@ -147,9 +147,9 @@ function KirtiumHub.Functions.RecoveredRemote()
     return nil
 end
 
-function KirtiumHub.Functions.InstantRecover(body)
-    local AR = getgenv().KirtiumAntiRagdoll
-    local remote = KirtiumHub.Functions.RecoveredRemote()
+function MystrixHub.Functions.InstantRecover(body)
+    local AR = getgenv().MystrixAntiRagdoll
+    local remote = MystrixHub.Functions.RecoveredRemote()
     if not body.mrWrapped then
         body.mrWrapped = true
         body.mrOrig = body.onRecovered
@@ -187,21 +187,21 @@ function KirtiumHub.Functions.InstantRecover(body)
     end
 end
 
-function KirtiumHub.Functions.StopBallKeep()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallKeep") end)
+function MystrixHub.Functions.StopBallKeep()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallKeep") end)
 end
 
-function KirtiumHub.Functions.StartBallKeep()
-    KirtiumHub.Functions.StopBallKeep()
-    local AR = getgenv().KirtiumAntiRagdoll
+function MystrixHub.Functions.StartBallKeep()
+    MystrixHub.Functions.StopBallKeep()
+    local AR = getgenv().MystrixAntiRagdoll
     local st = { Had = 0 }
-    RunService:BindToRenderStep("KirtiumBallKeep", Enum.RenderPriority.Input.Value + 9, function()
+    RunService:BindToRenderStep("MystrixBallKeep", Enum.RenderPriority.Input.Value + 9, function()
         if not AR.Enabled then return end
         local char = LocalPlayer.Character
         if not char then return end
         local id = char:GetAttribute("DribbleId")
         if type(id) ~= "number" or id == 0 then return end
-        local ball = KirtiumHub.Functions.GetBall()
+        local ball = MystrixHub.Functions.GetBall()
         if not ball then return end
         local now = os.clock()
         if ball:GetAttribute("Possessor") == id then
@@ -209,7 +209,7 @@ function KirtiumHub.Functions.StartBallKeep()
             return
         end
         if now - st.Had > 1.5 then return end
-        if KirtiumHub.TrickActive or now < (KirtiumHub.ShotNext or 0) then return end
+        if MystrixHub.TrickActive or now < (MystrixHub.ShotNext or 0) then return end
         local vel = ball.AssemblyLinearVelocity
         if Vector3.new(vel.X, 0, vel.Z).Magnitude > 40 then
             st.Had = 0
@@ -231,12 +231,12 @@ function KirtiumHub.Functions.StartBallKeep()
     end)
 end
 
-function KirtiumHub.Functions.StopAntiRagdoll()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumAntiRagdoll") end)
-    KirtiumHub.Functions.StopBallKeep()
-    getgenv().KirtiumAntiRagdoll.Running = false
+function MystrixHub.Functions.StopAntiRagdoll()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixAntiRagdoll") end)
+    MystrixHub.Functions.StopBallKeep()
+    getgenv().MystrixAntiRagdoll.Running = false
     pcall(function()
-        local mod = KirtiumHub.MannequinClientRef
+        local mod = MystrixHub.MannequinClientRef
         local char = LocalPlayer.Character
         local animator = mod and char and mod.getAnimator(char)
         local body = animator and animator.body
@@ -257,15 +257,15 @@ function KirtiumHub.Functions.StopAntiRagdoll()
     end)
 end
 
-function KirtiumHub.Functions.StartAntiRagdoll()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartAntiRagdoll()
+    local F = MystrixHub.Functions
     F.StopAntiRagdoll()
     local mod = F.MannequinClientModule()
     if not mod then return false end
-    local AR = getgenv().KirtiumAntiRagdoll
+    local AR = getgenv().MystrixAntiRagdoll
     F.StartBallKeep()
     local cachedChar, cachedAnimator
-    RunService:BindToRenderStep("KirtiumAntiRagdoll", Enum.RenderPriority.Input.Value + 6, function()
+    RunService:BindToRenderStep("MystrixAntiRagdoll", Enum.RenderPriority.Input.Value + 6, function()
         if not AR.Enabled then return end
         local char = LocalPlayer.Character
         if not char then return end
@@ -304,16 +304,16 @@ function KirtiumHub.Functions.StartAntiRagdoll()
         if now - (AR.OwnAt or -math.huge) < 0.6 then return end
         F.InstantRecover(body)
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
-        KirtiumHub.Functions.StopAntiRagdoll()
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopAntiRagdoll()
     end })
     AR.Running = true
     return true
 end
 
-function KirtiumHub.Functions.RefreshAntiRagdoll()
-    local F = KirtiumHub.Functions
-    local AR = getgenv().KirtiumAntiRagdoll
+function MystrixHub.Functions.RefreshAntiRagdoll()
+    local F = MystrixHub.Functions
+    local AR = getgenv().MystrixAntiRagdoll
     AR.Enabled = AR.Tackle == true or AR.GetUp == true
     local T = AR.Tuning
     if T and T.Slide and AR.SitDefault then
@@ -328,20 +328,20 @@ function KirtiumHub.Functions.RefreshAntiRagdoll()
     end
 end
 
-function KirtiumHub.Functions.SetAntiTackle(state)
-    getgenv().KirtiumAntiRagdoll.Tackle = state == true
-    KirtiumHub.Functions.RefreshAntiRagdoll()
+function MystrixHub.Functions.SetAntiTackle(state)
+    getgenv().MystrixAntiRagdoll.Tackle = state == true
+    MystrixHub.Functions.RefreshAntiRagdoll()
 end
 
-function KirtiumHub.Functions.SetInstantGetUp(state)
-    getgenv().KirtiumAntiRagdoll.GetUp = state == true
-    KirtiumHub.Functions.RefreshAntiRagdoll()
+function MystrixHub.Functions.SetInstantGetUp(state)
+    getgenv().MystrixAntiRagdoll.GetUp = state == true
+    MystrixHub.Functions.RefreshAntiRagdoll()
 end
 
-getgenv().KirtiumNoCooldown = getgenv().KirtiumNoCooldown or { Enabled = false }
+getgenv().MystrixNoCooldown = getgenv().MystrixNoCooldown or { Enabled = false }
 
-function KirtiumHub.Functions.StopNoCooldown()
-    local NC = getgenv().KirtiumNoCooldown
+function MystrixHub.Functions.StopNoCooldown()
+    local NC = getgenv().MystrixNoCooldown
     if NC.Conns then
         for _, c in ipairs(NC.Conns) do
             pcall(function() c:Disconnect() end)
@@ -353,9 +353,9 @@ function KirtiumHub.Functions.StopNoCooldown()
     end
 end
 
-function KirtiumHub.Functions.StartNoCooldown()
-    KirtiumHub.Functions.StopNoCooldown()
-    local NC = getgenv().KirtiumNoCooldown
+function MystrixHub.Functions.StartNoCooldown()
+    MystrixHub.Functions.StopNoCooldown()
+    local NC = getgenv().MystrixNoCooldown
     local ok, tuning = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
     end)
@@ -377,15 +377,15 @@ function KirtiumHub.Functions.StartNoCooldown()
         conns[#conns + 1] = LocalPlayer:GetAttributeChangedSignal(name):Connect(clear)
         clear()
     end
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
-        KirtiumHub.Functions.StopNoCooldown()
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopNoCooldown()
     end })
     return true
 end
 
-getgenv().KirtiumAutoPoke = getgenv().KirtiumAutoPoke or { Enabled = false, Range = 6 }
+getgenv().MystrixAutoPoke = getgenv().MystrixAutoPoke or { Enabled = false, Range = 6 }
 
-function KirtiumHub.Functions.GetPokeAction()
+function MystrixHub.Functions.GetPokeAction()
     local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
     local context = scripts and scripts:FindFirstChild("Poke")
     local action = context and context:FindFirstChild("Poke")
@@ -395,22 +395,22 @@ function KirtiumHub.Functions.GetPokeAction()
     return nil
 end
 
-function KirtiumHub.Functions.FirePoke()
-    local action = KirtiumHub.Functions.GetPokeAction()
+function MystrixHub.Functions.FirePoke()
+    local action = MystrixHub.Functions.GetPokeAction()
     if not action then return false end
-    local binding = KirtiumHub.PokeBinding
+    local binding = MystrixHub.PokeBinding
     if not (binding and binding.Parent == action) then
         if binding then
             pcall(function() binding:Destroy() end)
         end
         binding = Instance.new("InputBinding")
-        binding.Name = "KirtiumPoke"
+        binding.Name = "MystrixPoke"
         binding.Type = (Enum :: any).InputBindingType.Scriptable
         binding.Parent = action
-        KirtiumHub.PokeBinding = binding
-        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.PokeBinding = binding
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
             pcall(function() binding:Destroy() end)
-            KirtiumHub.PokeBinding = nil
+            MystrixHub.PokeBinding = nil
         end })
     end
     binding:Fire(true)
@@ -420,7 +420,7 @@ function KirtiumHub.Functions.FirePoke()
     return true
 end
 
-function KirtiumHub.Functions.FindPokeTarget()
+function MystrixHub.Functions.FindPokeTarget()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("Root")
     if not root then return nil end
@@ -446,37 +446,37 @@ function KirtiumHub.Functions.FindPokeTarget()
     return nil
 end
 
-function KirtiumHub.Functions.IsTouch()
+function MystrixHub.Functions.IsTouch()
     local UIS = Services.UserInputService
     return UIS.TouchEnabled and not UIS.KeyboardEnabled
 end
 
-function KirtiumHub.Functions.ReleaseAllBindings()
-    local B = KirtiumHub.Bindings
+function MystrixHub.Functions.ReleaseAllBindings()
+    local B = MystrixHub.Bindings
     if B then
         for _, b in pairs(B) do
             pcall(function() b:Fire(false) end)
         end
     end
-    local AS = KirtiumHub.AutoShoot
+    local AS = MystrixHub.AutoShoot
     if AS and AS.Binding then
         pcall(function() AS.Binding:Fire(false) end)
     end
-    local AP = KirtiumHub.AutoPoke
+    local AP = MystrixHub.AutoPoke
     if AP and AP.Binding then
         pcall(function() AP.Binding:Fire(false) end)
     end
-    KirtiumHub.TrickActive = false
-    KirtiumHub.ShotNext = 0
-    local V = KirtiumHub.TrickView
+    MystrixHub.TrickActive = false
+    MystrixHub.ShotNext = 0
+    local V = MystrixHub.TrickView
     if V then V.Active = false end
-    local F = KirtiumHub.Force
+    local F = MystrixHub.Force
     if F then F.Until = 0 end
 end
 
-function KirtiumHub.Functions.StopAutoPoke()
-    local state = KirtiumHub.AutoPoke
-    KirtiumHub.AutoPoke = nil
+function MystrixHub.Functions.StopAutoPoke()
+    local state = MystrixHub.AutoPoke
+    MystrixHub.AutoPoke = nil
     if state then
         if state.Conn then
             pcall(function() state.Conn:Disconnect() end)
@@ -488,15 +488,15 @@ function KirtiumHub.Functions.StopAutoPoke()
     end
 end
 
-function KirtiumHub.Functions.StartAutoPoke()
-    KirtiumHub.Functions.StopAutoPoke()
+function MystrixHub.Functions.StartAutoPoke()
+    MystrixHub.Functions.StopAutoPoke()
     local state = { Acc = 0 }
-    KirtiumHub.AutoPoke = state
+    MystrixHub.AutoPoke = state
     state.Conn = RunService.Heartbeat:Connect(function(dt)
         state.Acc += dt
         if state.Acc < 0.2 then return end
         state.Acc = 0
-        local cfg = getgenv().KirtiumAutoPoke
+        local cfg = getgenv().MystrixAutoPoke
         if not cfg.Enabled then return end
         local char = LocalPlayer.Character
         if not char then return end
@@ -504,40 +504,40 @@ function KirtiumHub.Functions.StartAutoPoke()
         if bodyState ~= nil and bodyState ~= "Animated" then return end
         local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
         if type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow() then return end
-        local target, distance = KirtiumHub.Functions.FindPokeTarget()
+        local target, distance = MystrixHub.Functions.FindPokeTarget()
         if target and distance <= cfg.Range then
-            KirtiumHub.Functions.FirePoke()
+            MystrixHub.Functions.FirePoke()
         end
     end)
-    KirtiumHub.ConnectionController.Insert(state.Conn)
+    MystrixHub.ConnectionController.Insert(state.Conn)
 end
 
-getgenv().KirtiumSprint = getgenv().KirtiumSprint or { Infinite = false, Auto = false }
+getgenv().MystrixSprint = getgenv().MystrixSprint or { Infinite = false, Auto = false }
 
-function KirtiumHub.Functions.MannequinClientModule()
-    local cached = KirtiumHub.MannequinClientRef
+function MystrixHub.Functions.MannequinClientModule()
+    local cached = MystrixHub.MannequinClientRef
     if cached then return cached end
     local ok, mod = pcall(function()
         return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("MannequinClient"))
     end)
     if ok and type(mod) == "table" then
-        KirtiumHub.MannequinClientRef = mod
+        MystrixHub.MannequinClientRef = mod
         return mod
     end
     return nil
 end
 
-function KirtiumHub.Functions.StopAutoSprint()
-    local state = KirtiumHub.AutoSprint
-    KirtiumHub.AutoSprint = nil
+function MystrixHub.Functions.StopAutoSprint()
+    local state = MystrixHub.AutoSprint
+    MystrixHub.AutoSprint = nil
     if state and state.Restore then
         state.Restore()
     end
 end
 
-function KirtiumHub.Functions.StartAutoSprint()
-    KirtiumHub.Functions.StopAutoSprint()
-    local mod = KirtiumHub.Functions.MannequinClientModule()
+function MystrixHub.Functions.StartAutoSprint()
+    MystrixHub.Functions.StopAutoSprint()
+    local mod = MystrixHub.Functions.MannequinClientModule()
     if not mod then return false end
     local state: {[string]: any} = { Original = mod.keepSprint, Move = nil, Cached = true, At = 0 }
 
@@ -560,7 +560,7 @@ function KirtiumHub.Functions.StartAutoSprint()
     end
 
     local function wrapper(...)
-        if getgenv().KirtiumSprint.Auto and moving() then
+        if getgenv().MystrixSprint.Auto and moving() then
             return true
         end
         local original = state.Original
@@ -592,25 +592,25 @@ function KirtiumHub.Functions.StartAutoSprint()
             mod.keepSprint = wrapper
         end
     end)
-    KirtiumHub.AutoSprint = state
-    KirtiumHub.ConnectionController.Insert(state.Conn)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = restore })
+    MystrixHub.AutoSprint = state
+    MystrixHub.ConnectionController.Insert(state.Conn)
+    MystrixHub.ConnectionController.Insert({ Disconnect = restore })
     return true
 end
 
-function KirtiumHub.Functions.StopInfiniteSprint()
-    KirtiumHub.RunSpeedBound = nil
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumRunSpeed") end)
+function MystrixHub.Functions.StopInfiniteSprint()
+    MystrixHub.RunSpeedBound = nil
+    pcall(function() RunService:UnbindFromRenderStep("MystrixRunSpeed") end)
 end
 
-function KirtiumHub.Functions.StartInfiniteSprint()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartInfiniteSprint()
+    local F = MystrixHub.Functions
     F.StopInfiniteSprint()
-    KirtiumHub.RunSpeedBound = true
+    MystrixHub.RunSpeedBound = true
     local speed = F.SprintBase()
-    local cfg = getgenv().KirtiumSprint
+    local cfg = getgenv().MystrixSprint
     local char, cm
-    RunService:BindToRenderStep("KirtiumRunSpeed", Enum.RenderPriority.Input.Value + 5, function()
+    RunService:BindToRenderStep("MystrixRunSpeed", Enum.RenderPriority.Input.Value + 5, function()
         local boost = cfg.Boost or 1
         if not (cfg.Infinite or boost > 1) then return end
         local current = LocalPlayer.Character
@@ -636,24 +636,24 @@ function KirtiumHub.Functions.StartInfiniteSprint()
             cm.BaseMoveSpeed = base
         end
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
-        KirtiumHub.Functions.StopInfiniteSprint()
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopInfiniteSprint()
     end })
 end
 
-function KirtiumHub.Functions.RefreshRunSpeed()
-    local cfg = getgenv().KirtiumSprint
+function MystrixHub.Functions.RefreshRunSpeed()
+    local cfg = getgenv().MystrixSprint
     if cfg.Infinite or (cfg.Boost or 1) > 1 then
-        if not KirtiumHub.RunSpeedBound then
-            KirtiumHub.Functions.StartInfiniteSprint()
+        if not MystrixHub.RunSpeedBound then
+            MystrixHub.Functions.StartInfiniteSprint()
         end
     else
-        KirtiumHub.Functions.StopInfiniteSprint()
+        MystrixHub.Functions.StopInfiniteSprint()
     end
 end
 
-function KirtiumHub.Functions.SilentAimModules()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.SilentAimModules()
+    local SA = getgenv().MystrixSilentAim
     if SA.BallView and SA.Flight and SA.Families then return true end
     pcall(function()
         local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
@@ -669,8 +669,8 @@ function KirtiumHub.Functions.SilentAimModules()
     return SA.BallView ~= nil and SA.Flight ~= nil and SA.Families ~= nil
 end
 
-function KirtiumHub.Functions.SilentAimGoalCompute()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.SilentAimGoalCompute()
+    local SA = getgenv().MystrixSilentAim
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("Root")
     local goals = {}
@@ -729,17 +729,17 @@ function KirtiumHub.Functions.SilentAimGoalCompute()
     }
 end
 
-function KirtiumHub.Functions.Budget(seconds)
-    local touch = KirtiumHub.IsTouchCached
+function MystrixHub.Functions.Budget(seconds)
+    local touch = MystrixHub.IsTouchCached
     if touch == nil then
-        touch = KirtiumHub.Functions.IsTouch()
-        KirtiumHub.IsTouchCached = touch
+        touch = MystrixHub.Functions.IsTouch()
+        MystrixHub.IsTouchCached = touch
     end
     return touch and seconds * 0.5 or seconds
 end
 
-function KirtiumHub.Functions.MannequinSnapshot()
-    local snap = KirtiumHub.MannequinSnap
+function MystrixHub.Functions.MannequinSnapshot()
+    local snap = MystrixHub.MannequinSnap
     local now = os.clock()
     if snap and now - snap.At < 0.15 then
         return snap.List
@@ -758,15 +758,15 @@ function KirtiumHub.Functions.MannequinSnapshot()
             }
         end
     end
-    KirtiumHub.MannequinSnap = { At = now, List = list }
+    MystrixHub.MannequinSnap = { At = now, List = list }
     return list
 end
 
-function KirtiumHub.Functions.SilentAimGoal()
-    local cache = KirtiumHub.GoalCache
+function MystrixHub.Functions.SilentAimGoal()
+    local cache = MystrixHub.GoalCache
     if not cache then
         cache = { At = 0, Valid = false }
-        KirtiumHub.GoalCache = cache
+        MystrixHub.GoalCache = cache
     end
     local char = LocalPlayer.Character
     local team = char and char:GetAttribute("Team")
@@ -774,7 +774,7 @@ function KirtiumHub.Functions.SilentAimGoal()
     if cache.Valid and cache.Char == char and cache.Team == team and now - cache.At < 0.5 then
         return cache.Value
     end
-    cache.Value = KirtiumHub.Functions.SilentAimGoalCompute()
+    cache.Value = MystrixHub.Functions.SilentAimGoalCompute()
     cache.Char = char
     cache.Team = team
     cache.At = now
@@ -782,18 +782,18 @@ function KirtiumHub.Functions.SilentAimGoal()
     return cache.Value
 end
 
-function KirtiumHub.Functions.SetQuickInteract(state)
-    local backup = KirtiumHub.PromptBackup
+function MystrixHub.Functions.SetQuickInteract(state)
+    local backup = MystrixHub.PromptBackup
     if not backup then
         backup = setmetatable({}, { __mode = "k" })
-        KirtiumHub.PromptBackup = backup
+        MystrixHub.PromptBackup = backup
     end
-    if KirtiumHub.QuickInteractConn then
-        KirtiumHub.QuickInteractConn:Disconnect()
-        KirtiumHub.QuickInteractConn = nil
+    if MystrixHub.QuickInteractConn then
+        MystrixHub.QuickInteractConn:Disconnect()
+        MystrixHub.QuickInteractConn = nil
     end
     if state then
-        KirtiumHub.QuickInteractConn = Services.ProximityPromptService.PromptShown:Connect(function(prompt)
+        MystrixHub.QuickInteractConn = Services.ProximityPromptService.PromptShown:Connect(function(prompt)
             if not backup[prompt] then
                 backup[prompt] = { hold = prompt.HoldDuration, line = prompt.RequiresLineOfSight }
             end
@@ -811,18 +811,18 @@ function KirtiumHub.Functions.SetQuickInteract(state)
     end
 end
 
-getgenv().KirtiumAutoShoot  = getgenv().KirtiumAutoShoot  or { Enabled = false, Range = 60 }
-getgenv().KirtiumAutoPickup = getgenv().KirtiumAutoPickup or { Enabled = false, Range = 25 }
+getgenv().MystrixAutoShoot  = getgenv().MystrixAutoShoot  or { Enabled = false, Range = 60 }
+getgenv().MystrixAutoPickup = getgenv().MystrixAutoPickup or { Enabled = false, Range = 25 }
 
-function KirtiumHub.Functions.GetBall()
-    local ball = KirtiumHub.BallRef
+function MystrixHub.Functions.GetBall()
+    local ball = MystrixHub.BallRef
     if ball and ball.Parent then return ball end
     ball = Services.CollectionService:GetTagged("SoccerBall")[1]
-    KirtiumHub.BallRef = ball
+    MystrixHub.BallRef = ball
     return ball
 end
 
-function KirtiumHub.Functions.GetKickAction(name)
+function MystrixHub.Functions.GetKickAction(name)
     local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
     local context = scripts and scripts:FindFirstChild("Kick")
     local action = context and context:FindFirstChild(name or "KickStrike")
@@ -832,30 +832,30 @@ function KirtiumHub.Functions.GetKickAction(name)
     return nil
 end
 
-function KirtiumHub.Functions.StopAutoShoot()
-    if not getgenv().KirtiumAutoTricks.Enabled then
-        KirtiumHub.Functions.AutoEngineStop()
+function MystrixHub.Functions.StopAutoShoot()
+    if not getgenv().MystrixAutoTricks.Enabled then
+        MystrixHub.Functions.AutoEngineStop()
     end
 end
 
-function KirtiumHub.Functions.StartAutoShoot()
-    KirtiumHub.Functions.AutoEngineStart()
+function MystrixHub.Functions.StartAutoShoot()
+    MystrixHub.Functions.AutoEngineStart()
 end
 
-function KirtiumHub.Functions.StopAutoPickup()
-    local st = KirtiumHub.AutoPickup
-    KirtiumHub.AutoPickup = nil
+function MystrixHub.Functions.StopAutoPickup()
+    local st = MystrixHub.AutoPickup
+    MystrixHub.AutoPickup = nil
     if st and st.Gate then
         pcall(function() st.Gate:Disconnect() end)
     end
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumAutoPickup") end)
+    pcall(function() RunService:UnbindFromRenderStep("MystrixAutoPickup") end)
 end
 
-function KirtiumHub.Functions.StartAutoPickup()
-    KirtiumHub.Functions.StopAutoPickup()
-    local cfg = getgenv().KirtiumAutoPickup
+function MystrixHub.Functions.StartAutoPickup()
+    MystrixHub.Functions.StopAutoPickup()
+    local cfg = getgenv().MystrixAutoPickup
     local st = { Acc = 0, Active = false }
-    KirtiumHub.AutoPickup = st
+    MystrixHub.AutoPickup = st
     st.Gate = RunService.Heartbeat:Connect(function(dt)
         st.Acc += dt
         if st.Acc < 0.08 then return end
@@ -871,8 +871,8 @@ function KirtiumHub.Functions.StartAutoPickup()
         local now = workspace:GetServerTimeNow()
         local hold = LocalPlayer:GetAttribute("KickoffHold")
         if type(hold) == "number" and hold > now then return end
-        if KirtiumHub.TrickActive or os.clock() < (KirtiumHub.ShotNext or 0) then return end
-        local ball = KirtiumHub.Functions.GetBall()
+        if MystrixHub.TrickActive or os.clock() < (MystrixHub.ShotNext or 0) then return end
+        local ball = MystrixHub.Functions.GetBall()
         if not ball then return end
         local possessor = ball:GetAttribute("Possessor")
         if type(possessor) == "number" and possessor ~= 0 then return end
@@ -887,7 +887,7 @@ function KirtiumHub.Functions.StartAutoPickup()
         st.Root, st.Cm, st.Ball = root, cm, ball
         st.Active = true
     end)
-    RunService:BindToRenderStep("KirtiumAutoPickup", Enum.RenderPriority.Input.Value + 8, function()
+    RunService:BindToRenderStep("MystrixAutoPickup", Enum.RenderPriority.Input.Value + 8, function()
         if not st.Active then return end
         local root, cm, ball = st.Root, st.Cm, st.Ball
         if not (root.Parent and cm.Parent and ball.Parent) then
@@ -915,20 +915,20 @@ function KirtiumHub.Functions.StartAutoPickup()
         cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 20)
         cm.FacingDirection = direction
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopAutoPickup() end })
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopAutoPickup() end })
 end
 
-getgenv().KirtiumGuard = getgenv().KirtiumGuard or { Enabled = false, Distance = 8, Predict = 0.35 }
-getgenv().KirtiumGuard.IgnoreTeammates = true
+getgenv().MystrixGuard = getgenv().MystrixGuard or { Enabled = false, Distance = 8, Predict = 0.35 }
+getgenv().MystrixGuard.IgnoreTeammates = true
 
-function KirtiumHub.Functions.GuardOwnGoal()
-    local G = KirtiumHub.GuardGoal
+function MystrixHub.Functions.GuardOwnGoal()
+    local G = MystrixHub.GuardGoal
     local now = os.clock()
     if G and now - G.At < 1 then
         return G.Value
     end
     local stale = G and now - G.At < 10 and G.Value or nil
-    local attacked = KirtiumHub.Functions.SilentAimGoal()
+    local attacked = MystrixHub.Functions.SilentAimGoal()
     if not attacked then return stale end
     local far, farPart = -1, nil
     for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
@@ -942,14 +942,14 @@ function KirtiumHub.Functions.GuardOwnGoal()
     end
     if not farPart then return stale end
     local value = Vector3.new(farPart.Position.X, 0, farPart.Position.Z)
-    KirtiumHub.GuardGoal = { At = now, Value = value }
+    MystrixHub.GuardGoal = { At = now, Value = value }
     return value
 end
 
-function KirtiumHub.Functions.StopGuard()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumGuard") end)
-    local st = KirtiumHub.GuardState
-    KirtiumHub.GuardState = nil
+function MystrixHub.Functions.StopGuard()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixGuard") end)
+    local st = MystrixHub.GuardState
+    MystrixHub.GuardState = nil
     if st then
         if st.Gate then
             pcall(function() st.Gate:Disconnect() end)
@@ -960,8 +960,8 @@ function KirtiumHub.Functions.StopGuard()
     end
 end
 
-function KirtiumHub.Functions.ClientModule(name)
-    local H = KirtiumHub
+function MystrixHub.Functions.ClientModule(name)
+    local H = MystrixHub
     local cache = H.ClientModules
     if not cache then
         cache = {}
@@ -979,21 +979,21 @@ function KirtiumHub.Functions.ClientModule(name)
     return cache[name] or nil
 end
 
-function KirtiumHub.Functions.StopBallReach()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallReach") end)
-    local st = KirtiumHub.BallReachState
-    KirtiumHub.BallReachState = nil
+function MystrixHub.Functions.StopBallReach()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallReach") end)
+    local st = MystrixHub.BallReachState
+    MystrixHub.BallReachState = nil
     if st and st.Gate then
         pcall(function() st.Gate:Disconnect() end)
     end
 end
 
-function KirtiumHub.Functions.StartBallReach()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartBallReach()
+    local F = MystrixHub.Functions
     F.StopBallReach()
-    local cfg = getgenv().KirtiumReach
+    local cfg = getgenv().MystrixReach
     local st = { Acc = 0, Active = false }
-    KirtiumHub.BallReachState = st
+    MystrixHub.BallReachState = st
     st.Gate = RunService.Heartbeat:Connect(function(dt)
         st.Acc += dt
         if st.Acc < 0.08 then return end
@@ -1005,7 +1005,7 @@ function KirtiumHub.Functions.StartBallReach()
         if F.MatchPaused(char) then return end
         local bodyState = char:GetAttribute("BodyState")
         if bodyState ~= nil and bodyState ~= "Animated" then return end
-        if KirtiumHub.TrickActive or os.clock() < (KirtiumHub.ShotNext or 0) then return end
+        if MystrixHub.TrickActive or os.clock() < (MystrixHub.ShotNext or 0) then return end
         local ball = F.GetBall()
         if not ball then return end
         local possessor = ball:GetAttribute("Possessor")
@@ -1032,7 +1032,7 @@ function KirtiumHub.Functions.StartBallReach()
         st.Root, st.Cm, st.Ball = root, cm, ball
         st.Active = true
     end)
-    RunService:BindToRenderStep("KirtiumBallReach", Enum.RenderPriority.Input.Value + 11, function()
+    RunService:BindToRenderStep("MystrixBallReach", Enum.RenderPriority.Input.Value + 11, function()
         if not st.Active then return end
         local root, cm, ball = st.Root, st.Cm, st.Ball
         if not (root.Parent and cm.Parent and ball.Parent) then
@@ -1060,32 +1060,32 @@ function KirtiumHub.Functions.StartBallReach()
         cm.MovingDirection = direction
         cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 24)
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopBallReach() end })
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopBallReach() end })
     return true
 end
 
-function KirtiumHub.Functions.ApplyBallReach()
-    local F = KirtiumHub.Functions
-    if getgenv().KirtiumReach.Enabled then
+function MystrixHub.Functions.ApplyBallReach()
+    local F = MystrixHub.Functions
+    if getgenv().MystrixReach.Enabled then
         return F.StartBallReach()
     end
     F.StopBallReach()
     return true
 end
 
-getgenv().KirtiumAutoDribble = getgenv().KirtiumAutoDribble or { Enabled = false, Range = 12 }
+getgenv().MystrixAutoDribble = getgenv().MystrixAutoDribble or { Enabled = false, Range = 12 }
 
-function KirtiumHub.Functions.StopAutoDribble()
-    local st = KirtiumHub.AutoDribble
-    KirtiumHub.AutoDribble = nil
+function MystrixHub.Functions.StopAutoDribble()
+    local st = MystrixHub.AutoDribble
+    MystrixHub.AutoDribble = nil
     if st and st.Conn then
         pcall(function() st.Conn:Disconnect() end)
     end
 end
 
-function KirtiumHub.Functions.AutoDribbleTick(st, now)
-    local F = KirtiumHub.Functions
-    local cfg = getgenv().KirtiumAutoDribble
+function MystrixHub.Functions.AutoDribbleTick(st, now)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixAutoDribble
     local char = LocalPlayer.Character
     if not char then return end
     local ball = F.GetBall()
@@ -1095,14 +1095,14 @@ function KirtiumHub.Functions.AutoDribbleTick(st, now)
     if F.MatchPaused(char) then return end
     local bodyState = char:GetAttribute("BodyState")
     if bodyState ~= nil and bodyState ~= "Animated" then return end
-    if KirtiumHub.TrickActive or now < (KirtiumHub.ShotNext or 0) then return end
+    if MystrixHub.TrickActive or now < (MystrixHub.ShotNext or 0) then return end
     local root = char:FindFirstChild("Root")
     if not root then return end
     local play = F.SkillModule()
     if not play then return end
     if type(play.busy) == "function" and play.busy() then return end
     local rp = root.Position
-    local shoot = getgenv().KirtiumAutoShoot
+    local shoot = getgenv().MystrixAutoShoot
     if shoot.Enabled then
         local goal = F.SilentAimGoal()
         if goal then
@@ -1229,28 +1229,28 @@ function KirtiumHub.Functions.AutoDribbleTick(st, now)
     end
 end
 
-function KirtiumHub.Functions.StartAutoDribble()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartAutoDribble()
+    local F = MystrixHub.Functions
     F.StopAutoDribble()
     local st = { Acc = 0, Next = 0, Flip = math.random() < 0.5 }
-    KirtiumHub.AutoDribble = st
+    MystrixHub.AutoDribble = st
     st.Conn = RunService.Heartbeat:Connect(function(dt)
         st.Acc += dt
         if st.Acc < 0.05 then return end
         st.Acc = 0
-        if not getgenv().KirtiumAutoDribble.Enabled then return end
+        if not getgenv().MystrixAutoDribble.Enabled then return end
         local now = os.clock()
         if now < st.Next then return end
         if not pcall(F.AutoDribbleTick, st, now) then
             st.Next = now + 1
         end
     end)
-    KirtiumHub.ConnectionController.Insert(st.Conn)
+    MystrixHub.ConnectionController.Insert(st.Conn)
     return true
 end
 
-function KirtiumHub.Functions.BallPastLine(ball)
-    local H = KirtiumHub
+function MystrixHub.Functions.BallPastLine(ball)
+    local H = MystrixHub
     local now = os.clock()
     local cache = H.GoalLineCache
     if not cache or now - cache.At > (cache.Lines and 3 or 1) then
@@ -1275,8 +1275,8 @@ function KirtiumHub.Functions.BallPastLine(ball)
     return x < lines[1] or x > lines[2]
 end
 
-function KirtiumHub.Functions.MatchPausedRaw(char)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.MatchPausedRaw(char)
+    local F = MystrixHub.Functions
     local team = char:GetAttribute("Team")
     if team ~= "Blue" and team ~= "Red" then return true end
     if LocalPlayer:GetAttribute("InTutorial") == true then return true end
@@ -1306,8 +1306,8 @@ function KirtiumHub.Functions.MatchPausedRaw(char)
     return false
 end
 
-function KirtiumHub.Functions.MatchPaused(char)
-    local H = KirtiumHub
+function MystrixHub.Functions.MatchPaused(char)
+    local H = MystrixHub
     local now = os.clock()
     if H.PausedChar == char and now - (H.PausedAt or 0) < 0.08 then
         return H.PausedValue
@@ -1317,25 +1317,25 @@ function KirtiumHub.Functions.MatchPaused(char)
     return paused
 end
 
-function KirtiumHub.Functions.SprintBase()
-    local cached = KirtiumHub.SprintBase
+function MystrixHub.Functions.SprintBase()
+    local cached = MystrixHub.SprintBase
     if cached then return cached end
     local speed = 36
     pcall(function()
         local tuning = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
         speed = tuning.Speed.Sprint
     end)
-    KirtiumHub.SprintBase = speed
+    MystrixHub.SprintBase = speed
     return speed
 end
 
-function KirtiumHub.Functions.StartGuard()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartGuard()
+    local F = MystrixHub.Functions
     F.StopGuard()
-    local cfg = getgenv().KirtiumGuard
+    local cfg = getgenv().MystrixGuard
     cfg.Engage = cfg.Engage or 22
     local st: {[string]: any} = { Acc = 0, Active = false, Engaged = false, Controlling = false, ResumeAt = 0 }
-    KirtiumHub.GuardState = st
+    MystrixHub.GuardState = st
 
     local function finite(v)
         return v.X == v.X and v.Y == v.Y and v.Z == v.Z
@@ -1467,7 +1467,7 @@ function KirtiumHub.Functions.StartGuard()
         end
         st.Char = char
         st.MyId = id
-        st.Speed = F.SprintBase() * math.max(getgenv().KirtiumSprint.Boost or 1, 1)
+        st.Speed = F.SprintBase() * math.max(getgenv().MystrixSprint.Boost or 1, 1)
         st.Root, st.Cm, st.Ball, st.Carrier, st.Goal = root, cm, ball, carrier, goal
         st.Active = true
         return true
@@ -1568,8 +1568,8 @@ function KirtiumHub.Functions.StartGuard()
                 end
             end
         else
-            local px = pos.X + vel.X * getgenv().KirtiumGuard.Predict
-            local pz = pos.Z + vel.Z * getgenv().KirtiumGuard.Predict
+            local px = pos.X + vel.X * getgenv().MystrixGuard.Predict
+            local pz = pos.Z + vel.Z * getgenv().MystrixGuard.Predict
             local gx, gz = goal.X - px, goal.Z - pz
             local gd = math.sqrt(gx * gx + gz * gz)
             if gd < 1 then
@@ -1613,7 +1613,7 @@ function KirtiumHub.Functions.StartGuard()
         end
     end
 
-    RunService:BindToRenderStep("KirtiumGuard", Enum.RenderPriority.Input.Value + 10, function(dt)
+    RunService:BindToRenderStep("MystrixGuard", Enum.RenderPriority.Input.Value + 10, function(dt)
         if not st.Active then
             if st.Controlling then release() end
             return
@@ -1622,22 +1622,22 @@ function KirtiumHub.Functions.StartGuard()
             release()
         end
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopGuard() end })
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopGuard() end })
 end
 
-getgenv().KirtiumKeeper = getgenv().KirtiumKeeper or {}
+getgenv().MystrixKeeper = getgenv().MystrixKeeper or {}
 for k, v in pairs({ Enabled = false, Depth = 4.5, DiveRange = 14, Poke = true, Dive = true, Gather = true, Rush = true, RushRange = 34, DiveLead = 0.06, StandReach = 2 }) do
-    if getgenv().KirtiumKeeper[k] == nil then
-        getgenv().KirtiumKeeper[k] = v
+    if getgenv().MystrixKeeper[k] == nil then
+        getgenv().MystrixKeeper[k] = v
     end
 end
-getgenv().KirtiumKeeper.Enabled = false
+getgenv().MystrixKeeper.Enabled = false
 
-function KirtiumHub.Functions.KeeperGoal()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.KeeperGoal()
+    local F = MystrixHub.Functions
     local char = LocalPlayer.Character
     local now = os.clock()
-    local cache = KirtiumHub.KeeperGoalCache
+    local cache = MystrixHub.KeeperGoalCache
     if cache and cache.Char == char and now - cache.At < 0.5 then
         return cache.Value
     end
@@ -1673,12 +1673,12 @@ function KirtiumHub.Functions.KeeperGoal()
         side = side,
         inward = Vector3.new(-side, 0, 0),
     }
-    KirtiumHub.KeeperGoalCache = { Char = char, At = now, Value = value }
+    MystrixHub.KeeperGoalCache = { Char = char, At = now, Value = value }
     return value
 end
 
-function KirtiumHub.Functions.KeeperActions()
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperActions()
+    local H = MystrixHub
     local cached = H.KeeperActionCache
     if cached and os.clock() - cached.At < 5 and (not cached.Dive or cached.Dive.Parent) and (not cached.Slide or cached.Slide.Parent) then
         return cached
@@ -1704,7 +1704,7 @@ function KirtiumHub.Functions.KeeperActions()
     return found
 end
 
-function KirtiumHub.Functions.KeeperReady(action)
+function MystrixHub.Functions.KeeperReady(action)
     if not (action and action.Parent) then return false end
     local ok, enabled = pcall(function()
         local parent = action.Parent
@@ -1713,8 +1713,8 @@ function KirtiumHub.Functions.KeeperReady(action)
     return ok and enabled == true
 end
 
-function KirtiumHub.Functions.KeeperFire(action)
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperFire(action)
+    local H = MystrixHub
     local bindings = H.KeeperBindings
     if not bindings then
         bindings = {}
@@ -1732,7 +1732,7 @@ function KirtiumHub.Functions.KeeperFire(action)
             pcall(function() binding:Destroy() end)
         end
         binding = Instance.new("InputBinding")
-        binding.Name = "KirtiumKeeper"
+        binding.Name = "MystrixKeeper"
         binding.Type = (Enum :: any).InputBindingType.Scriptable
         binding.Parent = action
         bindings[action] = binding
@@ -1744,7 +1744,7 @@ function KirtiumHub.Functions.KeeperFire(action)
     return true
 end
 
-function KirtiumHub.Functions.KeeperCarrier(possessor)
+function MystrixHub.Functions.KeeperCarrier(possessor)
     for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
         if model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
             local root = model:FindFirstChild("Root")
@@ -1756,8 +1756,8 @@ function KirtiumHub.Functions.KeeperCarrier(possessor)
     return nil, nil
 end
 
-function KirtiumHub.Functions.KeeperDiveEnv()
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperDiveEnv()
+    local H = MystrixHub
     if H.KeeperDiveData then return H.KeeperDiveData end
     if H.KeeperDiveFail and os.clock() - H.KeeperDiveFail < 3 then return nil end
     local ok, data = pcall(function()
@@ -1777,10 +1777,10 @@ function KirtiumHub.Functions.KeeperDiveEnv()
     return nil
 end
 
-task.spawn(KirtiumHub.Functions.KeeperDiveEnv)
+task.spawn(MystrixHub.Functions.KeeperDiveEnv)
 
-function KirtiumHub.Functions.KeeperDive(char, kind, lateral)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.KeeperDive(char, kind, lateral)
+    local F = MystrixHub.Functions
     local mod = F.MannequinClientModule()
     if not mod then return false end
     if char:GetAttribute("BodyState") ~= "Animated" then return false end
@@ -1800,7 +1800,7 @@ function KirtiumHub.Functions.KeeperDive(char, kind, lateral)
     return false
 end
 
-function KirtiumHub.Functions.KeeperIntercept(plan, x)
+function MystrixHub.Functions.KeeperIntercept(plan, x)
     local path = plan.path
     if not path then return nil end
     local side = plan.side
@@ -1816,9 +1816,9 @@ function KirtiumHub.Functions.KeeperIntercept(plan, x)
     return nil
 end
 
-function KirtiumHub.Functions.KeeperPlan(char, root, ball, goal)
-    local F = KirtiumHub.Functions
-    local cfg = getgenv().KirtiumKeeper
+function MystrixHub.Functions.KeeperPlan(char, root, ball, goal)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixKeeper
     local id = char:GetAttribute("DribbleId")
     local myTeam = char:GetAttribute("Team")
     local possessor = ball:GetAttribute("Possessor")
@@ -1874,7 +1874,7 @@ function KirtiumHub.Functions.KeeperPlan(char, root, ball, goal)
     end
 
     if not F.SilentAimModules() then return nil end
-    local SA = getgenv().KirtiumSilentAim
+    local SA = getgenv().MystrixSilentAim
     local BV = SA.BallView
     local rel = ball:GetAttribute("ReleasedBy")
     local relAt = ball:GetAttribute("ReleasedAt")
@@ -1966,24 +1966,24 @@ function KirtiumHub.Functions.KeeperPlan(char, root, ball, goal)
     return { kind = "hold", target = spotFor(pos), look = pos }
 end
 
-function KirtiumHub.Functions.StopKeeper()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumKeeper") end)
-    local st = KirtiumHub.KeeperState
-    KirtiumHub.KeeperState = nil
+function MystrixHub.Functions.StopKeeper()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixKeeper") end)
+    local st = MystrixHub.KeeperState
+    MystrixHub.KeeperState = nil
     if st and st.Controlling and st.Cm and st.Cm.Parent then
         pcall(function() st.Cm.MovingDirection = Vector3.zero end)
     end
 end
 
-function KirtiumHub.Functions.StartKeeper()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartKeeper()
+    local F = MystrixHub.Functions
     F.StopKeeper()
     if not F.SilentAimModules() then return false end
     F.KeeperDiveEnv()
     F.KeeperDivesModule()
-    local cfg = getgenv().KirtiumKeeper
+    local cfg = getgenv().MystrixKeeper
     local st: {[string]: any} = { Acc = 1, Plan = nil, Controlling = false, DiveNext = 0, PokeNext = 0, SlideNext = 0 }
-    KirtiumHub.KeeperState = st
+    MystrixHub.KeeperState = st
 
     local function downed(char)
         local bodyState = char:GetAttribute("BodyState")
@@ -2032,7 +2032,7 @@ function KirtiumHub.Functions.StartKeeper()
         local target = plan.target
         local dx, dz = target.X - rp.X, target.Z - rp.Z
         local dist = math.sqrt(dx * dx + dz * dz)
-        local speed = F.SprintBase() * math.max(getgenv().KirtiumSprint.Boost or 1, 1)
+        local speed = F.SprintBase() * math.max(getgenv().MystrixSprint.Boost or 1, 1)
         local active = cm.ActiveController
         if active == nil or active.Name == "BodyIdleController" then
             local gc = cm:FindFirstChild("GroundController")
@@ -2109,7 +2109,7 @@ function KirtiumHub.Functions.StartKeeper()
         end
     end
 
-    RunService:BindToRenderStep("KirtiumKeeper", Enum.RenderPriority.Input.Value + 12, function(dt)
+    RunService:BindToRenderStep("MystrixKeeper", Enum.RenderPriority.Input.Value + 12, function(dt)
         if not cfg.Enabled then
             release()
             return
@@ -2129,18 +2129,18 @@ function KirtiumHub.Functions.StartKeeper()
             end
         end
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function() KirtiumHub.Functions.StopKeeper() end })
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopKeeper() end })
     return true
 end
 
-getgenv().KirtiumAutoTricks = getgenv().KirtiumAutoTricks or { Enabled = false, Range = 70 }
-getgenv().KirtiumAutoTricks.Auto = true
-getgenv().KirtiumAutoTricks.AirFamilies = {}
-getgenv().KirtiumAutoTricks.Skills = {}
-getgenv().KirtiumAutoTricks.Lob = false
-getgenv().KirtiumTrickFilter = getgenv().KirtiumTrickFilter or { Hooked = false }
+getgenv().MystrixAutoTricks = getgenv().MystrixAutoTricks or { Enabled = false, Range = 70 }
+getgenv().MystrixAutoTricks.Auto = true
+getgenv().MystrixAutoTricks.AirFamilies = {}
+getgenv().MystrixAutoTricks.Skills = {}
+getgenv().MystrixAutoTricks.Lob = false
+getgenv().MystrixTrickFilter = getgenv().MystrixTrickFilter or { Hooked = false }
 
-KirtiumHub.TrickOptions = {
+MystrixHub.TrickOptions = {
     "Auto",
     "Bicycle Kick",
     "Volley",
@@ -2160,7 +2160,7 @@ KirtiumHub.TrickOptions = {
     "Croqueta",
 }
 
-KirtiumHub.TrickCatalog = {
+MystrixHub.TrickCatalog = {
     ["Bicycle Kick"] = { air = "Bicycle" },
     ["Volley"] = { air = "Volley" },
     ["Side Volley"] = { air = "SideVolley" },
@@ -2179,16 +2179,16 @@ KirtiumHub.TrickCatalog = {
     ["Croqueta"] = { skill = { kind = "Hold", dir = "Away" } },
 }
 
-function KirtiumHub.Functions.ForceFor(seconds)
-    local F = KirtiumHub.Force
+function MystrixHub.Functions.ForceFor(seconds)
+    local F = MystrixHub.Force
     if not F then
         F = { Active = false, Until = 0 }
-        KirtiumHub.Force = F
+        MystrixHub.Force = F
     end
     F.Until = math.max(F.Until, os.clock() + seconds)
     if F.Active then return end
-    local SA = getgenv().KirtiumSilentAim
-    local MP = getgenv().KirtiumMaxPower
+    local SA = getgenv().MystrixSilentAim
+    local MP = getgenv().MystrixMaxPower
     F.Active = true
     SA.Enabled = true
     MP.Enabled = true
@@ -2202,7 +2202,7 @@ function KirtiumHub.Functions.ForceFor(seconds)
     end)
 end
 
-KirtiumHub.ShotSpots = {
+MystrixHub.ShotSpots = {
     ["Top Right Corner"] = { 0.97, 0.95 },
     ["Bottom Right Corner"] = { 0.97, 0.04 },
     ["Top Left Corner"] = { -0.97, 0.95 },
@@ -2218,15 +2218,15 @@ KirtiumHub.ShotSpots = {
     ["Middle"] = { 0, 0.4 },
 }
 
-function KirtiumHub.Functions.SegGap(p, a, b)
+function MystrixHub.Functions.SegGap(p, a, b)
     local d = b - a
     local dd = d:Dot(d)
     local t = dd > 1e-9 and math.clamp((p - a):Dot(d) / dd, 0, 1) or 0
     return (p - (a + d * t)).Magnitude
 end
 
-function KirtiumHub.Functions.KeeperKit()
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperKit()
+    local H = MystrixHub
     if H.KeeperKitData then return H.KeeperKitData end
     if H.KeeperKitFail and os.clock() - H.KeeperKitFail < 5 then return nil end
     local ok, kit = pcall(function()
@@ -2289,10 +2289,10 @@ function KirtiumHub.Functions.KeeperKit()
     return nil
 end
 
-task.spawn(KirtiumHub.Functions.KeeperKit)
+task.spawn(MystrixHub.Functions.KeeperKit)
 
-function KirtiumHub.Functions.KeeperSave(lat, y, T, dist)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.KeeperSave(lat, y, T, dist)
+    local F = MystrixHub.Functions
     local kit = F.KeeperKit()
     T = math.max(T, 0)
     lat = math.abs(lat)
@@ -2346,7 +2346,7 @@ function KirtiumHub.Functions.KeeperSave(lat, y, T, dist)
     return best, save
 end
 
-function KirtiumHub.Functions.KeeperAt(goal, from, keeper, kit)
+function MystrixHub.Functions.KeeperAt(goal, from, keeper, kit)
     local cfg = kit and kit.cfg
     if not cfg then return keeper end
     local oX = -goal.out
@@ -2382,8 +2382,8 @@ function KirtiumHub.Functions.KeeperAt(goal, from, keeper, kit)
     return Vector3.new(keeper.X + mx, keeper.Y, keeper.Z + mz)
 end
 
-function KirtiumHub.Functions.ShotTargets(goal, lob, radius)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.ShotTargets(goal, lob, radius)
+    local F = MystrixHub.Functions
     local targets = SilentAimState.Targets
     if targets and #targets > 0 then
         local list = {}
@@ -2396,8 +2396,8 @@ function KirtiumHub.Functions.ShotTargets(goal, lob, radius)
     return F.ShotAutoList(goal, lob, radius), false
 end
 
-function KirtiumHub.Functions.PitchSolve(env, gy, from, point, speed, minA, maxA, lob, dt, bx, bz, bn, deadline, center)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.PitchSolve(env, gy, from, point, speed, minA, maxA, lob, dt, bx, bz, bn, deadline, center)
+    local F = MystrixHub.Functions
     local dx, dz = point.X - from.X, point.Z - from.Z
     local d = math.sqrt(dx * dx + dz * dz)
     if d < 1 then return nil end
@@ -2431,16 +2431,16 @@ function KirtiumHub.Functions.PitchSolve(env, gy, from, point, speed, minA, maxA
     return best.vel, spin, best.miss, best.ft, best.blocked, best.c, best.th
 end
 
-function KirtiumHub.Functions.ShotBounds(env)
+function MystrixHub.Functions.ShotBounds(env)
     local goal = env.Goal
     local clear = env.Radius + 0.1
     return goal.half - clear - 1.0, goal.ground + 0.3, goal.top - clear - 0.9
 end
 
-function KirtiumHub.Functions.SilentAimKeeper(goal)
+function MystrixHub.Functions.SilentAimKeeper(goal)
     local keeper
     local best = math.huge
-    for _, entry in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+    for _, entry in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
         if entry.keeper and entry.model ~= goal.char and type(entry.team) == "string" and entry.team ~= goal.team then
             local d = math.abs(entry.pos.X - goal.x)
             if d < best then
@@ -2452,18 +2452,18 @@ function KirtiumHub.Functions.SilentAimKeeper(goal)
     return keeper
 end
 
-function KirtiumHub.Functions.TrickBinding(key)
-    local bindings = KirtiumHub.Bindings
+function MystrixHub.Functions.TrickBinding(key)
+    local bindings = MystrixHub.Bindings
     if not bindings then
         bindings = {}
-        KirtiumHub.Bindings = bindings
-        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Bindings = bindings
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
             for _, b in pairs(bindings) do
                 pcall(function() b:Destroy() end)
             end
         end })
     end
-    local action = KirtiumHub.Functions.GetKickAction(key)
+    local action = MystrixHub.Functions.GetKickAction(key)
     if not action then return nil end
     local binding = bindings[key]
     if not (binding and binding.Parent == action) then
@@ -2471,7 +2471,7 @@ function KirtiumHub.Functions.TrickBinding(key)
             pcall(function() binding:Destroy() end)
         end
         binding = Instance.new("InputBinding")
-        binding.Name = "KirtiumTrick" .. key
+        binding.Name = "MystrixTrick" .. key
         binding.Type = (Enum :: any).InputBindingType.Scriptable
         binding.Parent = action
         bindings[key] = binding
@@ -2479,8 +2479,8 @@ function KirtiumHub.Functions.TrickBinding(key)
     return binding
 end
 
-function KirtiumHub.Functions.TrickViewApply()
-    local V = KirtiumHub.TrickView
+function MystrixHub.Functions.TrickViewApply()
+    local V = MystrixHub.TrickView
     local cam = workspace.CurrentCamera
     if not (V and V.Active and cam) then return end
     local cf = cam.CFrame
@@ -2496,11 +2496,11 @@ function KirtiumHub.Functions.TrickViewApply()
     cam.CFrame = CFrame.lookAt(pos, target)
 end
 
-function KirtiumHub.Functions.InstallTrickView()
-    if KirtiumHub.TrickView then return end
+function MystrixHub.Functions.InstallTrickView()
+    if MystrixHub.TrickView then return end
     local V: {[string]: any} = { Active = false, Mode = "goal", Until = 0 }
-    KirtiumHub.TrickView = V
-    local names = { "KirtiumViewEarly", "KirtiumViewBegin", "KirtiumViewEnd" }
+    MystrixHub.TrickView = V
+    local names = { "MystrixViewEarly", "MystrixViewBegin", "MystrixViewEnd" }
 
     local function restore()
         local cam = workspace.CurrentCamera
@@ -2513,30 +2513,30 @@ function KirtiumHub.Functions.InstallTrickView()
     for _, name in ipairs(names) do
         pcall(function() RunService:UnbindFromRenderStep(name) end)
     end
-    RunService:BindToRenderStep("KirtiumViewEarly", Enum.RenderPriority.First.Value, restore)
-    RunService:BindToRenderStep("KirtiumViewBegin", Enum.RenderPriority.Input.Value + 2, function()
+    RunService:BindToRenderStep("MystrixViewEarly", Enum.RenderPriority.First.Value, restore)
+    RunService:BindToRenderStep("MystrixViewBegin", Enum.RenderPriority.Input.Value + 2, function()
         if V.Active and os.clock() > V.Until then
             V.Active = false
         end
         if V.Active then
-            KirtiumHub.Functions.TrickViewApply()
+            MystrixHub.Functions.TrickViewApply()
         end
     end)
-    RunService:BindToRenderStep("KirtiumViewEnd", Enum.RenderPriority.Input.Value + 9, restore)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+    RunService:BindToRenderStep("MystrixViewEnd", Enum.RenderPriority.Input.Value + 9, restore)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
         for _, name in ipairs(names) do
             pcall(function() RunService:UnbindFromRenderStep(name) end)
         end
         restore()
         V.Active = false
-        KirtiumHub.TrickView = nil
+        MystrixHub.TrickView = nil
     end })
 end
 
-function KirtiumHub.Functions.TrickViewSet(mode, value, seconds)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.TrickViewSet(mode, value, seconds)
+    local F = MystrixHub.Functions
     F.InstallTrickView()
-    local V = KirtiumHub.TrickView
+    local V = MystrixHub.TrickView
     V.Mode = mode
     if mode == "away" then
         V.Dir = value
@@ -2548,8 +2548,8 @@ function KirtiumHub.Functions.TrickViewSet(mode, value, seconds)
     F.TrickViewApply()
 end
 
-function KirtiumHub.Functions.TrickViewPush(st)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.TrickViewPush(st)
+    local F = MystrixHub.Functions
     if st.Mode == "away" and st.Goal then
         F.TrickViewSet("away", Vector3.new(-st.Goal.out, 0, 0), 0.3)
     elseif st.Point then
@@ -2557,31 +2557,31 @@ function KirtiumHub.Functions.TrickViewPush(st)
     end
 end
 
-function KirtiumHub.Functions.TrickFire(key, point, hold)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.TrickFire(key, point, hold)
+    local F = MystrixHub.Functions
     local binding = F.TrickBinding(key)
     if not binding then
         F.Debug("kick action not found")
         return false
     end
     F.ForceFor(2.5)
-    KirtiumHub.TrickActive = true
-    KirtiumHub.TrickKey = key
+    MystrixHub.TrickActive = true
+    MystrixHub.TrickKey = key
     F.TrickViewSet("goal", point, hold + 0.8)
     binding:Fire(true)
     task.delay(hold, function()
         F.TrickViewSet("goal", point, 0.8)
         pcall(function() binding:Fire(false) end)
         task.delay(0.9, function()
-            KirtiumHub.TrickActive = false
-            KirtiumHub.TrickKey = nil
+            MystrixHub.TrickActive = false
+            MystrixHub.TrickKey = nil
         end)
     end)
     F.Debug("fired " .. key)
     return true
 end
 
-function KirtiumHub.Functions.TrickReady()
+function MystrixHub.Functions.TrickReady()
     local char = LocalPlayer.Character
     if not char then return nil end
     local team = char:GetAttribute("Team")
@@ -2592,16 +2592,16 @@ function KirtiumHub.Functions.TrickReady()
     local hold = LocalPlayer:GetAttribute("KickoffHold")
     if type(hold) == "number" and hold > workspace:GetServerTimeNow() then return nil end
     local root = char:FindFirstChild("Root")
-    local ball = KirtiumHub.Functions.GetBall()
+    local ball = MystrixHub.Functions.GetBall()
     if not (root and ball) then return nil end
-    local goal = KirtiumHub.Functions.SilentAimGoal()
+    local goal = MystrixHub.Functions.SilentAimGoal()
     if not goal then return nil end
     return char, root, ball, goal
 end
 
-function KirtiumHub.Functions.AutoPossessed(st, S, T, goal, goalDist, now)
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.AutoPossessed(st, S, T, goal, goalDist, now)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     local forced = T.Enabled and T.Auto == false
     local lobForced = forced and T.Lob == true
     if not (S.Enabled or lobForced) or goalDist > S.Range or goalDist < 3 then
@@ -2636,15 +2636,15 @@ function KirtiumHub.Functions.AutoPossessed(st, S, T, goal, goalDist, now)
         st.Next = now + 0.35
         return
     end
-    KirtiumHub.ShotLast = result
+    MystrixHub.ShotLast = result
     st.Next = now + 1.6
-    KirtiumHub.ShotNext = now + 1.6
-    F.TrickFire(useLob and "KickLob" or "KickStrike", result.point, getgenv().KirtiumMaxPower.Hooked and 0.06 or 0.46)
+    MystrixHub.ShotNext = now + 1.6
+    F.TrickFire(useLob and "KickLob" or "KickStrike", result.point, getgenv().MystrixMaxPower.Hooked and 0.06 or 0.46)
 end
 
-function KirtiumHub.Functions.AutoAir(st, T, char, root, ball, goal, goalDist, now)
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.AutoAir(st, T, char, root, ball, goal, goalDist, now)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     if goalDist > T.Range then return end
     local bp, rp = ball.Position, root.Position
     local bdx, bdz = bp.X - rp.X, bp.Z - rp.Z
@@ -2682,21 +2682,21 @@ function KirtiumHub.Functions.AutoAir(st, T, char, root, ball, goal, goalDist, n
     st.Cand = { t = cand.t, at = now }
     st.ScanAt = now + 0.1
     st.Lost = 0
-    KirtiumHub.TrickActive = true
-    KirtiumHub.ShotNext = now + 4
+    MystrixHub.TrickActive = true
+    MystrixHub.ShotNext = now + 4
     F.ForceFor(3.5)
     F.TrickViewPush(st)
     binding:Fire(true)
     F.Debug("holding for " .. family)
 end
 
-function KirtiumHub.Functions.AutoStep(st, now)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.AutoStep(st, now)
+    local F = MystrixHub.Functions
     if st.Phase == "tail" then
         F.TrickViewPush(st)
         if now >= st.TailUntil then
             st.Phase = nil
-            KirtiumHub.TrickActive = false
+            MystrixHub.TrickActive = false
             st.Next = now + 0.8
         end
         return
@@ -2737,21 +2737,21 @@ function KirtiumHub.Functions.AutoStep(st, now)
         pcall(function() st.Binding:Fire(false) end)
         st.Phase = "tail"
         st.TailUntil = now + 0.5
-        KirtiumHub.ShotNext = now + 1.2
+        MystrixHub.ShotNext = now + 1.2
     end
 end
 
-function KirtiumHub.Functions.AutoTick(st)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.AutoTick(st)
+    local F = MystrixHub.Functions
     local now = os.clock()
     if st.Phase then
         F.AutoStep(st, now)
         return
     end
-    local S = getgenv().KirtiumAutoShoot
-    local T = getgenv().KirtiumAutoTricks
+    local S = getgenv().MystrixAutoShoot
+    local T = getgenv().MystrixAutoTricks
     if not (S.Enabled or T.Enabled) then return end
-    if now < st.Next or now < (KirtiumHub.ShotNext or 0) then return end
+    if now < st.Next or now < (MystrixHub.ShotNext or 0) then return end
     local char, root, ball, goal = F.TrickReady()
     if not char then
         F.Debug("not ready: no match body, ball or goal")
@@ -2775,8 +2775,8 @@ function KirtiumHub.Functions.AutoTick(st)
     end
 end
 
-function KirtiumHub.Functions.SkillModule()
-    local cached = KirtiumHub.SkillRef
+function MystrixHub.Functions.SkillModule()
+    local cached = MystrixHub.SkillRef
     if cached then return cached end
     local ok, mod = pcall(function()
         local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
@@ -2787,13 +2787,13 @@ function KirtiumHub.Functions.SkillModule()
         return playback and require(playback)
     end)
     if ok and type(mod) == "table" and type(mod.request) == "function" then
-        KirtiumHub.SkillRef = mod
+        MystrixHub.SkillRef = mod
         return mod
     end
     return nil
 end
 
-function KirtiumHub.Functions.SkillThreat(char, root, range)
+function MystrixHub.Functions.SkillThreat(char, root, range)
     local team = char:GetAttribute("Team")
     if type(team) ~= "string" then return nil end
     local rp = root.Position
@@ -2808,7 +2808,7 @@ function KirtiumHub.Functions.SkillThreat(char, root, range)
     end
     local ux, uz = fx / sp, fz / sp
     local best
-    for _, e in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+    for _, e in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
         if e.model ~= char and type(e.team) == "string" and e.team ~= team then
             local dx, dz = e.pos.X - rp.X, e.pos.Z - rp.Z
             local d = math.sqrt(dx * dx + dz * dz)
@@ -2823,7 +2823,7 @@ function KirtiumHub.Functions.SkillThreat(char, root, range)
     return best
 end
 
-function KirtiumHub.Functions.SkillPick(speed, d, ahead, side)
+function MystrixHub.Functions.SkillPick(speed, d, ahead, side)
     local away = side > 0 and "Left" or "Right"
     local r = math.random()
     if speed < 10 then
@@ -2844,9 +2844,9 @@ function KirtiumHub.Functions.SkillPick(speed, d, ahead, side)
     return { kind = "Flick", dir = "Down" }
 end
 
-function KirtiumHub.Functions.AutoSkill(st, char, root, goalDist, now)
-    local F = KirtiumHub.Functions
-    local T = getgenv().KirtiumAutoTricks
+function MystrixHub.Functions.AutoSkill(st, char, root, goalDist, now)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixAutoTricks
     local forced = T.Auto == false
     if forced and #(T.Skills or {}) == 0 then return false end
     if now < (st.SkillNext or 0) or goalDist < 22 then return false end
@@ -2879,16 +2879,16 @@ function KirtiumHub.Functions.AutoSkill(st, char, root, goalDist, now)
     return false
 end
 
-function KirtiumHub.Functions.AutoEngineStart()
-    local F = KirtiumHub.Functions
-    if KirtiumHub.Auto then return true end
-    if not KirtiumHub.TrickMods then
+function MystrixHub.Functions.AutoEngineStart()
+    local F = MystrixHub.Functions
+    if MystrixHub.Auto then return true end
+    if not MystrixHub.TrickMods then
         pcall(function()
             local sharedGame = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
             local Kick = require(sharedGame:WaitForChild("Kick"))
             local Dribble = require(sharedGame:WaitForChild("Dribble"))
             local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
-            KirtiumHub.TrickMods = {
+            MystrixHub.TrickMods = {
                 Bicycle = Kick.Bicycle,
                 Families = Kick.Families,
                 Rules = Dribble.Rules,
@@ -2898,15 +2898,15 @@ function KirtiumHub.Functions.AutoEngineStart()
             }
         end)
     end
-    local st: {[string]: any} = { Acc = 0, Next = 0, ScanAt = 0, Mods = KirtiumHub.TrickMods }
-    KirtiumHub.Auto = st
+    local st: {[string]: any} = { Acc = 0, Next = 0, ScanAt = 0, Mods = MystrixHub.TrickMods }
+    MystrixHub.Auto = st
     F.InstallTrickView()
     st.Conn = RunService.Heartbeat:Connect(function(dt)
         st.Acc += dt
         local slow = F.Budget(1) < 1 and 1.5 or 1
         if st.Acc < (st.Phase and 0.04 or 0.12) * slow then return end
         st.Acc = 0
-        local S, T = getgenv().KirtiumAutoShoot, getgenv().KirtiumAutoTricks
+        local S, T = getgenv().MystrixAutoShoot, getgenv().MystrixAutoTricks
         if not st.Phase and not (S.Enabled or T.Enabled) then return end
         local ok, err = pcall(F.AutoTick, st)
         if not ok then
@@ -2914,21 +2914,21 @@ function KirtiumHub.Functions.AutoEngineStart()
             if st.Phase == "air" then
                 pcall(function() st.Binding:Fire(false) end)
                 st.Phase = nil
-                KirtiumHub.TrickActive = false
+                MystrixHub.TrickActive = false
                 st.Next = os.clock() + 1
             end
         end
     end)
-    KirtiumHub.ConnectionController.Insert(st.Conn)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
-        KirtiumHub.Functions.AutoEngineStop()
+    MystrixHub.ConnectionController.Insert(st.Conn)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.AutoEngineStop()
     end })
     return true
 end
 
-function KirtiumHub.Functions.AutoEngineStop()
-    local st = KirtiumHub.Auto
-    KirtiumHub.Auto = nil
+function MystrixHub.Functions.AutoEngineStop()
+    local st = MystrixHub.Auto
+    MystrixHub.Auto = nil
     if st then
         if st.Conn then
             pcall(function() st.Conn:Disconnect() end)
@@ -2937,12 +2937,12 @@ function KirtiumHub.Functions.AutoEngineStop()
             pcall(function() st.Binding:Fire(false) end)
         end
     end
-    KirtiumHub.Functions.ReleaseAllBindings()
+    MystrixHub.Functions.ReleaseAllBindings()
 end
 
-function KirtiumHub.Functions.TrickScanAir(st, root, goal)
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.TrickScanAir(st, root, goal)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     local BV = SA.BallView
     local state, shift = BV.freeSim()
     if not state then return nil end
@@ -2979,7 +2979,7 @@ function KirtiumHub.Functions.TrickScanAir(st, root, goal)
     return best, bike, groundY, workspace:GetServerTimeNow() - shift, cands
 end
 
-function KirtiumHub.Functions.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
+function MystrixHub.Functions.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
     local M = st.Mods
     if not M then return true end
     local ok, result = pcall(function()
@@ -3022,32 +3022,32 @@ function KirtiumHub.Functions.TrickBicycleOk(st, char, root, goal, sampleNow, gr
     return ok and result == true
 end
 
-function KirtiumHub.Functions.StartAutoTricks()
-    return KirtiumHub.Functions.AutoEngineStart()
+function MystrixHub.Functions.StartAutoTricks()
+    return MystrixHub.Functions.AutoEngineStart()
 end
 
-function KirtiumHub.Functions.StopAutoTricks()
-    if not getgenv().KirtiumAutoShoot.Enabled then
-        KirtiumHub.Functions.AutoEngineStop()
+function MystrixHub.Functions.StopAutoTricks()
+    if not getgenv().MystrixAutoShoot.Enabled then
+        MystrixHub.Functions.AutoEngineStop()
     end
 end
 
-getgenv().KirtiumSilentAim.Targets = {}
-getgenv().KirtiumSilentAim.TargetKey = "Auto"
-getgenv().KirtiumSilentAim.Range = 300
-KirtiumHub.ShotIgnore = { SideFoot = true, PushPass = true, VolleyPass = true, VolleyPush = true }
-KirtiumHub.ShotLobs = { Lofted = true, Chip = true }
-KirtiumHub.ShotSeeds = {}
-KirtiumHub.ShotCache = {}
-KirtiumHub.ShotCursor = {}
-KirtiumHub.ShotFamily = nil
-KirtiumHub.ShotFamilyAt = 0
-KirtiumHub.PreviewCache = nil
-KirtiumHub.ShotHint = nil
-KirtiumHub.DebugOn = false
+getgenv().MystrixSilentAim.Targets = {}
+getgenv().MystrixSilentAim.TargetKey = "Auto"
+getgenv().MystrixSilentAim.Range = 300
+MystrixHub.ShotIgnore = { SideFoot = true, PushPass = true, VolleyPass = true, VolleyPush = true }
+MystrixHub.ShotLobs = { Lofted = true, Chip = true }
+MystrixHub.ShotSeeds = {}
+MystrixHub.ShotCache = {}
+MystrixHub.ShotCursor = {}
+MystrixHub.ShotFamily = nil
+MystrixHub.ShotFamilyAt = 0
+MystrixHub.PreviewCache = nil
+MystrixHub.ShotHint = nil
+MystrixHub.DebugOn = false
 
-function KirtiumHub.Functions.SetSilentTargets(value)
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.SetSilentTargets(value)
+    local SA = getgenv().MystrixSilentAim
     local list = {}
     local auto = false
     if type(value) == "table" then
@@ -3070,20 +3070,20 @@ function KirtiumHub.Functions.SetSilentTargets(value)
         SA.Targets = list
         SA.TargetKey = table.concat(list, ",")
     end
-    table.clear(KirtiumHub.ShotCache)
+    table.clear(MystrixHub.ShotCache)
 end
 
-function KirtiumHub.Functions.Debug(message)
-    if not KirtiumHub.DebugOn then return end
+function MystrixHub.Functions.Debug(message)
+    if not MystrixHub.DebugOn then return end
     local now = os.clock()
-    if now - (KirtiumHub.DebugAt or 0) < 1.2 then return end
-    KirtiumHub.DebugAt = now
+    if now - (MystrixHub.DebugAt or 0) < 1.2 then return end
+    MystrixHub.DebugAt = now
     warn("[kirtium.qyz] " .. tostring(message))
 end
 
-function KirtiumHub.Functions.ShotEnv()
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.ShotEnv()
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     if not F.SilentAimModules() then return nil end
     local ball = SA.BallView.getBall()
     if not ball then return nil end
@@ -3095,21 +3095,21 @@ function KirtiumHub.Functions.ShotEnv()
         end)
         SA.Radius = (ok and type(r) == "number") and math.clamp(r, 0.5, 2) or 1.1
     end
-    local env = KirtiumHub.ShotEnvCache
+    local env = MystrixHub.ShotEnvCache
     local now = os.clock()
     if not env or env.Ball ~= ball or now - env.At > 0.5 then
         env = { Ball = ball, Params = SA.Flight.params(ball), At = now }
-        KirtiumHub.ShotEnvCache = env
+        MystrixHub.ShotEnvCache = env
     end
     env.Goal = goal
     env.Radius = SA.Radius
     return env
 end
 
-function KirtiumHub.Functions.ShotBodies(goal, lob)
+function MystrixHub.Functions.ShotBodies(goal, lob)
     local bx, bz, n = {}, {}, 0
     if lob then return bx, bz, 0 end
-    for _, entry in ipairs(KirtiumHub.Functions.MannequinSnapshot()) do
+    for _, entry in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
         if entry.model ~= goal.char and not entry.keeper then
             n += 1
             bx[n] = entry.pos.X
@@ -3119,8 +3119,8 @@ function KirtiumHub.Functions.ShotBodies(goal, lob)
     return bx, bz, n
 end
 
-function KirtiumHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA, maxA, key, bx, bz, bn, lob, stepDt, iters, deadline)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA, maxA, key, bx, bz, bn, lob, stepDt, iters, deadline)
+    local F = MystrixHub.Functions
     local fx, fz = point.X - from.X, point.Z - from.Z
     local d = math.sqrt(fx * fx + fz * fz)
     if d < 2 then return nil end
@@ -3132,13 +3132,13 @@ function KirtiumHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA
     local gravity = env.Params.gravity
     local pY = point.Y
     local pL = point.X * side.X + point.Z * side.Z
-    local seeds = KirtiumHub.ShotSeeds
+    local seeds = MystrixHub.ShotSeeds
     local seed = seeds[key]
     if seed and ((seed[3] - from).Magnitude > 8 or math.abs(seed[4] - speed) > 2 or math.abs(seed[5] - curve) > 2) then
         seed = nil
     end
     if not seed then
-        local hint = KirtiumHub.ShotHint
+        local hint = MystrixHub.ShotHint
         if hint
             and hint[12] == lob
             and (hint[3] - from).Magnitude < 8
@@ -3218,12 +3218,12 @@ function KirtiumHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA
     end
     if not bestVel then return nil end
     seeds[key] = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22 }
-    KirtiumHub.ShotHint = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22, dx, dz, lob }
+    MystrixHub.ShotHint = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22, dx, dz, lob }
     return bestVel, spin, bestMiss, bestT, bestB, bestC
 end
 
-function KirtiumHub.Functions.ShotGate(from)
-    local goal = KirtiumHub.Functions.SilentAimGoal()
+function MystrixHub.Functions.ShotGate(from)
+    local goal = MystrixHub.Functions.SilentAimGoal()
     if not goal then return nil end
     if (from.X - goal.x) * goal.out >= 0 then return nil end
     local dx, dz = goal.x - from.X, goal.z - from.Z
@@ -3234,8 +3234,8 @@ function KirtiumHub.Functions.ShotGate(from)
     return goal
 end
 
-function KirtiumHub.Functions.ShotPoint(goal, mode, radius)
-    local spot = KirtiumHub.ShotSpots[mode]
+function MystrixHub.Functions.ShotPoint(goal, mode, radius)
+    local spot = MystrixHub.ShotSpots[mode]
     if not spot then return nil end
     radius = radius or 0.84
     local zl = goal.half - radius - 1.5
@@ -3244,7 +3244,7 @@ function KirtiumHub.Functions.ShotPoint(goal, mode, radius)
     return Vector3.new(goal.x, y0 + (y1 - y0) * spot[2], goal.z + goal.out * zl * spot[1])
 end
 
-function KirtiumHub.Functions.ShotAutoList(goal, lob, radius)
+function MystrixHub.Functions.ShotAutoList(goal, lob, radius)
     radius = radius or 0.84
     local cache = goal.Lists
     if not cache then
@@ -3269,7 +3269,7 @@ function KirtiumHub.Functions.ShotAutoList(goal, lob, radius)
     return list
 end
 
-function KirtiumHub.Functions.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, stepDt, kp)
+function MystrixHub.Functions.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, stepDt, kp)
     local Flight = SilentAimState.Flight
     local params = env.Params
     local goal = env.Goal
@@ -3374,8 +3374,8 @@ function KirtiumHub.Functions.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, 
     return nil, t, blocked, framed
 end
 
-function KirtiumHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode)
+    local F = MystrixHub.Functions
     local SA = SilentAimState
     local env = F.ShotEnv()
     if not env then return nil end
@@ -3414,7 +3414,7 @@ function KirtiumHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     local now = os.clock()
     local deadline = budget and (now + budget) or nil
     local points, targeted = F.ShotTargets(goal, lob, radius)
-    local cache = KirtiumHub.ShotCache
+    local cache = MystrixHub.ShotCache
     local light = mode ~= "strike"
     local simDt = lob and 1 / 45 or 1 / 60
     if light then
@@ -3559,7 +3559,7 @@ function KirtiumHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
         end)
         local M = math.min(#ranked, targeted and #ranked or 14)
         if M > 0 then
-            local cursors = KirtiumHub.ShotCursor
+            local cursors = MystrixHub.ShotCursor
             local count = mode == "strike" and M or (mode == "preview" and 1 or math.min(M, 3))
             local first = mode == "strike" and 1 or (cursors[key] or 1)
             local tried = 0
@@ -3626,12 +3626,12 @@ function KirtiumHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     result.goalX = goal.x
     result.at = now
     result.born = now
-    KirtiumHub.ShotLast = result
+    MystrixHub.ShotLast = result
     return result
 end
 
-function KirtiumHub.Functions.ShotFallback(from, family, lob)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.ShotFallback(from, family, lob)
+    local F = MystrixHub.Functions
     local SA = SilentAimState
     local goal = F.SilentAimGoal()
     if not goal then return nil end
@@ -3690,8 +3690,8 @@ function KirtiumHub.Functions.ShotFallback(from, family, lob)
     local vel = Vector3.new(px / pd * math.cos(ang) * speed, math.sin(ang) * speed, pz / pd * math.cos(ang) * speed)
     return { vel = vel, spin = Vector3.new(0, 0, 0) }
 end
-function KirtiumHub.Functions.SilentAimRedirect(from, vel, spin, family)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.SilentAimRedirect(from, vel, spin, family)
+    local F = MystrixHub.Functions
     local SA = SilentAimState
     local stats = SA.Stats
     if not stats then
@@ -3699,7 +3699,7 @@ function KirtiumHub.Functions.SilentAimRedirect(from, vel, spin, family)
         SA.Stats = stats
     end
     stats.calls += 1
-    if type(family) ~= "string" or KirtiumHub.ShotIgnore[family] then
+    if type(family) ~= "string" or MystrixHub.ShotIgnore[family] then
         stats.last = "ignored family " .. tostring(family)
         return nil
     end
@@ -3732,10 +3732,10 @@ function KirtiumHub.Functions.SilentAimRedirect(from, vel, spin, family)
     stats.last = "no solution"
     return nil
 end
-function KirtiumHub.Functions.SilentAimSolve(from, family)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.SilentAimSolve(from, family)
+    local F = MystrixHub.Functions
     local SA = SilentAimState
-    local lob = KirtiumHub.ShotLobs[family] == true
+    local lob = MystrixHub.ShotLobs[family] == true
     local ok, result = pcall(F.ShotBest, from, family, lob, F.Budget(0.012), nil, "strike")
     if not ok then
         SA.LastError = tostring(result)
@@ -3756,11 +3756,11 @@ function KirtiumHub.Functions.SilentAimSolve(from, family)
     return nil
 end
 
-function KirtiumHub.Functions.SilentAimPlan(plan)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.SilentAimPlan(plan)
+    local F = MystrixHub.Functions
     local SA = SilentAimState
     local family = plan.family
-    if type(family) ~= "string" or KirtiumHub.ShotIgnore[family] then return nil end
+    if type(family) ~= "string" or MystrixHub.ShotIgnore[family] then return nil end
     local from = plan.ball
     if not F.ShotGate(from) then return nil end
     local vel, spin = F.SilentAimSolve(from, family)
@@ -3769,13 +3769,13 @@ function KirtiumHub.Functions.SilentAimPlan(plan)
     return vel, spin
 end
 
-function KirtiumHub.Functions.InstallPlanSync()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.InstallPlanSync()
+    local SA = getgenv().MystrixSilentAim
     if SA.PlanHooked then return true end
     if not (hookmetamethod and getnamecallmethod and setnamecallmethod and newcclosure) then return false end
     local old
     old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local state = getgenv().KirtiumSilentAim
+        local state = getgenv().MystrixSilentAim
         if state.Enabled and state.PlanSync ~= false and getnamecallmethod() == "FireServer" then
             local plan = ...
             if type(plan) == "table"
@@ -3785,7 +3785,7 @@ function KirtiumHub.Functions.InstallPlanSync()
                 and plan.power ~= nil
                 and plan.leg ~= nil
                 and typeof(plan.dir) == "Vector3" then
-                local H = getgenv().KirtiumHub
+                local H = getgenv().MystrixHub
                 local F = H and H.Functions
                 if F then
                     local ok, vel, spin = pcall(F.SilentAimPlan, plan)
@@ -3812,17 +3812,17 @@ function KirtiumHub.Functions.InstallPlanSync()
     SA.PlanHooked = true
     return true
 end
-function KirtiumHub.Functions.CurrentFamily()
-    local name = KirtiumHub.ShotFamily
-    if name and os.clock() - (KirtiumHub.ShotFamilyAt or 0) < 0.6 then
+function MystrixHub.Functions.CurrentFamily()
+    local name = MystrixHub.ShotFamily
+    if name and os.clock() - (MystrixHub.ShotFamilyAt or 0) < 0.6 then
         return name
     end
     return nil
 end
 
-function KirtiumHub.Functions.PreviewAim(from, vel, spin)
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.PreviewAim(from, vel, spin)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     if not F.SilentAimModules() then return nil end
     local goal = F.ShotGate(from, vel)
     if not goal then return nil end
@@ -3830,19 +3830,19 @@ function KirtiumHub.Functions.PreviewAim(from, vel, spin)
     local fm = flat.Magnitude
     local family, lob, minAngle
     lob = false
-    local auto = KirtiumHub.Auto
+    local auto = MystrixHub.Auto
     if auto and auto.Phase == "air" then
         local gy = SA.BallView.groundBallY(from)
         family = auto.Mode == "away" and "Bicycle" or (from.Y - gy <= 2.4 and "Volley" or "RunningHeader")
         minAngle = -0.95
-    elseif KirtiumHub.TrickActive then
-        family = KirtiumHub.TrickKey == "KickLob" and "Lofted" or "Laced"
+    elseif MystrixHub.TrickActive then
+        family = MystrixHub.TrickKey == "KickLob" and "Lofted" or "Laced"
         lob = family == "Lofted"
     else
         family = F.CurrentFamily()
         if family then
-            if KirtiumHub.ShotIgnore[family] then return nil end
-            lob = KirtiumHub.ShotLobs[family] == true
+            if MystrixHub.ShotIgnore[family] then return nil end
+            lob = MystrixHub.ShotLobs[family] == true
         elseif fm > 1 and vel.Y / fm > 0.62 then
             family, lob = "Lofted", true
         else
@@ -3850,8 +3850,8 @@ function KirtiumHub.Functions.PreviewAim(from, vel, spin)
         end
     end
     local now = os.clock()
-    KirtiumHub.PreviewWant = { family = family, lob = lob, minAngle = minAngle, at = now }
-    local cache = KirtiumHub.PreviewCache
+    MystrixHub.PreviewWant = { family = family, lob = lob, minAngle = minAngle, at = now }
+    local cache = MystrixHub.PreviewCache
     local c = cache and cache[family .. (minAngle and "|a" or "")]
     if c and c.goalX == goal.x and now - c.at < 0.6 and (c.from - from).Magnitude < 8 then
         return c.vel, c.spin
@@ -3859,13 +3859,13 @@ function KirtiumHub.Functions.PreviewAim(from, vel, spin)
     return nil
 end
 
-function KirtiumHub.Functions.StartShotTick()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartShotTick()
+    local F = MystrixHub.Functions
     F.InstallPreviewSpoof()
-    if KirtiumHub.ShotTickConn then return end
+    if MystrixHub.ShotTickConn then return end
     local acc = 0
     local pause = 0.1
-    KirtiumHub.ShotTickConn = RunService.Heartbeat:Connect(function(dt)
+    MystrixHub.ShotTickConn = RunService.Heartbeat:Connect(function(dt)
         acc += dt
         if acc < pause then return end
         acc = 0
@@ -3880,21 +3880,21 @@ function KirtiumHub.Functions.StartShotTick()
         if not F.SilentAimModules() then return end
         local pos = SA.BallView.getPosition()
         if not pos or not F.ShotGate(pos) then return end
-        local want = KirtiumHub.PreviewWant
+        local want = MystrixHub.PreviewWant
         local family, lob, minAngle
         if want and os.clock() - want.at < 0.5 then
             family, lob, minAngle = want.family, want.lob, want.minAngle
         else
             family = F.CurrentFamily() or "Laced"
-            if KirtiumHub.ShotIgnore[family] then family = "Laced" end
-            lob = KirtiumHub.ShotLobs[family] == true
+            if MystrixHub.ShotIgnore[family] then family = "Laced" end
+            lob = MystrixHub.ShotLobs[family] == true
         end
         local t0 = os.clock()
         local ok, result = pcall(F.ShotBest, pos, family, lob, F.Budget(0.004), minAngle, "preview")
-        local cache = KirtiumHub.PreviewCache
+        local cache = MystrixHub.PreviewCache
         if not cache then
             cache = {}
-            KirtiumHub.PreviewCache = cache
+            MystrixHub.PreviewCache = cache
         end
         local pkey = family .. (minAngle and "|a" or "")
         if ok and result then
@@ -3910,11 +3910,11 @@ function KirtiumHub.Functions.StartShotTick()
         end
         pause = math.clamp((os.clock() - t0) * 6, 0.1, 0.5)
     end)
-    KirtiumHub.ConnectionController.Insert(KirtiumHub.ShotTickConn)
+    MystrixHub.ConnectionController.Insert(MystrixHub.ShotTickConn)
 end
 
-function KirtiumHub.Functions.InstallPickTrack()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.InstallPickTrack()
+    local SA = getgenv().MystrixSilentAim
     if SA.PickHooked then return end
     local ok, Select = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Select
@@ -3922,8 +3922,8 @@ function KirtiumHub.Functions.InstallPickTrack()
     if not ok or type(Select) ~= "table" or type(Select.pick) ~= "function" or not hookfunction then return end
     local orig
     local function wrapper(self, forced)
-        local H = getgenv().KirtiumHub
-        local state = getgenv().KirtiumSilentAim
+        local H = getgenv().MystrixHub
+        local state = getgenv().MystrixSilentAim
         local input = self
         if H and type(self) == "table" then
             H.KickIntent = self.intent
@@ -3960,9 +3960,9 @@ function KirtiumHub.Functions.InstallPickTrack()
     end
 end
 
-function KirtiumHub.Functions.InstallSilentAim()
-    local F = KirtiumHub.Functions
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.InstallSilentAim()
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
     SA.Redirect = F.SilentAimRedirect
     local ok, DribbleClient = pcall(function()
         return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("DribbleClient"))
@@ -3982,8 +3982,8 @@ function KirtiumHub.Functions.InstallSilentAim()
         SA.Families = nil
         SA.KeeperRules = nil
         SA.Radius = nil
-        KirtiumHub.ShotEnvCache = nil
-        KirtiumHub.GoalCache = nil
+        MystrixHub.ShotEnvCache = nil
+        MystrixHub.GoalCache = nil
     end
     F.SilentAimModules()
     F.InstallPickTrack()
@@ -4003,7 +4003,7 @@ function KirtiumHub.Functions.InstallSilentAim()
                                 SA.LastAt = os.clock()
                                 vel = newVel
                                 spin = newSpin or spin
-                                local H = getgenv().KirtiumHub
+                                local H = getgenv().MystrixHub
                                 if H then H.ShotLast = nil end
                             end
                         else
@@ -4034,8 +4034,8 @@ function KirtiumHub.Functions.InstallSilentAim()
     return SA.Hooked == true
 end
 
-function KirtiumHub.Functions.KickGoalDir(x, z)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.KickGoalDir(x, z)
+    local F = MystrixHub.Functions
     local goal = F.SilentAimGoal()
     if not goal then return nil end
     if (x - goal.x) * goal.out >= 0 then return nil end
@@ -4047,8 +4047,8 @@ function KirtiumHub.Functions.KickGoalDir(x, z)
     return Vector3.new(dx / m, 0, dz / m)
 end
 
-function KirtiumHub.Functions.InstallPlanAim()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.InstallPlanAim()
+    local SA = getgenv().MystrixSilentAim
     if SA.PlanAimHooked or not hookfunction then return end
     local ok, Plan = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Plan
@@ -4056,8 +4056,8 @@ function KirtiumHub.Functions.InstallPlanAim()
     if not ok or type(Plan) ~= "table" or type(Plan.find) ~= "function" then return end
     local orig
     local function wrapper(self, ...)
-        local H = getgenv().KirtiumHub
-        local state = getgenv().KirtiumSilentAim
+        local H = getgenv().MystrixHub
+        local state = getgenv().MystrixSilentAim
         if H and state.Enabled and type(self) == "table" and typeof(self.pos) == "Vector3" then
             local intent = H.KickIntent
             if (intent == "Shoot" or intent == "Lob") and os.clock() - (H.KickIntentAt or 0) < 0.15 then
@@ -4081,8 +4081,8 @@ function KirtiumHub.Functions.InstallPlanAim()
     end
 end
 
-function KirtiumHub.Functions.InstallPreviewSpoof()
-    local SA = getgenv().KirtiumSilentAim
+function MystrixHub.Functions.InstallPreviewSpoof()
+    local SA = getgenv().MystrixSilentAim
     if SA.PreviewShowHooked or SA.PreviewShowHooking then return end
     SA.PreviewShowHooking = true
     task.spawn(function()
@@ -4096,11 +4096,11 @@ function KirtiumHub.Functions.InstallPreviewSpoof()
         end
         local orig = KP.show
         local function wrapper(strike, ...)
-            local state = getgenv().KirtiumSilentAim
+            local state = getgenv().MystrixSilentAim
             if state.Enabled and state.Spoof ~= false and type(strike) == "table" and typeof(strike.from) == "Vector3" and typeof(strike.vel) == "Vector3" then
-                local view = KirtiumHub.TrickView
+                local view = MystrixHub.TrickView
                 local locked = view ~= nil and view.Active == true
-                local rok, nv, ns = pcall(KirtiumHub.Functions.PreviewAim, strike.from, strike.vel, strike.spin)
+                local rok, nv, ns = pcall(MystrixHub.Functions.PreviewAim, strike.from, strike.vel, strike.spin)
                 if rok and nv then
                     local copy = table.clone(strike)
                     copy.vel = nv
@@ -4120,7 +4120,7 @@ function KirtiumHub.Functions.InstallPreviewSpoof()
         KP.show = wrapper
         SA.PreviewShowHooked = true
         SA.PreviewShowHooking = false
-        KirtiumHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
             if KP.show == wrapper then
                 KP.show = orig
             end
@@ -4129,8 +4129,8 @@ function KirtiumHub.Functions.InstallPreviewSpoof()
     end)
 end
 
-function KirtiumHub.Functions.ShotPredict(params, pos, vel, spin, gy, horizon, dt)
-    local Flight = getgenv().KirtiumSilentAim.Flight
+function MystrixHub.Functions.ShotPredict(params, pos, vel, spin, gy, horizon, dt)
+    local Flight = getgenv().MystrixSilentAim.Flight
     local list = {}
     local v, s = vel, spin
     local rolling = false
@@ -4160,10 +4160,10 @@ function KirtiumHub.Functions.ShotPredict(params, pos, vel, spin, gy, horizon, d
     return list
 end
 
-getgenv().KirtiumTracker = getgenv().KirtiumTracker or { Enabled = false, Rate = 0.25, Color = Color3.fromRGB(43, 255, 172) }
+getgenv().MystrixTracker = getgenv().MystrixTracker or { Enabled = false, Rate = 0.25, Color = Color3.fromRGB(43, 255, 172) }
 
-function KirtiumHub.Functions.TrackerModules()
-    local T = getgenv().KirtiumTracker
+function MystrixHub.Functions.TrackerModules()
+    local T = getgenv().MystrixTracker
     if T.BallSim and T.World then return true end
     pcall(function()
         local g = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
@@ -4174,9 +4174,9 @@ function KirtiumHub.Functions.TrackerModules()
     return T.BallSim ~= nil and T.World ~= nil
 end
 
-function KirtiumHub.Functions.TrackerTrace(ev)
-    local F = KirtiumHub.Functions
-    local T = getgenv().KirtiumTracker
+function MystrixHub.Functions.TrackerTrace(ev)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixTracker
     local BallSim, World = T.BallSim, T.World
     local data = World.get()
     if T.FrameSrc ~= data.frames then
@@ -4218,25 +4218,25 @@ function KirtiumHub.Functions.TrackerTrace(ev)
     return pts, landing
 end
 
-function KirtiumHub.Functions.StopBallTracker()
-    pcall(function() RunService:UnbindFromRenderStep("KirtiumBallTracker") end)
-    local T = getgenv().KirtiumTracker
+function MystrixHub.Functions.StopBallTracker()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallTracker") end)
+    local T = getgenv().MystrixTracker
     if T.Base then
         pcall(function() T.Base:Destroy() end)
         T.Base = nil
     end
 end
 
-function KirtiumHub.Functions.StartBallTracker()
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.StartBallTracker()
+    local F = MystrixHub.Functions
     F.StopBallTracker()
     if not F.SilentAimModules() or not F.TrackerModules() then return false end
-    local T = getgenv().KirtiumTracker
-    local SA = getgenv().KirtiumSilentAim
+    local T = getgenv().MystrixTracker
+    local SA = getgenv().MystrixSilentAim
     local BV = SA.BallView
     local COUNT = 56
     local base = Instance.new("Part")
-    base.Name = "KirtiumTracker"
+    base.Name = "MystrixTracker"
     base.Anchored = true
     base.CanCollide = false
     base.CanQuery = false
@@ -4340,7 +4340,7 @@ function KirtiumHub.Functions.StartBallTracker()
         end
     end
 
-    RunService:BindToRenderStep("KirtiumBallTracker", Enum.RenderPriority.Camera.Value + 40, function()
+    RunService:BindToRenderStep("MystrixBallTracker", Enum.RenderPriority.Camera.Value + 40, function()
         if not T.Enabled then
             hideAll()
             return
@@ -4418,14 +4418,14 @@ function KirtiumHub.Functions.StartBallTracker()
             hideAll()
         end
     end)
-    KirtiumHub.ConnectionController.Insert({ Disconnect = function()
-        KirtiumHub.Functions.StopBallTracker()
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopBallTracker()
     end })
     return true
 end
 
-function KirtiumHub.Functions.KeeperDivesModule()
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperDivesModule()
+    local H = MystrixHub
     if H.KeeperDivesRef then return H.KeeperDivesRef end
     local ok, mod = pcall(function()
         local shared = Services.ReplicatedStorage:WaitForChild("Shared", 5)
@@ -4440,8 +4440,8 @@ function KirtiumHub.Functions.KeeperDivesModule()
     return nil
 end
 
-function KirtiumHub.Functions.KeeperDiveTouch(kind)
-    local H = KirtiumHub
+function MystrixHub.Functions.KeeperDiveTouch(kind)
+    local H = MystrixHub
     local cache = H.KeeperTouchCache
     if not cache then
         cache = {}
@@ -4460,7 +4460,7 @@ function KirtiumHub.Functions.KeeperDiveTouch(kind)
     return touch or 0.35
 end
 
-function KirtiumHub.Functions.KeeperDiveStick(kind, lateral)
+function MystrixHub.Functions.KeeperDiveStick(kind, lateral)
     if kind == "Jump" then return Vector2.new(0, 1) end
     local angles = { High = 40, Mid = 0, Low = -40, Smother = -80 }
     local a = math.rad(angles[kind] or 0)
@@ -4472,8 +4472,8 @@ function KirtiumHub.Functions.KeeperDiveStick(kind, lateral)
     return Vector2.new(sign * math.cos(a), math.sin(a))
 end
 
-function KirtiumHub.Functions.KeeperDiveDirect(char, kind, lateral)
-    local F = KirtiumHub.Functions
+function MystrixHub.Functions.KeeperDiveDirect(char, kind, lateral)
+    local F = MystrixHub.Functions
     if kind == "Jump" then return false end
     local env = F.KeeperDiveEnv()
     local mod = F.MannequinClientModule()
@@ -4497,8 +4497,8 @@ function KirtiumHub.Functions.KeeperDiveDirect(char, kind, lateral)
     return true
 end
 
-function KirtiumHub.Functions.InstallTrickFilter()
-    local TF = getgenv().KirtiumTrickFilter
+function MystrixHub.Functions.InstallTrickFilter()
+    local TF = getgenv().MystrixTrickFilter
     if TF.Hooked then return true end
     if not hookfunction then return false end
     local ok, Kick = pcall(function()
@@ -4512,8 +4512,8 @@ function KirtiumHub.Functions.InstallTrickFilter()
         if type(fn) == "function" then
             local orig
             local function wrapper(self, ...)
-                local H = getgenv().KirtiumHub
-                local T = getgenv().KirtiumAutoTricks
+                local H = getgenv().MystrixHub
+                local T = getgenv().MystrixAutoTricks
                 local auto = H and H.Auto
                 if T
                     and T.Enabled
@@ -4538,9 +4538,9 @@ function KirtiumHub.Functions.InstallTrickFilter()
     return TF.Hooked
 end
 
-function KirtiumHub.Functions.SetTrickSelection(value)
-    local T = getgenv().KirtiumAutoTricks
-    local catalog = KirtiumHub.TrickCatalog
+function MystrixHub.Functions.SetTrickSelection(value)
+    local T = getgenv().MystrixAutoTricks
+    local catalog = MystrixHub.TrickCatalog
     local picked = {}
 
     local function take(name)
@@ -4582,16 +4582,16 @@ function KirtiumHub.Functions.SetTrickSelection(value)
     T.Skills = skills
     T.Lob = lob
 
-    local hooked = KirtiumHub.Functions.InstallTrickFilter()
+    local hooked = MystrixHub.Functions.InstallTrickFilter()
     if next(air) ~= nil and not hooked then
         warn("[kirtium.qyz] trick filter could not be installed, air tricks are not forced")
     end
     return hooked
 end
 
-function KirtiumHub.Functions.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
-    local F = KirtiumHub.Functions
-    local T = getgenv().KirtiumAutoTricks
+function MystrixHub.Functions.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixAutoTricks
     local checked, okBike = false, false
 
     local function bicycle()
@@ -4609,7 +4609,7 @@ function KirtiumHub.Functions.TrickChoose(st, char, root, goal, best, bike, cand
         return best, "goal", best.h <= 2.4 and "Volley" or "RunningHeader"
     end
 
-    local families = getgenv().KirtiumSilentAim.Families
+    local families = getgenv().MystrixSilentAim.Families
     local pick, pickMode, pickFamily
     for family in pairs(T.AirFamilies or {}) do
         local cand, mode
@@ -4636,8 +4636,8 @@ function KirtiumHub.Functions.TrickChoose(st, char, root, goal, best, bike, cand
     return pick, pickMode, pickFamily
 end
 
-function KirtiumHub.Functions.SkillForced(side)
-    local skills = getgenv().KirtiumAutoTricks.Skills
+function MystrixHub.Functions.SkillForced(side)
+    local skills = getgenv().MystrixAutoTricks.Skills
     local spec = skills[math.random(#skills)]
     local away = side > 0 and "Left" or "Right"
     return { kind = spec.kind, dir = spec.dir == "Away" and away or spec.dir, half = spec.half }
@@ -4649,26 +4649,6 @@ local uiSource = game:HttpGet("https://raw.githubusercontent.com/wadhiaubsjdh8yh
 uiSource = uiSource:gsub('local DISCORD_INVITE = "[^"]+"', function()
     return 'local DISCORD_INVITE = ' .. string.format("%q", DISCORD_INVITE)
 end, 1)
--- Troca SOMENTE o ícone de marca "logo" em todos os pontos da Blossom.
--- Os ícones das funções e abas permanecem originais.
-local logoFactoryPatch = 'local function imageFor(name)\n    if name == "logo" then return { Image = ' .. string.format("%q", HUB_LOGO) .. ' } end'
-local logoFactoryCount
-uiSource, logoFactoryCount = uiSource:gsub('local function imageFor%(name%)', function()
-    return logoFactoryPatch
-end, 1)
-if logoFactoryCount ~= 1 then
-    error('[kirtium.qyz] A biblioteca de interface mudou; nao foi possivel aplicar a logo.')
-end
-
--- Preserva as cores originais dos demais ícones; a logo conserva as cores do PNG.
-local logoColorCount
-uiSource, logoColorCount = uiSource:gsub('bind%(picture, "ImageColor3", color%)', function()
-    return 'if name == "logo" then picture.ImageColor3 = Color3.new(1, 1, 1) else bind(picture, "ImageColor3", color) end'
-end, 1)
-if logoColorCount ~= 1 then
-    warn('[kirtium.qyz] Imagem configurada, mas a cor da logo pode ser alterada pelo tema.')
-end
-
 local lib = loadstring(uiSource)()
 
 local CurrentGameName = game.Name
@@ -4683,63 +4663,36 @@ local Window = lib.new({
     Title = HUB_NAME, Script = HUB_NAME, Build = CurrentGameName, NotifyPosition = "Bottom Right", ConfigFolder = "kirtium.qyz/" .. gameName .. "/configs",
 })
 
-KirtiumHub.UIController.Window = Window
+MystrixHub.UIController.Window = Window
 
--- Verifica se a logo personalizada foi criada como imagem pela Blossom.
--- Se o asset não carregar, tenta a miniatura do mesmo ID e informa o motivo.
-do
-    local logo = Window.Logo
-    local picture = logo and logo.Parts and logo.Parts[1]
-    if not (picture and picture:IsA("ImageLabel")) then
-        warn("[kirtium.qyz] ERRO: o patch da biblioteca nao criou um ImageLabel para a logo.")
-    else
-        picture.Image = HUB_LOGO
-        picture.ImageColor3 = Color3.new(1, 1, 1)
-        picture.ImageTransparency = 0
-        picture.BackgroundTransparency = 1
-        picture.ScaleType = Enum.ScaleType.Fit
-        local thumb = "rbxthumb://type=Asset&id=140431954244571&w=420&h=420"
-        task.spawn(function()
-            local ok, err = pcall(function()
-                game:GetService("ContentProvider"):PreloadAsync({picture}, function(asset, status)
-                    if status ~= Enum.AssetFetchStatus.Success then
-                        warn("[kirtium.qyz] Falha ao carregar asset da logo: " .. tostring(status))
-                    end
-                end)
-            end)
-            if not ok then
-                warn("[kirtium.qyz] Erro no teste da logo: " .. tostring(err))
-            end
-        end)
-        task.delay(3, function()
-            if picture.Parent and not picture.IsLoaded then
-                local total = 0
-                for _, item in ipairs(Window.Screen:GetDescendants()) do
-                    if item:IsA("ImageLabel") and item.Image == HUB_LOGO then
-                        item.Image = thumb
-                        item.ImageColor3 = Color3.new(1, 1, 1)
-                        item.ImageTransparency = 0
-                        total += 1
-                    end
-                end
-                warn("[kirtium.qyz] O ID original nao carregou. Testando miniatura do Roblox em " .. total .. " imagens. Confira permissao, moderacao e se o ID corresponde a imagem.")
-                task.wait(3)
-                if picture.Parent then
-                    if picture.IsLoaded then
-                        print("[kirtium.qyz] Miniatura da logo carregada.")
-                    else
-                        warn("[kirtium.qyz] Nem a miniatura carregou: ID possivelmente invalido, privado ou sem acesso nesta experiencia.")
-                    end
-                end
-            else
-                print("[kirtium.qyz] Logo principal carregada corretamente.")
-            end
-        end)
+-- Substitui todas as logos de marca que a biblioteca Blossom desenha
+-- por padrão (menu lateral, watermark, botão de restaurar e loader).
+-- Os ícones das opções (Combat, Ball, Player...) continuam originais.
+local function ApplyKirtiumLogo(iconRoot)
+    if not iconRoot then return end
+
+    for _, child in ipairs(iconRoot:GetChildren()) do
+        if child:IsA("GuiObject") then
+            child.Visible = false
+        end
     end
+
+    local image = Instance.new("ImageLabel")
+    image.Name = "KirtiumLogo"
+    image.BackgroundTransparency = 1
+    image.BorderSizePixel = 0
+    image.Size = UDim2.fromScale(1, 1)
+    image.Image = HUB_LOGO
+    image.ImageColor3 = Color3.new(1, 1, 1)
+    image.ScaleType = Enum.ScaleType.Fit
+    image.ZIndex = iconRoot.ZIndex + 1
+    image.Parent = iconRoot
 end
 
--- A biblioteca Blossom chama makeIcon(..., "logo", ...) nas quatro áreas da interface.
--- A substituição é feita na própria fábrica de ícones, antes de carregar a biblioteca.
+ApplyKirtiumLogo(Window.Logo and Window.Logo.Root)
+ApplyKirtiumLogo(Window.Watermark and Window.Watermark:FindFirstChild("Icon"))
+ApplyKirtiumLogo(Window.FloatButton and Window.FloatButton:FindFirstChild("Icon"))
+ApplyKirtiumLogo(Window.Loader and Window.Loader:FindFirstChild("Icon"))
 
 Window:Category("Main")
 
@@ -4758,9 +4711,9 @@ local PlayerTab = Window:Tab({
     Icon = "lucide:user-round",
 })
 
-KirtiumHub.UIController.Tabs.Combat = CombatTab
-KirtiumHub.UIController.Tabs.Player = PlayerTab
-KirtiumHub.UIController.Tabs.Ball = BallTab
+MystrixHub.UIController.Tabs.Combat = CombatTab
+MystrixHub.UIController.Tabs.Player = PlayerTab
+MystrixHub.UIController.Tabs.Ball = BallTab
 
 local SilentAimSection = CombatTab:Section({
     Name = "Silent Aim",
@@ -4774,7 +4727,7 @@ SilentAimSection:Dropdown({
     Default = { "Auto" },
     Multi = true,
     Callback = function(value)
-        KirtiumHub.Functions.SetSilentTargets(value)
+        MystrixHub.Functions.SetSilentTargets(value)
     end,
 })
 
@@ -4785,7 +4738,7 @@ SilentAimSection:Slider({
     Suffix = "st",
     Default = 300,
     Callback = function(value)
-        getgenv().KirtiumSilentAim.Range = value
+        getgenv().MystrixSilentAim.Range = value
     end,
 })
 
@@ -4794,10 +4747,10 @@ SilentAimSection:Toggle({
     Keybind = Enum.KeyCode.H,
     Default = false,
     Callback = function(state)
-        local SA = getgenv().KirtiumSilentAim
-        local forced = KirtiumHub.Force ~= nil and KirtiumHub.Force.Active == true
+        local SA = getgenv().MystrixSilentAim
+        local forced = MystrixHub.Force ~= nil and MystrixHub.Force.Active == true
         if state then
-            local ok = KirtiumHub.Functions.InstallSilentAim()
+            local ok = MystrixHub.Functions.InstallSilentAim()
             if not ok then
                 SA.User = false
                 SA.Enabled = forced
@@ -4816,7 +4769,7 @@ SilentAimSection:Toggle({
     Name = "Auto Curve",
     Default = false,
     Callback = function(state)
-        getgenv().KirtiumSilentAim.AutoCurve = state
+        getgenv().MystrixSilentAim.AutoCurve = state
     end,
 })
 
@@ -4827,7 +4780,7 @@ SilentAimSection:Slider({
     Suffix = "%",
     Default = 100,
     Callback = function(value)
-        getgenv().KirtiumSilentAim.CurveAmount = value / 100
+        getgenv().MystrixSilentAim.CurveAmount = value / 100
     end,
 })
 
@@ -4841,14 +4794,14 @@ KeeperSection:Toggle({
     Name = "Auto Goalkeeper",
     Default = false,
     Callback = function(state)
-        local GK = getgenv().KirtiumKeeper
+        local GK = getgenv().MystrixKeeper
         GK.Enabled = state
         if state then
-            if not KirtiumHub.Functions.StartKeeper() then
+            if not MystrixHub.Functions.StartKeeper() then
                 GK.Enabled = false
             end
         else
-            KirtiumHub.Functions.StopKeeper()
+            MystrixHub.Functions.StopKeeper()
         end
     end,
 })
@@ -4857,7 +4810,7 @@ KeeperSection:Toggle({
     Name = "Keeper Dive / Slide",
     Default = true,
     Callback = function(state)
-        getgenv().KirtiumKeeper.Dive = state
+        getgenv().MystrixKeeper.Dive = state
     end,
 })
 
@@ -4865,7 +4818,7 @@ KeeperSection:Toggle({
     Name = "Keeper Rush Out",
     Default = true,
     Callback = function(state)
-        getgenv().KirtiumKeeper.Rush = state
+        getgenv().MystrixKeeper.Rush = state
     end,
 })
 
@@ -4873,7 +4826,7 @@ KeeperSection:Toggle({
     Name = "Keeper Gather Loose Balls",
     Default = true,
     Callback = function(state)
-        getgenv().KirtiumKeeper.Gather = state
+        getgenv().MystrixKeeper.Gather = state
     end,
 })
 
@@ -4881,7 +4834,7 @@ KeeperSection:Toggle({
     Name = "Keeper Poke",
     Default = true,
     Callback = function(state)
-        getgenv().KirtiumKeeper.Poke = state
+        getgenv().MystrixKeeper.Poke = state
     end,
 })
 
@@ -4893,7 +4846,7 @@ KeeperSection:Slider({
     Default = 4.5,
     Decimals = 1,
     Callback = function(value)
-        getgenv().KirtiumKeeper.Depth = value
+        getgenv().MystrixKeeper.Depth = value
     end,
 })
 
@@ -4904,7 +4857,7 @@ KeeperSection:Slider({
     Suffix = "st",
     Default = 14,
     Callback = function(value)
-        getgenv().KirtiumKeeper.DiveRange = value
+        getgenv().MystrixKeeper.DiveRange = value
     end,
 })
 
@@ -4916,7 +4869,7 @@ KeeperSection:Slider({
     Default = 0.06,
     Decimals = 2,
     Callback = function(value)
-        getgenv().KirtiumKeeper.DiveLead = value
+        getgenv().MystrixKeeper.DiveLead = value
     end,
 })
 
@@ -4928,7 +4881,7 @@ KeeperSection:Slider({
     Default = 2,
     Decimals = 1,
     Callback = function(value)
-        getgenv().KirtiumKeeper.StandReach = value
+        getgenv().MystrixKeeper.StandReach = value
     end,
 })
 
@@ -4939,7 +4892,7 @@ KeeperSection:Slider({
     Suffix = "st",
     Default = 34,
     Callback = function(value)
-        getgenv().KirtiumKeeper.RushRange = value
+        getgenv().MystrixKeeper.RushRange = value
     end,
 })
 
@@ -4954,10 +4907,10 @@ PowerSection:Toggle({
     Keybind = Enum.KeyCode.B,
     Default = false,
     Callback = function(state)
-        local MP = getgenv().KirtiumMaxPower
-        local forced = KirtiumHub.Force ~= nil and KirtiumHub.Force.Active == true
+        local MP = getgenv().MystrixMaxPower
+        local forced = MystrixHub.Force ~= nil and MystrixHub.Force.Active == true
         if state then
-            if not KirtiumHub.Functions.InstallMaxPower() then
+            if not MystrixHub.Functions.InstallMaxPower() then
                 MP.User = false
                 MP.Enabled = forced
                 return
@@ -4982,8 +4935,8 @@ SprintSection:Toggle({
     Keybind = Enum.KeyCode.N,
     Default = false,
     Callback = function(state)
-        getgenv().KirtiumSprint.Infinite = state
-        KirtiumHub.Functions.RefreshRunSpeed()
+        getgenv().MystrixSprint.Infinite = state
+        MystrixHub.Functions.RefreshRunSpeed()
     end,
 })
 
@@ -4991,11 +4944,11 @@ SprintSection:Toggle({
     Name = "Auto Sprint",
     Default = false,
     Callback = function(state)
-        getgenv().KirtiumSprint.Auto = state
+        getgenv().MystrixSprint.Auto = state
         if state then
-            KirtiumHub.Functions.StartAutoSprint()
+            MystrixHub.Functions.StartAutoSprint()
         else
-            KirtiumHub.Functions.StopAutoSprint()
+            MystrixHub.Functions.StopAutoSprint()
         end
     end,
 })
@@ -5007,8 +4960,8 @@ SprintSection:Slider({
     Default = 100,
     Suffix = "%",
     Callback = function(value)
-        getgenv().KirtiumSprint.Boost = value / 100
-        KirtiumHub.Functions.RefreshRunSpeed()
+        getgenv().MystrixSprint.Boost = value / 100
+        MystrixHub.Functions.RefreshRunSpeed()
     end,
 })
 
@@ -5022,11 +4975,11 @@ RagdollSection:Toggle({
     Name = "Anti-Tackle",
     Default = false,
     Callback = function(state)
-        if state and not KirtiumHub.Functions.InstallAntiRagdoll() then
-            KirtiumHub.Functions.SetAntiTackle(false)
+        if state and not MystrixHub.Functions.InstallAntiRagdoll() then
+            MystrixHub.Functions.SetAntiTackle(false)
             return
         end
-        KirtiumHub.Functions.SetAntiTackle(state)
+        MystrixHub.Functions.SetAntiTackle(state)
     end,
 })
 
@@ -5034,11 +4987,11 @@ RagdollSection:Toggle({
     Name = "Instant Get Up",
     Default = false,
     Callback = function(state)
-        if state and not KirtiumHub.Functions.InstallAntiRagdoll() then
-            KirtiumHub.Functions.SetInstantGetUp(false)
+        if state and not MystrixHub.Functions.InstallAntiRagdoll() then
+            MystrixHub.Functions.SetInstantGetUp(false)
             return
         end
-        KirtiumHub.Functions.SetInstantGetUp(state)
+        MystrixHub.Functions.SetInstantGetUp(state)
     end,
 })
 
@@ -5052,12 +5005,12 @@ PokeSection:Toggle({
     Name = "Auto Poke",
     Default = false,
     Callback = function(state)
-        local AP = getgenv().KirtiumAutoPoke
+        local AP = getgenv().MystrixAutoPoke
         AP.Enabled = state
         if state then
-            KirtiumHub.Functions.StartAutoPoke()
+            MystrixHub.Functions.StartAutoPoke()
         else
-            KirtiumHub.Functions.StopAutoPoke()
+            MystrixHub.Functions.StopAutoPoke()
         end
     end,
 })
@@ -5070,7 +5023,7 @@ PokeSection:Slider({
     Default = 6,
     Decimals = 1,
     Callback = function(value)
-        getgenv().KirtiumAutoPoke.Range = value
+        getgenv().MystrixAutoPoke.Range = value
     end,
 })
 
@@ -5084,12 +5037,12 @@ CooldownSection:Toggle({
     Name = "No Tackle / Poke Cooldown",
     Default = false,
     Callback = function(state)
-        local NC = getgenv().KirtiumNoCooldown
+        local NC = getgenv().MystrixNoCooldown
         NC.Enabled = state
         if state then
-            KirtiumHub.Functions.StartNoCooldown()
+            MystrixHub.Functions.StartNoCooldown()
         else
-            KirtiumHub.Functions.StopNoCooldown()
+            MystrixHub.Functions.StopNoCooldown()
         end
     end,
 })
@@ -5105,18 +5058,18 @@ ShootingSection:Toggle({
     Keybind = Enum.KeyCode.K,
     Default = false,
     Callback = function(state)
-        local AS = getgenv().KirtiumAutoShoot
+        local AS = getgenv().MystrixAutoShoot
         if state then
-            if not KirtiumHub.Functions.InstallSilentAim() then
+            if not MystrixHub.Functions.InstallSilentAim() then
                 AS.Enabled = false
                 return
             end
-            pcall(KirtiumHub.Functions.InstallMaxPower)
+            pcall(MystrixHub.Functions.InstallMaxPower)
             AS.Enabled = true
-            KirtiumHub.Functions.StartAutoShoot()
+            MystrixHub.Functions.StartAutoShoot()
         else
             AS.Enabled = false
-            KirtiumHub.Functions.StopAutoShoot()
+            MystrixHub.Functions.StopAutoShoot()
         end
     end,
 })
@@ -5128,7 +5081,7 @@ ShootingSection:Slider({
     Default = 60,
     Suffix = "st",
     Callback = function(value)
-        getgenv().KirtiumAutoShoot.Range = value
+        getgenv().MystrixAutoShoot.Range = value
     end,
 })
 
@@ -5142,9 +5095,9 @@ ReachSection:Toggle({
     Name = "Extended Ball Reach",
     Default = false,
     Callback = function(state)
-        local R = getgenv().KirtiumReach
+        local R = getgenv().MystrixReach
         R.Enabled = state
-        if not KirtiumHub.Functions.ApplyBallReach() then
+        if not MystrixHub.Functions.ApplyBallReach() then
             R.Enabled = false
         end
     end,
@@ -5158,7 +5111,7 @@ ReachSection:Slider({
     Default = 3,
     Decimals = 1,
     Callback = function(value)
-        getgenv().KirtiumReach.Add = value
+        getgenv().MystrixReach.Add = value
     end,
 })
 
@@ -5172,12 +5125,12 @@ PickupSection:Toggle({
     Name = "Auto Pickup",
     Default = false,
     Callback = function(state)
-        local AP = getgenv().KirtiumAutoPickup
+        local AP = getgenv().MystrixAutoPickup
         AP.Enabled = state
         if state then
-            KirtiumHub.Functions.StartAutoPickup()
+            MystrixHub.Functions.StartAutoPickup()
         else
-            KirtiumHub.Functions.StopAutoPickup()
+            MystrixHub.Functions.StopAutoPickup()
         end
     end,
 })
@@ -5189,7 +5142,7 @@ PickupSection:Slider({
     Suffix = "st",
     Default = 25,
     Callback = function(value)
-        getgenv().KirtiumAutoPickup.Range = value
+        getgenv().MystrixAutoPickup.Range = value
     end,
 })
 
@@ -5204,21 +5157,21 @@ local TrackerToggle = TrackerSection:Toggle({
     Keybind = Enum.KeyCode.J,
     Default = false,
     Callback = function(state)
-        local T = getgenv().KirtiumTracker
+        local T = getgenv().MystrixTracker
         T.Enabled = state
         if state then
-            if not KirtiumHub.Functions.StartBallTracker() then
+            if not MystrixHub.Functions.StartBallTracker() then
                 T.Enabled = false
             end
         else
-            KirtiumHub.Functions.StopBallTracker()
+            MystrixHub.Functions.StopBallTracker()
         end
     end,
 })
 
 local trackerColorCallback = function(value)
     if typeof(value) == "Color3" then
-        getgenv().KirtiumTracker.Color = value
+        getgenv().MystrixTracker.Color = value
     end
 end
 
@@ -5228,7 +5181,7 @@ for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
         pickerMade = pcall(function()
             TrackerToggle[name](TrackerToggle, {
                 Name = "Tracker Color",
-                Default = getgenv().KirtiumTracker.Color,
+                Default = getgenv().MystrixTracker.Color,
                 Callback = trackerColorCallback,
             })
         end)
@@ -5239,7 +5192,7 @@ for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
         pickerMade = pcall(function()
             TrackerSection[name](TrackerSection, {
                 Name = "Tracker Color",
-                Default = getgenv().KirtiumTracker.Color,
+                Default = getgenv().MystrixTracker.Color,
                 Callback = trackerColorCallback,
             })
         end)
@@ -5254,7 +5207,7 @@ TrackerSection:Slider({
     Suffix = "s",
     Decimals = 2,
     Callback = function(value)
-        getgenv().KirtiumTracker.Rate = value
+        getgenv().MystrixTracker.Rate = value
     end,
 })
 
@@ -5269,12 +5222,12 @@ DefenseSection:Toggle({
     Keybind = Enum.KeyCode.M,
     Default = false,
     Callback = function(state)
-        local GD = getgenv().KirtiumGuard
+        local GD = getgenv().MystrixGuard
         GD.Enabled = state
         if state then
-            KirtiumHub.Functions.StartGuard()
+            MystrixHub.Functions.StartGuard()
         else
-            KirtiumHub.Functions.StopGuard()
+            MystrixHub.Functions.StopGuard()
         end
     end,
 })
@@ -5286,7 +5239,7 @@ DefenseSection:Slider({
     Suffix = "st",
     Default = 8,
     Callback = function(value)
-        getgenv().KirtiumGuard.Distance = value
+        getgenv().MystrixGuard.Distance = value
     end,
 })
 
@@ -5298,7 +5251,7 @@ DefenseSection:Slider({
     Suffix = "s",
     Decimals = 2,
     Callback = function(value)
-        getgenv().KirtiumGuard.Predict = value
+        getgenv().MystrixGuard.Predict = value
     end,
 })
 
@@ -5309,7 +5262,7 @@ DefenseSection:Slider({
     Suffix = "st",
     Default = 22,
     Callback = function(value)
-        getgenv().KirtiumGuard.Engage = value
+        getgenv().MystrixGuard.Engage = value
     end,
 })
 
@@ -5317,7 +5270,7 @@ DefenseSection:Toggle({
     Name = "Ignore Teammates",
     Default = true,
     Callback = function(state)
-        getgenv().KirtiumGuard.IgnoreTeammates = state
+        getgenv().MystrixGuard.IgnoreTeammates = state
     end,
 })
 
@@ -5329,11 +5282,11 @@ local SkillsSection = CombatTab:Section({
 
 SkillsSection:Dropdown({
     Name = "Trick Select",
-    Options = KirtiumHub.TrickOptions,
+    Options = MystrixHub.TrickOptions,
     Default = { "Auto" },
     Multi = true,
     Callback = function(value)
-        KirtiumHub.Functions.SetTrickSelection(value)
+        MystrixHub.Functions.SetTrickSelection(value)
     end,
 })
 
@@ -5341,21 +5294,21 @@ SkillsSection:Toggle({
     Name = "Auto Tricks",
     Default = false,
     Callback = function(state)
-        local AT = getgenv().KirtiumAutoTricks
+        local AT = getgenv().MystrixAutoTricks
         if state then
-            if not KirtiumHub.Functions.InstallSilentAim() then
+            if not MystrixHub.Functions.InstallSilentAim() then
                 AT.Enabled = false
                 return
             end
-            pcall(KirtiumHub.Functions.InstallMaxPower)
-            if not KirtiumHub.Functions.StartAutoTricks() then
+            pcall(MystrixHub.Functions.InstallMaxPower)
+            if not MystrixHub.Functions.StartAutoTricks() then
                 AT.Enabled = false
                 return
             end
             AT.Enabled = true
         else
             AT.Enabled = false
-            KirtiumHub.Functions.StopAutoTricks()
+            MystrixHub.Functions.StopAutoTricks()
         end
     end,
 })
@@ -5367,7 +5320,7 @@ SkillsSection:Slider({
     Default = 70,
     Suffix = "st",
     Callback = function(value)
-        getgenv().KirtiumAutoTricks.Range = value
+        getgenv().MystrixAutoTricks.Range = value
     end,
 })
 
@@ -5378,7 +5331,7 @@ SkillsSection:Slider({
     Suffix = "st",
     Default = 14,
     Callback = function(value)
-        getgenv().KirtiumAutoTricks.Defender = value
+        getgenv().MystrixAutoTricks.Defender = value
     end,
 })
 
@@ -5386,17 +5339,17 @@ SkillsSection:Toggle({
     Name = "Auto Dribble",
     Default = false,
     Callback = function(state)
-        local AD = getgenv().KirtiumAutoDribble
+        local AD = getgenv().MystrixAutoDribble
         if state then
-            if not KirtiumHub.Functions.SkillModule() then
+            if not MystrixHub.Functions.SkillModule() then
                 AD.Enabled = false
                 return
             end
             AD.Enabled = true
-            KirtiumHub.Functions.StartAutoDribble()
+            MystrixHub.Functions.StartAutoDribble()
         else
             AD.Enabled = false
-            KirtiumHub.Functions.StopAutoDribble()
+            MystrixHub.Functions.StopAutoDribble()
         end
     end,
 })
@@ -5408,7 +5361,7 @@ SkillsSection:Slider({
     Suffix = "st",
     Default = 12,
     Callback = function(value)
-        getgenv().KirtiumAutoDribble.Range = value
+        getgenv().MystrixAutoDribble.Range = value
     end,
 })
 
@@ -5419,7 +5372,7 @@ local SettingsTab = Window:Tab({
     Icon = "lucide:settings",
 })
 
-KirtiumHub.UIController.Tabs.Settings = SettingsTab
+MystrixHub.UIController.Tabs.Settings = SettingsTab
 
 Window:BuildSettings(SettingsTab)
 
