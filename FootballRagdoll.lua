@@ -1,226 +1,5835 @@
-local function base91decode(s,alphabet)
-    local lut={}
-    for i=1,#alphabet do lut[alphabet:byte(i)]=i-1 end
-    local output={}
-    local value=-1
-    local buffer=0
-    local bits=0
-    for i=1,#s do
-        local c=lut[s:byte(i)]
-        if c then
-            if value<0 then value=c
+if getgenv().MystrixHub then
+    if MystrixHub.ConnectionController and MystrixHub.ConnectionController.Connections then
+        for i, v in next, MystrixHub.ConnectionController.Connections do
+            pcall(function() v:Disconnect() end)
+            MystrixHub.ConnectionController.Connections[i] = nil
+        end
+    end
+    if MystrixHub.TasksController and MystrixHub.TasksController.Tasks then
+        for i, v in next, MystrixHub.TasksController.Tasks do
+            pcall(function() task.cancel(v) end)
+            MystrixHub.TasksController.Tasks[i] = nil
+        end
+    end
+    if MystrixHub.UIController then
+        local UI = MystrixHub.UIController
+    end
+    pcall(function()
+        for _, sg in ipairs(cloneref(game:GetService("CoreGui")):GetChildren()) do
+            if sg.Name == "Blossom" then sg:Destroy() end
+        end
+    end)
+    getgenv().MystrixHub = nil
+    task.wait(0.2)
+end
+
+local CURRENT_VERSION = "v1.1.7"
+local DISCORD_INVITE = "46JkThWjPB"
+
+local Services = setmetatable({}, {
+    __index = function(self, Index)
+        local service = cloneref(game:GetService(Index))
+        rawset(self, Index, service)
+        return service
+    end
+})
+
+local Players = Services.Players
+local RunService = Services.RunService
+local LocalPlayer = Players.LocalPlayer
+
+getgenv().MystrixHub = {
+    Meta = {
+        Version = CURRENT_VERSION,
+        Discord = DISCORD_INVITE,
+        Logo = HUB_LOGO,
+        ServerName = "Mystrix Hub",
+    },
+
+    PlayerController = {
+        Player = LocalPlayer,
+        PlayerGui = LocalPlayer.PlayerGui,
+    },
+
+    UIController = {
+        Window = nil,
+        Tabs = {},
+    },
+
+    ConnectionController = {
+        Connections = {},
+    },
+
+    TasksController = {
+        Tasks = {},
+    },
+
+    Functions = {},
+}
+
+function MystrixHub.ConnectionController.Insert(Connection)
+    table.insert(MystrixHub.ConnectionController.Connections, Connection)
+end
+
+function MystrixHub.TasksController.Insert(Task)
+    table.insert(MystrixHub.TasksController.Tasks, Task)
+end
+
+getgenv().MystrixSilentAim = getgenv().MystrixSilentAim or { Enabled = false, Hooked = false }
+getgenv().MystrixMaxPower = getgenv().MystrixMaxPower or { Enabled = false, Hooked = false }
+local SilentAimState = getgenv().MystrixSilentAim
+if SilentAimState.OnlyGoalShots == nil then SilentAimState.OnlyGoalShots = true end
+local MaxPowerState = getgenv().MystrixMaxPower
+
+function MystrixHub.Functions.InstallMaxPower()
+    local MP = getgenv().MystrixMaxPower
+    if MP.Hooked then return true end
+    local ok, Rules = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Rules
+    end)
+    if not ok or type(Rules) ~= "table" or type(Rules.charge) ~= "function" then return false end
+    local orig
+    local function wrapper(value)
+        local state = getgenv().MystrixMaxPower
+        if state and state.Enabled then return 1 end
+        return orig(value)
+    end
+    if hookfunction then
+        orig = hookfunction(Rules.charge, wrapper)
+        MP.Hooked = true
+    elseif setreadonly then
+        orig = Rules.charge
+        setreadonly(Rules, false)
+        Rules.charge = wrapper
+        setreadonly(Rules, true)
+        MP.Hooked = true
+    end
+    return MP.Hooked == true
+end
+
+getgenv().MystrixReach = getgenv().MystrixReach or { Enabled = false, Add = 3 }
+getgenv().MystrixReach.Enabled = false
+getgenv().MystrixAntiRagdoll = getgenv().MystrixAntiRagdoll or {}
+getgenv().MystrixAntiRagdoll.Enabled = false
+getgenv().MystrixAntiRagdoll.Tackle = false
+getgenv().MystrixAntiRagdoll.GetUp = false
+getgenv().MystrixAntiRagdoll.Running = false
+
+function MystrixHub.Functions.InstallAntiRagdoll()
+    local AR = getgenv().MystrixAntiRagdoll
+    if AR.Hooked2 then return true end
+    local mod = MystrixHub.Functions.MannequinClientModule()
+    if not mod then return false end
+    local okT, Tuning = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+    end)
+    if okT and type(Tuning) == "table" and type(Tuning.Slide) == "table" then
+        AR.Tuning = Tuning
+        AR.SitDefault = AR.SitDefault or Tuning.Slide.SitTime
+    end
+    AR.Hooked = true
+    AR.Hooked2 = true
+    return true
+end
+
+function MystrixHub.Functions.RecoveredRemote()
+    local AR = getgenv().MystrixAntiRagdoll
+    if AR.Remote then return AR.Remote end
+    local ok, remote = pcall(function()
+        local Net = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
+        return Net:RemoteEvent("MannequinRecovered")
+    end)
+    if ok and remote then
+        AR.Remote = remote
+        return remote
+    end
+    return nil
+end
+
+function MystrixHub.Functions.InstantRecover(body)
+    local AR = getgenv().MystrixAntiRagdoll
+    local remote = MystrixHub.Functions.RecoveredRemote()
+    if not body.mrWrapped then
+        body.mrWrapped = true
+        body.mrOrig = body.onRecovered
+        body.onRecovered = function()
+            if not remote then return end
+            local wait = 0.65 - (os.clock() - (body.physicalAt or 0))
+            if wait <= 0 then
+                pcall(function() remote:FireServer() end)
             else
-                value=value+c*91
-                buffer=buffer+value*2^bits
-                bits=bits+((value%8192)>88 and 13 or 14)
-                while bits>=8 do
-                    output[#output+1]=string.char(buffer%256)
-                    buffer=math.floor(buffer/256)
-                    bits=bits-8
-                end
-                value=-1
+                task.delay(wait, function()
+                    if not body.active then
+                        pcall(function() remote:FireServer() end)
+                    end
+                end)
             end
         end
     end
-    if value>=0 then output[#output+1]=string.char((buffer+value*2^bits)%256) end
-    return table.concat(output)
-end
-local function bunzip(s)
-    local pos=1
-    local buffer=0
-    local bits=0
-    local floor=math.floor
-    local function get(n)
-        if n>24 then
-            local n1=n-24
-            return get(n1)*16777216+get(24)
-        end
-        while bits<n do
-            local byte=s:byte(pos)
-            assert(byte,'truncated compressed data')
-            buffer=buffer*256+byte
-            bits=bits+8
-            pos=pos+1
-        end
-        local v=floor(buffer/2^(bits-n))%2^n
-        bits=bits-n
-        buffer=buffer%2^bits
-        return v
+    local mode = body.mode
+    if mode == "Fall" or mode == "KickFall" or mode == "FrontFall" or mode == "Slide" then
+        body.yaw = AR.Yaw or body.yaw or 0
     end
-    assert(get(24)==0x425a68,'invalid bzip2 header')
-    local blocksize=get(8)-48
-    assert(blocksize>=1 and blocksize<=9,'invalid blocksize')
-    local result={}
-    while true do
-        local magic=get(48)
-        local crc=get(32)
-        if magic==0x177245385090 then break end
-        assert(magic==0x314159265359,'invalid bzip2 block magic')
-        assert(get(1)==0,'randomized blocks unsupported')
-        local primary=get(24)
-        local used={}
-        local groupsMask=get(16)
-        local available={}
-        for block=0,15 do
-            local present=floor(groupsMask/2^(15-block))%2
-            if present==1 then
-                local charMask=get(16)
-                for j=0,15 do
-                    if floor(charMask/2^(15-j))%2==1 then
-                        available[#available+1]=block*16+j
+    body.pending = nil
+    body.launch = nil
+    body.fromKick = nil
+    body.fromFront = nil
+    body.seatPending = false
+    body.driveOff = nil
+    body.reseatPending = true
+    local ok = pcall(body.reseat, body)
+    if not ok then
+        pcall(body.standNow, body)
+    end
+    if body.active then
+        pcall(body.standNow, body)
+    end
+end
+
+function MystrixHub.Functions.StopBallKeep()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallKeep") end)
+end
+
+function MystrixHub.Functions.StartBallKeep()
+    MystrixHub.Functions.StopBallKeep()
+    local AR = getgenv().MystrixAntiRagdoll
+    local st = { Had = 0 }
+    RunService:BindToRenderStep("MystrixBallKeep", Enum.RenderPriority.Input.Value + 9, function()
+        if not AR.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local id = char:GetAttribute("DribbleId")
+        if type(id) ~= "number" or id == 0 then return end
+        local ball = MystrixHub.Functions.GetBall()
+        if not ball then return end
+        local now = os.clock()
+        if ball:GetAttribute("Possessor") == id then
+            st.Had = now
+            return
+        end
+        if now - st.Had > 1.5 then return end
+        if MystrixHub.TrickActive or now < (MystrixHub.ShotNext or 0) then return end
+        local vel = ball.AssemblyLinearVelocity
+        if Vector3.new(vel.X, 0, vel.Z).Magnitude > 40 then
+            st.Had = 0
+            return
+        end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        local dx = ball.Position.X + vel.X * 0.12 - root.Position.X
+        local dz = ball.Position.Z + vel.Z * 0.12 - root.Position.Z
+        local distance = math.sqrt(dx * dx + dz * dz)
+        if distance > 45 or distance < 1.2 then return end
+        local direction = Vector3.new(dx / distance, 0, dz / distance)
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 31)
+        cm.FacingDirection = direction
+    end)
+end
+
+function MystrixHub.Functions.StopAntiRagdoll()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixAntiRagdoll") end)
+    MystrixHub.Functions.StopBallKeep()
+    getgenv().MystrixAntiRagdoll.Running = false
+    pcall(function()
+        local mod = MystrixHub.MannequinClientRef
+        local char = LocalPlayer.Character
+        local animator = mod and char and mod.getAnimator(char)
+        local body = animator and animator.body
+        if body then
+            if body.mrWrapped then
+                body.onRecovered = body.mrOrig
+                body.mrWrapped = nil
+                body.mrOrig = nil
+            end
+            if body.mrTackleFn and body.onTackle == body.mrTackleFn then
+                body.onTackle = body.mrTackleOrig
+            end
+            body.mrTackleFn = nil
+            body.mrTackleOrig = nil
+            body.mrHit = nil
+            body.mrHitAt = nil
+        end
+    end)
+end
+
+function MystrixHub.Functions.StartAntiRagdoll()
+    local F = MystrixHub.Functions
+    F.StopAntiRagdoll()
+    local mod = F.MannequinClientModule()
+    if not mod then return false end
+    local AR = getgenv().MystrixAntiRagdoll
+    F.StartBallKeep()
+    local cachedChar, cachedAnimator
+    RunService:BindToRenderStep("MystrixAntiRagdoll", Enum.RenderPriority.Input.Value + 6, function()
+        if not AR.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local animator = cachedAnimator
+        if char ~= cachedChar or not animator or not animator.body then
+            local ok, result = pcall(mod.getAnimator, char)
+            if not ok or not result then return end
+            cachedChar, cachedAnimator = char, result
+            animator = result
+        end
+        local body = animator.body
+        if not body then return end
+        if not body.active then
+            local root = char:FindFirstChild("Root")
+            if root then
+                local look = root.CFrame.LookVector
+                if look.X * look.X + look.Z * look.Z > 0.000001 then
+                    AR.Yaw = math.atan2(-look.X, -look.Z)
+                end
+            end
+            return
+        end
+        local mode = body.mode
+        local now = os.clock()
+        if mode == "Slide" or mode == "Dive" or mode == "Block" or mode == "KeyDive" then
+            AR.OwnAt = now
+            if mode ~= "Slide" or not AR.GetUp then return end
+            local t = body.t or 0
+            local hit = body.tackled ~= nil and next(body.tackled) ~= nil
+            if t < 0.2 then return end
+            if not (hit or body.slideEnd ~= nil or t >= 0.3) then return end
+            F.InstantRecover(body)
+            return
+        end
+        if not AR.Tackle then return end
+        if now - (AR.OwnAt or -math.huge) < 0.6 then return end
+        F.InstantRecover(body)
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopAntiRagdoll()
+    end })
+    AR.Running = true
+    return true
+end
+
+function MystrixHub.Functions.RefreshAntiRagdoll()
+    local F = MystrixHub.Functions
+    local AR = getgenv().MystrixAntiRagdoll
+    AR.Enabled = AR.Tackle == true or AR.GetUp == true
+    local T = AR.Tuning
+    if T and T.Slide and AR.SitDefault then
+        T.Slide.SitTime = AR.GetUp and 0.02 or AR.SitDefault
+    end
+    if AR.Enabled then
+        if not AR.Running then
+            F.StartAntiRagdoll()
+        end
+    elseif AR.Running then
+        F.StopAntiRagdoll()
+    end
+end
+
+function MystrixHub.Functions.SetAntiTackle(state)
+    getgenv().MystrixAntiRagdoll.Tackle = state == true
+    MystrixHub.Functions.RefreshAntiRagdoll()
+end
+
+function MystrixHub.Functions.SetInstantGetUp(state)
+    getgenv().MystrixAntiRagdoll.GetUp = state == true
+    MystrixHub.Functions.RefreshAntiRagdoll()
+end
+
+getgenv().MystrixNoCooldown = getgenv().MystrixNoCooldown or { Enabled = false }
+
+function MystrixHub.Functions.StopNoCooldown()
+    local NC = getgenv().MystrixNoCooldown
+    if NC.Conns then
+        for _, c in ipairs(NC.Conns) do
+            pcall(function() c:Disconnect() end)
+        end
+        NC.Conns = nil
+    end
+    if NC.Tuning and NC.SlideDefault then
+        NC.Tuning.Slide.Cooldown = NC.SlideDefault
+    end
+end
+
+function MystrixHub.Functions.StartNoCooldown()
+    MystrixHub.Functions.StopNoCooldown()
+    local NC = getgenv().MystrixNoCooldown
+    local ok, tuning = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+    end)
+    if ok and type(tuning) == "table" and type(tuning.Slide) == "table" then
+        NC.Tuning = tuning
+        NC.SlideDefault = NC.SlideDefault or tuning.Slide.Cooldown
+        tuning.Slide.Cooldown = 0
+    end
+    local conns = {}
+    NC.Conns = conns
+    for _, name in ipairs({ "SlideReadyAt", "SlideCooldown", "PokeReadyAt" }) do
+        local function clear()
+            if not NC.Enabled then return end
+            local v = LocalPlayer:GetAttribute(name)
+            if v ~= nil and v ~= 0 then
+                LocalPlayer:SetAttribute(name, 0)
+            end
+        end
+        conns[#conns + 1] = LocalPlayer:GetAttributeChangedSignal(name):Connect(clear)
+        clear()
+    end
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopNoCooldown()
+    end })
+    return true
+end
+
+getgenv().MystrixAutoPoke = getgenv().MystrixAutoPoke or { Enabled = false, Range = 6 }
+
+function MystrixHub.Functions.GetPokeAction()
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local context = scripts and scripts:FindFirstChild("Poke")
+    local action = context and context:FindFirstChild("Poke")
+    if action and action:IsA("InputAction") then
+        return action
+    end
+    return nil
+end
+
+function MystrixHub.Functions.FirePoke()
+    local action = MystrixHub.Functions.GetPokeAction()
+    if not action then return false end
+    local binding = MystrixHub.PokeBinding
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "MystrixPoke"
+        binding.Type = Enum.InputBindingType.Scriptable
+        binding.Parent = action
+        MystrixHub.PokeBinding = binding
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
+            pcall(function() binding:Destroy() end)
+            MystrixHub.PokeBinding = nil
+        end })
+    end
+    binding:Fire(true)
+    task.delay(0.05, function()
+        pcall(function() binding:Fire(false) end)
+    end)
+    return true
+end
+
+function MystrixHub.Functions.FindPokeTarget()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("Root")
+    if not root then return nil end
+    local ball = MystrixHub.Functions.GetBall()
+    if not ball then return nil end
+    local possessor = ball:GetAttribute("Possessor")
+    local ownId = char:GetAttribute("DribbleId")
+    if type(possessor) ~= "number" or possessor == 0 or possessor == ownId then return nil end
+    local myTeam = char:GetAttribute("Team")
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model ~= char and model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+            local team = model:GetAttribute("Team")
+            if myTeam ~= nil and team == myTeam then return nil end
+            local otherRoot = model:FindFirstChild("Root")
+            if not (otherRoot and otherRoot:IsA("BasePart")) then return nil end
+            local bodyState = model:GetAttribute("BodyState")
+            if bodyState ~= nil and bodyState ~= "Animated" then return nil end
+            local diff = otherRoot.Position - root.Position
+            return model, Vector3.new(diff.X, 0, diff.Z).Magnitude
+        end
+    end
+    return nil
+end
+
+function MystrixHub.Functions.IsTouch()
+    local UIS = Services.UserInputService
+    return UIS.TouchEnabled and not UIS.KeyboardEnabled
+end
+
+function MystrixHub.Functions.ReleaseAllBindings()
+    local B = MystrixHub.Bindings
+    if B then
+        for _, b in pairs(B) do
+            pcall(function() b:Fire(false) end)
+        end
+    end
+    local AS = MystrixHub.AutoShoot
+    if AS and AS.Binding then
+        pcall(function() AS.Binding:Fire(false) end)
+    end
+    local AP = MystrixHub.AutoPoke
+    if AP and AP.Binding then
+        pcall(function() AP.Binding:Fire(false) end)
+    end
+    MystrixHub.TrickActive = false
+    MystrixHub.ShotNext = 0
+    local V = MystrixHub.TrickView
+    if V then V.Active = false end
+    local F = MystrixHub.Force
+    if F then F.Until = 0 end
+end
+
+function MystrixHub.Functions.PokeOpportunity(target, range)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("Root")
+    local cm = char and char:FindFirstChildOfClass("ControllerManager")
+    if not (root and cm and target) then return false end
+    local gc = cm:FindFirstChild("GroundController")
+    if not gc or cm.ActiveController ~= gc then return false end
+    local ball = MystrixHub.Functions.GetBall()
+    if not ball or ball:GetAttribute("Possessor") ~= target:GetAttribute("DribbleId") then return false end
+    local bp, bv = ball.Position, ball.AssemblyLinearVelocity
+    local view = MystrixHub.Functions.ClientModule("BallView")
+    if view and type(view.freeState) == "function" then
+        local ok, pos, vel = pcall(view.freeState)
+        if ok and typeof(pos) == "Vector3" and typeof(vel) == "Vector3" then
+            bp, bv = pos, vel
+        end
+    end
+    local aim = bp + Vector3.new(bv.X, 0, bv.Z) * 0.14 - root.Position
+    local flat = Vector3.new(aim.X, 0, aim.Z)
+    local dist = flat.Magnitude
+    if dist < 0.8 or dist > math.min(range, 7.2) then return false end
+    local look = root.CFrame.LookVector
+    local face = Vector3.new(look.X, 0, look.Z)
+    if face.Magnitude < 0.01 or face.Unit:Dot(flat.Unit) < -0.05 then return false end
+    if math.abs(bp.Y - root.Position.Y) > 5 then return false end
+    return true
+end
+
+function MystrixHub.Functions.StopAutoPoke()
+    local state = MystrixHub.AutoPoke
+    MystrixHub.AutoPoke = nil
+    if state then
+        if state.Conn then
+            pcall(function() state.Conn:Disconnect() end)
+        end
+        if state.Binding then
+            pcall(function() state.Binding:Fire(false) end)
+            pcall(function() state.Binding:Destroy() end)
+        end
+    end
+end
+
+function MystrixHub.Functions.StartAutoPoke()
+    local F = MystrixHub.Functions
+    F.StopAutoPoke()
+    local st = { Acc = 0, Next = 0, Target = nil, Seen = 0 }
+    MystrixHub.AutoPoke = st
+    st.Conn = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.075 then return end
+        st.Acc = 0
+        local cfg = getgenv().MystrixAutoPoke
+        if not cfg.Enabled then return end
+        local now = os.clock()
+        if now < st.Next then return end
+        local char = LocalPlayer.Character
+        if not char or F.MatchPaused(char) then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        if MystrixHub.TrickActive or now < (MystrixHub.ShotNext or 0) then return end
+        local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+        if type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow() + 0.03 then return end
+        local target, distance = F.FindPokeTarget()
+        if not target or not distance or distance > math.min(cfg.Range + 1, 9) then
+            st.Target, st.Seen = nil, 0
+            return
+        end
+        if st.Target ~= target then
+            st.Target, st.Seen = target, now
+            return
+        end
+        if now - st.Seen < 0.09 or not F.PokeOpportunity(target, cfg.Range) then return end
+        local ok, fired = pcall(F.FirePoke)
+        st.Next = now + ((ok and fired) and 0.75 or 0.25)
+        if ok and fired then st.Seen = now + 0.3 end
+    end)
+    MystrixHub.ConnectionController.Insert(st.Conn)
+    return true
+end
+
+getgenv().MystrixSprint = getgenv().MystrixSprint or { Infinite = false, Auto = false }
+
+function MystrixHub.Functions.MannequinClientModule()
+    local cached = MystrixHub.MannequinClientRef
+    if cached then return cached end
+    local ok, mod = pcall(function()
+        return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("MannequinClient"))
+    end)
+    if ok and type(mod) == "table" then
+        MystrixHub.MannequinClientRef = mod
+        return mod
+    end
+    return nil
+end
+
+function MystrixHub.Functions.StopAutoSprint()
+    local state = MystrixHub.AutoSprint
+    MystrixHub.AutoSprint = nil
+    if state and state.Restore then
+        state.Restore()
+    end
+end
+
+function MystrixHub.Functions.StartAutoSprint()
+    MystrixHub.Functions.StopAutoSprint()
+    local mod = MystrixHub.Functions.MannequinClientModule()
+    if not mod then return false end
+    local state = { Original = mod.keepSprint, Move = nil, Cached = true, At = 0 }
+
+    local function moving()
+        local now = os.clock()
+        if now - state.At < 0.05 then return state.Cached end
+        state.At = now
+        if not (state.Move and state.Move.Parent) then
+            local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+            local ctx = scripts and scripts:FindFirstChild("Mannequin")
+            state.Move = ctx and ctx:FindFirstChild("Move")
+        end
+        if not state.Move then
+            state.Cached = true
+            return true
+        end
+        local ok, s = pcall(state.Move.GetState, state.Move)
+        state.Cached = ok and typeof(s) == "Vector2" and s.Magnitude > 0.1
+        return state.Cached
+    end
+
+    local function wrapper(...)
+        if getgenv().MystrixSprint.Auto and moving() then
+            return true
+        end
+        local original = state.Original
+        if original then
+            return original(...)
+        end
+        return false
+    end
+
+    local function restore()
+        if state.Conn then
+            pcall(function() state.Conn:Disconnect() end)
+            state.Conn = nil
+        end
+        if mod.keepSprint == wrapper then
+            mod.keepSprint = state.Original
+        end
+    end
+
+    state.Restore = restore
+    mod.keepSprint = wrapper
+    local acc = 0
+    state.Conn = RunService.Heartbeat:Connect(function(dt)
+        acc += dt
+        if acc < 0.5 then return end
+        acc = 0
+        if mod.keepSprint ~= wrapper then
+            state.Original = mod.keepSprint
+            mod.keepSprint = wrapper
+        end
+    end)
+    MystrixHub.AutoSprint = state
+    MystrixHub.ConnectionController.Insert(state.Conn)
+    MystrixHub.ConnectionController.Insert({ Disconnect = restore })
+    return true
+end
+
+function MystrixHub.Functions.StopInfiniteSprint()
+    MystrixHub.RunSpeedBound = nil
+    pcall(function() RunService:UnbindFromRenderStep("MystrixRunSpeed") end)
+end
+
+function MystrixHub.Functions.StartInfiniteSprint()
+    local F = MystrixHub.Functions
+    F.StopInfiniteSprint()
+    MystrixHub.RunSpeedBound = true
+    local speed = F.SprintBase()
+    local cfg = getgenv().MystrixSprint
+    local char, cm
+    RunService:BindToRenderStep("MystrixRunSpeed", Enum.RenderPriority.Input.Value + 5, function()
+        local boost = cfg.Boost or 1
+        if not (cfg.Infinite or boost > 1) then return end
+        local current = LocalPlayer.Character
+        if current ~= char or not (cm and cm.Parent) then
+            char = current
+            cm = char and char:FindFirstChildOfClass("ControllerManager")
+        end
+        if not cm then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local dir = cm.MovingDirection
+        if dir.X * dir.X + dir.Y * dir.Y + dir.Z * dir.Z < 0.0025 then return end
+        local current = cm.BaseMoveSpeed
+        local base = current
+        if cfg.Infinite and base < speed then
+            base = speed
+        end
+        if boost > 1 and base >= speed * 0.85 then
+            local target = speed * boost
+            if base < target then base = target end
+        end
+        if base ~= current then
+            cm.BaseMoveSpeed = base
+        end
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopInfiniteSprint()
+    end })
+end
+
+function MystrixHub.Functions.RefreshRunSpeed()
+    local cfg = getgenv().MystrixSprint
+    if cfg.Infinite or (cfg.Boost or 1) > 1 then
+        if not MystrixHub.RunSpeedBound then
+            MystrixHub.Functions.StartInfiniteSprint()
+        end
+    else
+        MystrixHub.Functions.StopInfiniteSprint()
+    end
+end
+
+function MystrixHub.Functions.SilentAimModules()
+    local SA = getgenv().MystrixSilentAim
+    if SA.BallView and SA.Flight and SA.Families then return true end
+    pcall(function()
+        local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+        SA.BallView = require(gameFolder:WaitForChild("BallView"))
+    end)
+    pcall(function()
+        local sharedGame = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+        local Kick = require(sharedGame:WaitForChild("Kick"))
+        SA.Flight = Kick.Flight
+        SA.Families = Kick.Families
+        SA.KeeperRules = require(sharedGame:WaitForChild("KeeperRules"))
+    end)
+    return SA.BallView ~= nil and SA.Flight ~= nil and SA.Families ~= nil
+end
+
+function MystrixHub.Functions.SilentAimGoalCompute()
+    local SA = getgenv().MystrixSilentAim
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("Root")
+    local goals = {}
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            table.insert(goals, part)
+        end
+    end
+    if #goals < 2 then return nil end
+    table.sort(goals, function(a, b) return a.Position.X < b.Position.X end)
+    local team = char and char:GetAttribute("Team")
+    local hasTeam = team == "Blue" or team == "Red"
+    local chosen
+    if hasTeam and SA.KeeperRules then
+        local ok, side, area = pcall(function()
+            return SA.KeeperRules.ownSide(team), SA.KeeperRules.area(team)
+        end)
+        if ok and side and area then
+            for _, part in ipairs(goals) do
+                if (part.Position.X - area.centre.X) * -side > 0 then
+                    chosen = part
+                    break
+                end
+            end
+        end
+    end
+    if not chosen and hasTeam then
+        local blueSide = workspace:GetAttribute("BlueSide") == 1 and 1 or -1
+        local out = team == "Blue" and -blueSide or blueSide
+        chosen = out == -1 and goals[1] or goals[#goals]
+    end
+    if not chosen and root then
+        local look = root.CFrame.LookVector
+        local bestDot = -math.huge
+        for _, part in ipairs(goals) do
+            local d = (part.Position.X - root.Position.X) * look.X
+            if d > bestDot then
+                bestDot = d
+                chosen = part
+            end
+        end
+    end
+    if not chosen then return nil end
+    local b = chosen.Position.X < (goals[1].Position.X + goals[#goals].Position.X) / 2 and -1 or 1
+    local q = chosen.Size.Y / 9.142857142857142
+    local ground = chosen.Position.Y - chosen.Size.Y / 2
+    return {
+        x = chosen.Position.X - b * chosen.Size.X / 2 + b * 0.21428571428571425 * q,
+        z = chosen.Position.Z,
+        ground = ground,
+        top = ground + 8.714285714285714 * q,
+        half = 13.071428571428571 * q,
+        out = b,
+        team = hasTeam and team or nil,
+        char = char,
+    }
+end
+
+function MystrixHub.Functions.Budget(seconds)
+    local touch = MystrixHub.IsTouchCached
+    if touch == nil then
+        touch = MystrixHub.Functions.IsTouch()
+        MystrixHub.IsTouchCached = touch
+    end
+    return touch and seconds * 0.5 or seconds
+end
+
+function MystrixHub.Functions.MannequinSnapshot()
+    local snap = MystrixHub.MannequinSnap
+    local now = os.clock()
+    if snap and now - snap.At < 0.15 then
+        return snap.List
+    end
+    local list = {}
+    local n = 0
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        local root = model:FindFirstChild("Root")
+        if root and model:IsA("Model") and root:IsA("BasePart") then
+            n += 1
+            list[n] = {
+                model = model,
+                team = model:GetAttribute("Team"),
+                keeper = model:GetAttribute("AIGoalie") ~= nil or model:GetAttribute("Role") == "Goalkeeper",
+                pos = root.Position,
+            }
+        end
+    end
+    MystrixHub.MannequinSnap = { At = now, List = list }
+    return list
+end
+
+function MystrixHub.Functions.SilentAimGoal()
+    local cache = MystrixHub.GoalCache
+    if not cache then
+        cache = { At = 0, Valid = false }
+        MystrixHub.GoalCache = cache
+    end
+    local char = LocalPlayer.Character
+    local team = char and char:GetAttribute("Team")
+    local now = os.clock()
+    if cache.Valid and cache.Char == char and cache.Team == team and now - cache.At < 0.5 then
+        return cache.Value
+    end
+    cache.Value = MystrixHub.Functions.SilentAimGoalCompute()
+    cache.Char = char
+    cache.Team = team
+    cache.At = now
+    cache.Valid = true
+    return cache.Value
+end
+
+function MystrixHub.Functions.SetQuickInteract(state)
+    local backup = MystrixHub.PromptBackup
+    if not backup then
+        backup = setmetatable({}, { __mode = "k" })
+        MystrixHub.PromptBackup = backup
+    end
+    if MystrixHub.QuickInteractConn then
+        MystrixHub.QuickInteractConn:Disconnect()
+        MystrixHub.QuickInteractConn = nil
+    end
+    if state then
+        MystrixHub.QuickInteractConn = Services.ProximityPromptService.PromptShown:Connect(function(prompt)
+            if not backup[prompt] then
+                backup[prompt] = { hold = prompt.HoldDuration, line = prompt.RequiresLineOfSight }
+            end
+            prompt.HoldDuration = 0
+            prompt.RequiresLineOfSight = false
+        end)
+    else
+        for prompt, orig in pairs(backup) do
+            pcall(function()
+                prompt.HoldDuration = orig.hold
+                prompt.RequiresLineOfSight = orig.line
+            end)
+        end
+        table.clear(backup)
+    end
+end
+
+getgenv().MystrixAutoShoot  = getgenv().MystrixAutoShoot  or { Enabled = false, Range = 60 }
+getgenv().MystrixAutoPickup = getgenv().MystrixAutoPickup or { Enabled = false, Range = 25 }
+
+function MystrixHub.Functions.GetBall()
+    local ball = MystrixHub.BallRef
+    if ball and ball.Parent then return ball end
+    ball = Services.CollectionService:GetTagged("SoccerBall")[1]
+    MystrixHub.BallRef = ball
+    return ball
+end
+
+function MystrixHub.Functions.GetKickAction(name)
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local context = scripts and scripts:FindFirstChild("Kick")
+    local action = context and context:FindFirstChild(name or "KickStrike")
+    if action and action:IsA("InputAction") then
+        return action
+    end
+    return nil
+end
+
+function MystrixHub.Functions.StopAutoShoot()
+    if not getgenv().MystrixAutoTricks.Enabled then
+        MystrixHub.Functions.AutoEngineStop()
+    end
+end
+
+function MystrixHub.Functions.StartAutoShoot()
+    MystrixHub.Functions.AutoEngineStart()
+end
+
+function MystrixHub.Functions.StopAutoPickup()
+    local st = MystrixHub.AutoPickup
+    MystrixHub.AutoPickup = nil
+    if st and st.Gate then
+        pcall(function() st.Gate:Disconnect() end)
+    end
+    pcall(function() RunService:UnbindFromRenderStep("MystrixAutoPickup") end)
+end
+
+function MystrixHub.Functions.StartAutoPickup()
+    MystrixHub.Functions.StopAutoPickup()
+    local cfg = getgenv().MystrixAutoPickup
+    local st = { Acc = 0, Active = false }
+    MystrixHub.AutoPickup = st
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.08 then return end
+        st.Acc = 0
+        st.Active = false
+        if not cfg.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local team = char:GetAttribute("Team")
+        if team ~= "Blue" and team ~= "Red" then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        local now = workspace:GetServerTimeNow()
+        local hold = LocalPlayer:GetAttribute("KickoffHold")
+        if type(hold) == "number" and hold > now then return end
+        if MystrixHub.TrickActive or os.clock() < (MystrixHub.ShotNext or 0) then return end
+        local ball = MystrixHub.Functions.GetBall()
+        if not ball then return end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then return end
+        local id = char:GetAttribute("DribbleId")
+        if ball:GetAttribute("ReleasedBy") == id then
+            local releasedAt = ball:GetAttribute("ReleasedAt")
+            if type(releasedAt) == "number" and now - releasedAt < 1.2 then return end
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        st.Root, st.Cm, st.Ball = root, cm, ball
+        st.Active = true
+    end)
+    RunService:BindToRenderStep("MystrixAutoPickup", Enum.RenderPriority.Input.Value + 8, function()
+        if not st.Active then return end
+        local root, cm, ball = st.Root, st.Cm, st.Ball
+        if not (root.Parent and cm.Parent and ball.Parent) then
+            st.Active = false
+            return
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            st.Active = false
+            return
+        end
+        local ballPos = ball.Position
+        local rootPos = root.Position
+        if ballPos.Y > rootPos.Y - 2.4 then return end
+        local vel = ball.AssemblyLinearVelocity
+        if math.abs(vel.Y) > 8 then return end
+        local vx, vz = vel.X, vel.Z
+        if vx * vx + vz * vz > 900 then return end
+        local dx = ballPos.X + vx * 0.12 - rootPos.X
+        local dz = ballPos.Z + vz * 0.12 - rootPos.Z
+        local distance = math.sqrt(dx * dx + dz * dz)
+        if distance > cfg.Range or distance < 1.4 then return end
+        local direction = Vector3.new(dx / distance, 0, dz / distance)
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 20)
+        cm.FacingDirection = direction
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopAutoPickup() end })
+end
+
+getgenv().MystrixGuard = getgenv().MystrixGuard or { Enabled = false, Distance = 8, Predict = 0.35 }
+getgenv().MystrixGuard.IgnoreTeammates = true
+
+function MystrixHub.Functions.GuardOwnGoal()
+    local G = MystrixHub.GuardGoal
+    local now = os.clock()
+    if G and now - G.At < 1 then
+        return G.Value
+    end
+    local stale = G and now - G.At < 10 and G.Value or nil
+    local attacked = MystrixHub.Functions.SilentAimGoal()
+    if not attacked then return stale end
+    local far, farPart = -1, nil
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            local d = math.abs(part.Position.X - attacked.x)
+            if d > far then
+                far = d
+                farPart = part
+            end
+        end
+    end
+    if not farPart then return stale end
+    local value = Vector3.new(farPart.Position.X, 0, farPart.Position.Z)
+    MystrixHub.GuardGoal = { At = now, Value = value }
+    return value
+end
+
+function MystrixHub.Functions.StopGuard()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixGuard") end)
+    local st = MystrixHub.GuardState
+    MystrixHub.GuardState = nil
+    if st then
+        if st.Gate then
+            pcall(function() st.Gate:Disconnect() end)
+        end
+        if st.Controlling and st.Cm and st.Cm.Parent then
+            pcall(function() st.Cm.MovingDirection = Vector3.zero end)
+        end
+    end
+end
+
+function MystrixHub.Functions.ClientModule(name)
+    local H = MystrixHub
+    local cache = H.ClientModules
+    if not cache then
+        cache = {}
+        H.ClientModules = cache
+    end
+    local cached = cache[name]
+    if cached ~= nil then return cached or nil end
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local client = scripts and scripts:FindFirstChild("Client")
+    local folder = client and client:FindFirstChild("Game")
+    local inst = folder and folder:FindFirstChild(name)
+    if not (inst and inst:IsA("ModuleScript")) then return nil end
+    local ok, mod = pcall(require, inst)
+    cache[name] = (ok and type(mod) == "table") and mod or false
+    return cache[name] or nil
+end
+
+function MystrixHub.Functions.StopBallReach()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallReach") end)
+    local st = MystrixHub.BallReachState
+    MystrixHub.BallReachState = nil
+    if st and st.Gate then
+        pcall(function() st.Gate:Disconnect() end)
+    end
+end
+
+function MystrixHub.Functions.StartBallReach()
+    local F = MystrixHub.Functions
+    F.StopBallReach()
+    local cfg = getgenv().MystrixReach
+    local st = { Acc = 0, Active = false }
+    MystrixHub.BallReachState = st
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.08 then return end
+        st.Acc = 0
+        st.Active = false
+        if not cfg.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        if F.MatchPaused(char) then return end
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return end
+        if MystrixHub.TrickActive or os.clock() < (MystrixHub.ShotNext or 0) then return end
+        local ball = F.GetBall()
+        if not ball then return end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then return end
+        local id = char:GetAttribute("DribbleId")
+        if ball:GetAttribute("ReleasedBy") == id then
+            local releasedAt = ball:GetAttribute("ReleasedAt")
+            if type(releasedAt) == "number" and workspace:GetServerTimeNow() - releasedAt < 1.2 then return end
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim then
+                if anim.kick then return end
+                local kickS, headS, pokeS = anim.kickS, anim.headS, anim.pokeS
+                if kickS and not kickS.done then return end
+                if headS and not headS.done then return end
+                if pokeS and not pokeS.done then return end
+            end
+        end
+        st.Root, st.Cm, st.Ball = root, cm, ball
+        st.Active = true
+    end)
+    RunService:BindToRenderStep("MystrixBallReach", Enum.RenderPriority.Input.Value + 11, function()
+        if not st.Active then return end
+        local root, cm, ball = st.Root, st.Cm, st.Ball
+        if not (root.Parent and cm.Parent and ball.Parent) then
+            st.Active = false
+            return
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            st.Active = false
+            return
+        end
+        local bp, rp = ball.Position, root.Position
+        if bp.Y > rp.Y - 2.4 then return end
+        local vel = ball.AssemblyLinearVelocity
+        if vel.X * vel.X + vel.Z * vel.Z > 1444 or math.abs(vel.Y) > 8 then return end
+        local dx = bp.X + vel.X * 0.1 - rp.X
+        local dz = bp.Z + vel.Z * 0.1 - rp.Z
+        local d = math.sqrt(dx * dx + dz * dz)
+        if d > 6 + cfg.Add or d < 1.6 then return end
+        local ux, uz = dx / d, dz / d
+        local md = cm.MovingDirection
+        if md.X * ux + md.Z * uz < -0.2 then return end
+        local direction = Vector3.new(ux, 0, uz)
+        cm.FacingDirection = direction
+        cm.MovingDirection = direction
+        cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, 24)
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopBallReach() end })
+    return true
+end
+
+function MystrixHub.Functions.ApplyBallReach()
+    local F = MystrixHub.Functions
+    if getgenv().MystrixReach.Enabled then
+        return F.StartBallReach()
+    end
+    F.StopBallReach()
+    return true
+end
+
+getgenv().MystrixAutoDribble = getgenv().MystrixAutoDribble or { Enabled = false, Range = 12 }
+
+function MystrixHub.Functions.StopAutoDribble()
+    local st = MystrixHub.AutoDribble
+    MystrixHub.AutoDribble = nil
+    pcall(function() RunService:UnbindFromRenderStep("MystrixDribbleEvade") end)
+    if st and st.Conn then
+        pcall(function() st.Conn:Disconnect() end)
+    end
+end
+
+function MystrixHub.Functions.AutoDribbleTick(st, now)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixAutoDribble
+    st.Threats = nil
+    local char = LocalPlayer.Character
+    if not char or F.MatchPaused(char) then return end
+    local ball = F.GetBall()
+    local id = char:GetAttribute("DribbleId")
+    if not ball or type(id) ~= "number" or ball:GetAttribute("Possessor") ~= id then return end
+    local bodyState = char:GetAttribute("BodyState")
+    if bodyState ~= nil and bodyState ~= "Animated" then return end
+    if MystrixHub.TrickActive or now < (MystrixHub.ShotNext or 0) then return end
+    local root = char:FindFirstChild("Root")
+    if not root then return end
+    local rp = root.Position
+    local shoot = getgenv().MystrixAutoShoot
+    if shoot.Enabled then
+        local goal = F.SilentAimGoal()
+        if goal then
+            local limit = math.min(shoot.Range, 26)
+            local gx, gz = goal.x - rp.X, goal.z - rp.Z
+            if gx * gx + gz * gz <= limit * limit then return end
+        end
+    end
+    local v = root.AssemblyLinearVelocity
+    local myVel = Vector3.new(v.X, 0, v.Z)
+    local speed = myVel.Magnitude
+    local facing = speed > 4 and myVel / speed or root.CFrame.LookVector
+    local f = Vector3.new(facing.X, 0, facing.Z)
+    if f.Magnitude < 0.01 then return end
+    f = f.Unit
+    local threats = F.DribbleThreats(char, rp, f, myVel, cfg.Range + 4)
+    st.Threats = threats
+    st.ThreatAt = os.clock()
+    st.Char = char
+    if now - (st.SkillAt or 0) > 2 then st.Combo = 0 end
+    local p = threats[1]
+    if not p then return end
+    if now < st.Next then return end
+    local urgent = p.ttc <= 0.6 or p.d <= 7
+    if not urgent then return end
+    if not p.ready and p.d > 3.5 then return end
+    if p.ahead < -0.15 and p.d > 5 then return end
+    local crowd = 0
+    for _, t in ipairs(threats) do
+        if t.d <= 14 then crowd += 1 end
+    end
+    local gesture = F.DribblePick(speed, p, threats, crowd, st.Last)
+    local rainbow = gesture and gesture.kind == "Rainbow"
+    local success = F.TrySkill(st, gesture, speed, now, rainbow and 1.1 or 0.7)
+    if success then
+        st.Combo = math.min((st.Combo or 0) + 1, 3)
+        st.SkillAt = now
+        st.Next = now + (rainbow and 1.2 or (0.6 + 0.08 * st.Combo))
+    else
+        st.Next = now + 0.12
+    end
+end
+
+function MystrixHub.Functions.StartAutoDribble()
+    local F = MystrixHub.Functions
+    F.StopAutoDribble()
+    local cfg = getgenv().MystrixAutoDribble
+    if cfg.Evade == nil then cfg.Evade = true end
+    if cfg.EvadeStrength == nil then cfg.EvadeStrength = 0.8 end
+    local st = { Acc = 0, Next = 0, Combo = 0 }
+    MystrixHub.AutoDribble = st
+    st.Conn = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.05 then return end
+        st.Acc = 0
+        if not getgenv().MystrixAutoDribble.Enabled then
+            st.Threats = nil
+            return
+        end
+        local now = os.clock()
+        local ok = pcall(F.AutoDribbleTick, st, now)
+        if not ok then
+            st.Threats = nil
+            st.Next = now + 0.5
+        end
+    end)
+    RunService:BindToRenderStep("MystrixDribbleEvade", Enum.RenderPriority.Input.Value + 7, function()
+        local c = getgenv().MystrixAutoDribble
+        if not (c.Enabled and c.Evade) then return end
+        local threats = st.Threats
+        local now = os.clock()
+        if not threats or #threats == 0 or now - (st.ThreatAt or 0) > 0.25 then return end
+        local char = LocalPlayer.Character
+        if not char or char ~= st.Char then return end
+        if MystrixHub.TrickActive or now < (MystrixHub.SkillUntil or 0) or now < (MystrixHub.ShotNext or 0) then return end
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not cm then return end
+        local md = cm.MovingDirection
+        local flat = Vector3.new(md.X, 0, md.Z)
+        local mag = flat.Magnitude
+        if mag < 0.1 then return end
+        local desired = flat / mag
+        local left = Vector3.new(desired.Z, 0, -desired.X)
+        local range = c.Range + 2
+        local vote, strongest = 0, 0
+        for i = 1, math.min(#threats, 3) do
+            local t = threats[i]
+            if t.ahead > 0.1 and t.d < range then
+                local w = 1 - t.d / range
+                if not t.ready then w *= 0.5 end
+                local s = desired.X * t.dir.Z - desired.Z * t.dir.X
+                vote += (s >= 0 and 1 or -1) * w
+                strongest = math.max(strongest, w * t.ahead)
+            end
+        end
+        if strongest <= 0 then return end
+        local want = vote >= 0 and 1 or -1
+        local sign = want
+        if st.LatSign and want ~= st.LatSign and now - (st.LatAt or 0) < 0.5 then
+            sign = st.LatSign
+        else
+            st.LatSign = want
+            st.LatAt = now
+        end
+        local strength = math.clamp(strongest * 1.6 * (c.EvadeStrength or 0.8), 0, 1.2)
+        local out = desired + left * sign * strength
+        if out.Magnitude < 0.001 then return end
+        cm.MovingDirection = out.Unit * mag
+    end)
+    MystrixHub.ConnectionController.Insert(st.Conn)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopAutoDribble()
+    end })
+    return true
+end
+
+function MystrixHub.Functions.BallPastLine(ball)
+    local H = MystrixHub
+    local now = os.clock()
+    local cache = H.GoalLineCache
+    if not cache or now - cache.At > (cache.Lines and 3 or 1) then
+        if not H.DribbleContacts then
+            local shared = Services.ReplicatedStorage:FindFirstChild("Shared")
+            local gameFolder = shared and shared:FindFirstChild("Game")
+            local dribble = gameFolder and gameFolder:FindFirstChild("Dribble")
+            if dribble then
+                local ok, mod = pcall(require, dribble)
+                if ok and type(mod) == "table" then
+                    H.DribbleContacts = mod.Contacts
+                end
+            end
+        end
+        local contacts = H.DribbleContacts
+        cache = { At = now, Lines = contacts and contacts.goalLines() or nil }
+        H.GoalLineCache = cache
+    end
+    local lines = cache.Lines
+    if not lines then return false end
+    local x = ball.Position.X
+    return x < lines[1] or x > lines[2]
+end
+
+function MystrixHub.Functions.MatchPausedRaw(char)
+    local F = MystrixHub.Functions
+    local team = char:GetAttribute("Team")
+    if team ~= "Blue" and team ~= "Red" then return true end
+    if LocalPlayer:GetAttribute("InTutorial") == true then return true end
+    local hold = LocalPlayer:GetAttribute("KickoffHold")
+    if type(hold) == "number" and hold > workspace:GetServerTimeNow() then return true end
+    local ball = F.GetBall()
+    if ball and F.BallPastLine(ball) then return true end
+    local celebration = F.ClientModule("GoalCelebration")
+    if celebration and type(celebration.current) == "function" then
+        local ok, current = pcall(celebration.current)
+        if ok and current ~= nil then return true end
+    end
+    local replay = F.ClientModule("InstantReplay")
+    if replay and type(replay.playing) == "function" then
+        local ok, playing = pcall(replay.playing)
+        if ok and playing == true then return true end
+    end
+    local lobby = F.ClientModule("Lobby")
+    if lobby and type(lobby.benched) == "function" then
+        local ok, benched = pcall(lobby.benched)
+        if ok and benched == true then return true end
+    end
+    local gui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    local ui = gui and gui:FindFirstChild("GameUI")
+    local popup = ui and ui:FindFirstChild("GoalPopup")
+    if popup and popup:IsA("GuiObject") and popup.Visible then return true end
+    return false
+end
+
+function MystrixHub.Functions.MatchPaused(char)
+    local H = MystrixHub
+    local now = os.clock()
+    if H.PausedChar == char and now - (H.PausedAt or 0) < 0.08 then
+        return H.PausedValue
+    end
+    local paused = H.Functions.MatchPausedRaw(char)
+    H.PausedChar, H.PausedAt, H.PausedValue = char, now, paused
+    return paused
+end
+
+function MystrixHub.Functions.SprintBase()
+    local cached = MystrixHub.SprintBase
+    if cached then return cached end
+    local speed = 36
+    pcall(function()
+        local tuning = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+        speed = tuning.Speed.Sprint
+    end)
+    MystrixHub.SprintBase = speed
+    return speed
+end
+
+function MystrixHub.Functions.StartGuard()
+    local F = MystrixHub.Functions
+    F.StopGuard()
+    local cfg = getgenv().MystrixGuard
+    cfg.Engage = cfg.Engage or 22
+    local st = { Acc = 0, Active = false, Engaged = false, Controlling = false, ResumeAt = 0 }
+    MystrixHub.GuardState = st
+
+    local function finite(v)
+        return v.X == v.X and v.Y == v.Y and v.Z == v.Z
+            and math.abs(v.X) < 100000 and math.abs(v.Y) < 100000 and math.abs(v.Z) < 100000
+    end
+
+    local function downed(char)
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return true end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim and anim.body and anim.body.active then return true end
+        end
+        return false
+    end
+
+    local function release()
+        if st.Controlling then
+            local cm = st.Cm
+            if cm and cm.Parent then
+                cm.MovingDirection = Vector3.zero
+            end
+        end
+        st.Controlling = false
+        st.Active = false
+        st.Face = nil
+        st.StuckAt = nil
+    end
+
+    local function pause(seconds)
+        st.ResumeAt = os.clock() + seconds
+        st.Engaged = false
+        release()
+    end
+
+    local function clearCarrier()
+        st.CarrierId, st.CarrierPart, st.CarrierModel = nil, nil, nil
+    end
+
+    local function evaluate()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        if downed(char) then
+            pause(0.5)
+            return false
+        end
+        if os.clock() < st.ResumeAt then return false end
+        if F.MatchPaused(char) then
+            st.Engaged = false
+            return false
+        end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if not (root and cm) then return false end
+        if not finite(root.Position) then return false end
+        local ball = F.GetBall()
+        if not ball or not finite(ball.Position) then return false end
+        local goal = F.GuardOwnGoal()
+        if not goal then return false end
+        local id = char:GetAttribute("DribbleId")
+        local possessor = ball:GetAttribute("Possessor")
+        local held = type(possessor) == "number" and possessor ~= 0
+        local mate = false
+        local carrier
+        if held then
+            if possessor == id then
+                clearCarrier()
+                st.Engaged = false
+                return false
+            end
+            if st.CarrierId ~= possessor or not (st.CarrierPart and st.CarrierPart.Parent) then
+                clearCarrier()
+                st.CarrierId = possessor
+                for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+                    if model ~= char and model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+                        local r = model:FindFirstChild("Root")
+                        if r and r:IsA("BasePart") then
+                            st.CarrierPart = r
+                            st.CarrierModel = model
+                        end
+                        break
+                    end
+                end
+            end
+            carrier = st.CarrierPart
+            local model = st.CarrierModel
+            if model then
+                local theirTeam = model:GetAttribute("Team")
+                if theirTeam ~= nil and theirTeam == char:GetAttribute("Team") then
+                    if cfg.IgnoreTeammates then
+                        st.Engaged = false
+                        return false
+                    end
+                    mate = true
+                    carrier = nil
+                end
+            end
+        else
+            clearCarrier()
+            if ball:GetAttribute("ReleasedBy") == id then
+                local releasedAt = ball:GetAttribute("ReleasedAt")
+                if type(releasedAt) == "number" and workspace:GetServerTimeNow() - releasedAt < 1.2 then
+                    st.Engaged = false
+                    return false
+                end
+            end
+        end
+        local rp = root.Position
+        local subject = carrier or ball
+        local sp = subject.Position
+        if not finite(sp) then return false end
+        local dx, dz = sp.X - rp.X, sp.Z - rp.Z
+        local d = math.sqrt(dx * dx + dz * dz)
+        local engaged = d <= (st.Engaged and cfg.Engage * 1.3 or cfg.Engage)
+        if engaged and not carrier and ball.Position.Y > rp.Y - 2.4 then
+            engaged = false
+        end
+        if mate then engaged = false end
+        st.Engaged = engaged
+        if engaged and carrier then
+            local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+            if not (type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow()) then
+                local target, distance = F.FindPokeTarget()
+                if target and distance <= 6.5 then
+                    F.FirePoke()
+                end
+            end
+        end
+        st.Char = char
+        st.MyId = id
+        st.Speed = F.SprintBase() * math.max(getgenv().MystrixSprint.Boost or 1, 1)
+        st.Root, st.Cm, st.Ball, st.Carrier, st.Goal = root, cm, ball, carrier, goal
+        st.Active = true
+        return true
+    end
+
+    st.Gate = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        if st.Acc < 0.1 then return end
+        st.Acc = 0
+        if not cfg.Enabled then
+            release()
+            return
+        end
+        local ok, ready = pcall(evaluate)
+        if not (ok and ready) then
+            release()
+        end
+    end)
+
+    local function steer(target, dt)
+        if not finite(target) or target.Magnitude < 0.001 then
+            return st.Face
+        end
+        target = target.Unit
+        local cur = st.Face
+        if not cur or not finite(cur) or cur.Magnitude < 0.001 then
+            local look = st.Root.CFrame.LookVector
+            local flat = Vector3.new(look.X, 0, look.Z)
+            cur = flat.Magnitude > 0.001 and flat.Unit or target
+        else
+            cur = cur.Unit
+        end
+        local angle = math.acos(math.clamp(cur:Dot(target), -1, 1))
+        local step = 9 * dt
+        if angle ~= angle or angle <= step then
+            st.Face = target
+            return target
+        end
+        local rotated = CFrame.Angles(0, cur:Cross(target).Y >= 0 and step or -step, 0) * cur
+        rotated = Vector3.new(rotated.X, 0, rotated.Z)
+        if rotated.Magnitude < 0.001 or not finite(rotated) then
+            st.Face = target
+            return target
+        end
+        st.Face = rotated.Unit
+        return st.Face
+    end
+
+    local function drive(dt)
+        local root, cm, ball, carrier, goal, char = st.Root, st.Cm, st.Ball, st.Carrier, st.Goal, st.Char
+        if not (root.Parent and cm.Parent and ball.Parent and char and char.Parent) then
+            release()
+            return
+        end
+        if downed(char) then
+            pause(0.5)
+            return
+        end
+        if os.clock() < st.ResumeAt then
+            release()
+            return
+        end
+        local active = cm.ActiveController
+        if active == nil or active.Name == "BodyIdleController" then
+            local gc = cm:FindFirstChild("GroundController")
+            if gc then cm.ActiveController = gc end
+        end
+        local possessor = ball:GetAttribute("Possessor")
+        if possessor ~= nil and possessor ~= 0 and possessor == st.MyId then
+            release()
+            return
+        end
+        local subject = carrier or ball
+        if not subject.Parent then
+            release()
+            return
+        end
+        local pos = subject.Position
+        local vel = subject.AssemblyLinearVelocity
+        local rp = root.Position
+        if not (finite(pos) and finite(vel) and finite(rp)) then
+            release()
+            return
+        end
+        if vel.Magnitude > 120 then
+            vel = vel.Unit * 120
+        end
+        local move, face
+        if st.Engaged then
+            local lead = carrier and 0.18 or 0.12
+            local mx, mz = pos.X + vel.X * lead - rp.X, pos.Z + vel.Z * lead - rp.Z
+            local dist = math.sqrt(mx * mx + mz * mz)
+            if dist > 0.8 then
+                local dir = Vector3.new(mx / dist, 0, mz / dist)
+                move = dir * math.clamp(dist / 5, 0, 1)
+                if dist > 2.5 then
+                    face = dir
+                end
+            end
+        else
+            local px = pos.X + vel.X * getgenv().MystrixGuard.Predict
+            local pz = pos.Z + vel.Z * getgenv().MystrixGuard.Predict
+            local gx, gz = goal.X - px, goal.Z - pz
+            local gd = math.sqrt(gx * gx + gz * gz)
+            if gd < 1 then
+                release()
+                return
+            end
+            local ux, uz = gx / gd, gz / gd
+            local stand = math.min(cfg.Distance, gd * 0.5)
+            local mx, mz = px + ux * stand - rp.X, pz + uz * stand - rp.Z
+            local dist = math.sqrt(mx * mx + mz * mz)
+            if dist > 0.8 then
+                move = Vector3.new(mx / dist, 0, mz / dist) * math.clamp(dist / 4, 0, 1)
+            end
+            local fx, fz = px - rp.X, pz - rp.Z
+            local fd = math.sqrt(fx * fx + fz * fz)
+            if fd > 4 then
+                face = Vector3.new(fx / fd, 0, fz / fd)
+            end
+        end
+        if move then
+            cm.MovingDirection = move
+            cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, st.Speed)
+        else
+            cm.MovingDirection = Vector3.zero
+        end
+        if face then
+            local facing = steer(face, dt)
+            if facing then
+                cm.FacingDirection = facing
+            end
+        end
+        st.Controlling = true
+        local rv = root.AssemblyLinearVelocity
+        if move and move.Magnitude > 0.5 and rv.X * rv.X + rv.Z * rv.Z < 1 then
+            st.StuckAt = st.StuckAt or os.clock()
+            if os.clock() - st.StuckAt > 1.5 then
+                pause(0.6)
+            end
+        else
+            st.StuckAt = nil
+        end
+    end
+
+    RunService:BindToRenderStep("MystrixGuard", Enum.RenderPriority.Input.Value + 10, function(dt)
+        if not st.Active then
+            if st.Controlling then release() end
+            return
+        end
+        if not pcall(drive, dt) then
+            release()
+        end
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopGuard() end })
+end
+
+getgenv().MystrixKeeper = getgenv().MystrixKeeper or {}
+for k, v in pairs({ Enabled = false, Depth = 4.5, DiveRange = 22, Poke = true, Dive = true, Gather = true, Rush = true, RushRange = 34, DiveLead = 0.0, DiveBias = 0.0, CommitRange = 45, StandReach = 2 }) do
+    if getgenv().MystrixKeeper[k] == nil then
+        getgenv().MystrixKeeper[k] = v
+    end
+end
+getgenv().MystrixKeeper.Enabled = false
+
+function MystrixHub.Functions.KeeperGoal()
+    local F = MystrixHub.Functions
+    local char = LocalPlayer.Character
+    local now = os.clock()
+    local cache = MystrixHub.KeeperGoalCache
+    if cache and cache.Char == char and now - cache.At < 0.5 then
+        return cache.Value
+    end
+    local attacked = F.SilentAimGoal()
+    if not attacked then return nil end
+    local parts = {}
+    local mid = 0
+    for _, part in ipairs(Services.CollectionService:GetTagged("SoccerGoalFrame")) do
+        if part:IsA("BasePart") and part:IsDescendantOf(workspace) then
+            parts[#parts + 1] = part
+            mid += part.Position.X
+        end
+    end
+    if #parts < 2 then return nil end
+    mid /= #parts
+    local own, far = nil, -1
+    for _, part in ipairs(parts) do
+        local d = math.abs(part.Position.X - attacked.x)
+        if d > far then
+            far = d
+            own = part
+        end
+    end
+    local side = own.Position.X < mid and -1 or 1
+    local q = own.Size.Y / 9.142857142857142
+    local ground = own.Position.Y - own.Size.Y / 2
+    local value = {
+        x = own.Position.X - side * own.Size.X / 2 + side * 0.21428571428571425 * q,
+        z = own.Position.Z,
+        half = 13.071428571428571 * q,
+        top = ground + 8.714285714285714 * q,
+        ground = ground,
+        side = side,
+        inward = Vector3.new(-side, 0, 0),
+    }
+    MystrixHub.KeeperGoalCache = { Char = char, At = now, Value = value }
+    return value
+end
+
+function MystrixHub.Functions.KeeperActions()
+    local H = MystrixHub
+    local cached = H.KeeperActionCache
+    if cached and os.clock() - cached.At < 5 and (not cached.Dive or cached.Dive.Parent) and (not cached.Slide or cached.Slide.Parent) then
+        return cached
+    end
+    local found = { At = os.clock() }
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    if scripts then
+        for _, inst in ipairs(scripts:GetDescendants()) do
+            if inst:IsA("InputAction") then
+                local name = inst.Name:lower()
+                if not found.Dive and (name:find("dive") or name == "block") then
+                    local ok, kind = pcall(function() return inst.Type end)
+                    if ok and kind == Enum.InputActionType.Bool then
+                        found.Dive = inst
+                    end
+                elseif not found.Slide and inst.Name == "Slide" then
+                    found.Slide = inst
+                end
+            end
+        end
+    end
+    H.KeeperActionCache = found
+    return found
+end
+
+function MystrixHub.Functions.KeeperReady(action)
+    if not (action and action.Parent) then return false end
+    local ok, enabled = pcall(function()
+        local parent = action.Parent
+        return action.Enabled and not (parent:IsA("InputContext") and not parent.Enabled)
+    end)
+    return ok and enabled == true
+end
+
+function MystrixHub.Functions.KeeperFire(action)
+    local H = MystrixHub
+    local bindings = H.KeeperBindings
+    if not bindings then
+        bindings = {}
+        H.KeeperBindings = bindings
+        H.ConnectionController.Insert({ Disconnect = function()
+            for _, b in pairs(bindings) do
+                pcall(function() b:Destroy() end)
+            end
+            H.KeeperBindings = nil
+        end })
+    end
+    local binding = bindings[action]
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "MystrixKeeper"
+        binding.Type = Enum.InputBindingType.Scriptable
+        binding.Parent = action
+        bindings[action] = binding
+    end
+    binding:Fire(true)
+    task.delay(0.06, function()
+        pcall(function() binding:Fire(false) end)
+    end)
+    return true
+end
+
+function MystrixHub.Functions.KeeperCarrier(possessor)
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model:IsA("Model") and model:GetAttribute("DribbleId") == possessor then
+            local root = model:FindFirstChild("Root")
+            if root and root:IsA("BasePart") then
+                return model, root
+            end
+        end
+    end
+    return nil, nil
+end
+
+function MystrixHub.Functions.KeeperDiveEnv()
+    local H = MystrixHub
+    if H.KeeperDiveData then return H.KeeperDiveData end
+    if H.KeeperDiveFail and os.clock() - H.KeeperDiveFail < 3 then return nil end
+    local ok, data = pcall(function()
+        local shared = Services.ReplicatedStorage:FindFirstChild("Shared")
+        local gameFolder = shared and shared:FindFirstChild("Game")
+        local netModule = shared and shared:FindFirstChild("Net")
+        local divesModule = gameFolder and gameFolder:FindFirstChild("KeeperDives")
+        if not (netModule and divesModule) then return nil end
+        local Net = require(netModule)
+        return { Dives = require(divesModule), Remote = Net:RemoteEvent("MannequinDev") }
+    end)
+    if ok and type(data) == "table" and data.Remote then
+        H.KeeperDiveData = data
+        return data
+    end
+    H.KeeperDiveFail = os.clock()
+    return nil
+end
+
+task.spawn(MystrixHub.Functions.KeeperDiveEnv)
+
+function MystrixHub.Functions.KeeperIntercept(plan, x)
+    local path = plan.path
+    if not path then return nil end
+    local side = plan.side
+    local prev, prevT = plan.from, 0
+    for _, e in ipairs(path) do
+        local p = e.pos
+        if (prev.X - x) * side < 0 and (p.X - x) * side >= 0 then
+            local a = (x - prev.X) / (p.X - prev.X)
+            return { t = prevT + (e.t - prevT) * a, pos = prev:Lerp(p, a) }
+        end
+        prev, prevT = p, e.t
+    end
+    return nil
+end
+
+function MystrixHub.Functions.StopKeeper()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixKeeper") end)
+    local st = MystrixHub.KeeperState
+    MystrixHub.KeeperState = nil
+    if st and st.Controlling and st.Cm and st.Cm.Parent then
+        pcall(function() st.Cm.MovingDirection = Vector3.zero end)
+    end
+end
+
+for k, v in pairs({ Lead = 0.03, ArmReach = 3.4, MinShotSpeed = 20 }) do
+    if getgenv().MystrixKeeper[k] == nil then
+        getgenv().MystrixKeeper[k] = v
+    end
+end
+
+function MystrixHub.Functions.KeeperDiveDirect(char, kind, lateral)
+    local F = MystrixHub.Functions
+    if kind == "Jump" then return false end
+    local env = F.KeeperDiveEnv()
+    local mod = F.MannequinClientModule()
+    local goal = F.KeeperGoal()
+    if not (env and mod and goal) then return false end
+    local okA, anim = pcall(mod.getAnimator, char)
+    if not okA or not anim then return false end
+    local body = anim.body or (anim.getBody and anim:getBody())
+    if not body or body.active then return false end
+    local dir = Vector3.new(0, 0, lateral.Z >= 0 and 1 or -1)
+    local ok, started = pcall(body.keyDive, body, kind, dir, goal.inward)
+    if not (ok and started) then return false end
+    local kdive = body.kdive
+    local payload = nil
+    if kdive and kdive.animated then
+        local eok, encoded = pcall(env.Dives.encode, kdive.move)
+        if eok then payload = encoded end
+    end
+    env.Remote:FireServer("Dive" .. kind, dir, payload)
+    return true
+end
+
+function MystrixHub.Functions.KeeperDive(char, kind, lateral)
+    local F = MystrixHub.Functions
+    local mod = F.MannequinClientModule()
+    if not mod then return false end
+    if char:GetAttribute("BodyState") ~= "Animated" then return false end
+    if mod.keeperReady and not mod.keeperReady() then return false end
+    if kind == "Jump" then
+        if not mod.keeperJump then return false end
+        return pcall(mod.keeperJump)
+    end
+    local ok, res = pcall(F.KeeperDiveDirect, char, kind, lateral)
+    return ok and res == true
+end
+
+function MystrixHub.Functions.KeeperDiveProfile(kind)
+    local H = MystrixHub
+    local cache = H.KeeperProfiles
+    if not cache then
+        cache = {}
+        H.KeeperProfiles = cache
+    end
+    if cache[kind] ~= nil then return cache[kind] or nil end
+    local mod = H.Functions.KeeperDivesModule()
+    if not (mod and type(mod.track) == "function" and type(mod.hips) == "function") then return nil end
+    local ok, tr = pcall(mod.track, kind)
+    if not ok or type(tr) ~= "table" or not tr.right then
+        cache[kind] = false
+        return nil
+    end
+    local limit = tr.ragAt or tr.touch or tr.duration
+    local step = 0.02
+    local n = math.max(math.floor(math.min(limit, tr.duration) / step), 2)
+    local okB, base = pcall(mod.hips, tr.right, 0)
+    if not okB then
+        cache[kind] = false
+        return nil
+    end
+    local D = {}
+    for i = 0, n do
+        local okP, p = pcall(mod.hips, tr.right, i * step)
+        if not okP then
+            cache[kind] = false
+            return nil
+        end
+        D[i + 1] = math.abs(p.X - base.X)
+    end
+    local prof = { step = step, D = D, tmax = n * step, takeoff = tr.takeoff, touch = tr.touch }
+    cache[kind] = prof
+    return prof
+end
+
+function MystrixHub.Functions.KeeperDiveTime(prof, alat, carry)
+    local arm = getgenv().MystrixKeeper.ArmReach
+    local ct = math.max(prof.takeoff or 0.15, 0.15)
+    for i = 1, #prof.D do
+        local t = (i - 1) * prof.step
+        local c = math.min(t, ct)
+        local disp = prof.D[i] + carry * (c - c * c / (2 * ct)) + arm
+        if disp >= alat then return t end
+    end
+    return nil
+end
+
+function MystrixHub.Functions.KeeperDecide(plan, root, now)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixKeeper
+    local rp = root.Position
+    local hit = F.KeeperIntercept(plan, rp.X)
+    if not hit then return nil end
+    local rem = plan.at + hit.t - now
+    if rem < -0.06 or (plan.speed or 0) < cfg.MinShotSpeed then return nil end
+    local lat = hit.pos.Z - rp.Z
+    local alat = math.abs(lat)
+    local hy = hit.pos.Y - plan.goal.ground
+    local runSpeed = F.SprintBase() * math.max(getgenv().MystrixSprint.Boost or 1, 1)
+    local reach = 3.2 + runSpeed * 0.8 * math.max(rem - 0.12, 0)
+    if hy >= 5.8 and alat <= 3.6 then
+        return "Jump", rem, 0.35 + cfg.Lead, lat
+    end
+    if alat <= reach then return nil end
+    if alat > cfg.DiveRange * 1.1 then return nil end
+    local order
+    if hy >= 4.9 then
+        order = { "High", "Mid", "Low" }
+    elseif hy <= 3.2 then
+        order = { "Low", "Mid", "High" }
+    else
+        order = { "Mid", "High", "Low" }
+    end
+    local sign = lat >= 0 and 1 or -1
+    local carry = math.clamp(root.AssemblyLinearVelocity.Z * sign, -24, 24)
+    local chosen, tau
+    for _, kind in ipairs(order) do
+        local prof = F.KeeperDiveProfile(kind)
+        if prof then
+            local t = F.KeeperDiveTime(prof, alat, carry)
+            if t then
+                chosen, tau = kind, t
+                break
+            end
+        end
+    end
+    if not chosen then
+        chosen = order[1]
+        local prof = F.KeeperDiveProfile(chosen)
+        tau = prof and prof.tmax or F.KeeperDiveTouch(chosen)
+    end
+    local lag = math.clamp(plan.lag or 0, 0, 0.25)
+    return chosen, rem, tau + cfg.Lead + lag * 0.4, lat
+end
+
+function MystrixHub.Functions.KeeperPlan(char, root, ball, goal)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixKeeper
+    local st = MystrixHub.KeeperState
+    local id = char:GetAttribute("DribbleId")
+    local myTeam = char:GetAttribute("Team")
+    local possessor = ball:GetAttribute("Possessor")
+    local rp = root.Position
+    local bp = ball.Position
+    local gz = goal.z
+    local inward = goal.inward
+    local near = cfg.Depth
+    local limit = goal.half - 2.5
+    local now = os.clock()
+
+    local function spotFor(point)
+        local dx, dz = point.X - goal.x, point.Z - gz
+        local dist = math.sqrt(dx * dx + dz * dz)
+        local ux, uz = inward.X, 0
+        if dist > 1 then
+            ux, uz = dx / dist, dz / dist
+        end
+        local along = ux * inward.X
+        if along < 0.35 then
+            uz = (uz >= 0 and 1 or -1) * 0.9367496997597597
+            along = 0.35
+        end
+        local t = math.clamp((dist - 14) / 90, 0, 1)
+        local depth = near + near * 1.2 * t
+        local z = math.clamp(uz * depth / along, -limit, limit)
+        return Vector3.new(goal.x + inward.X * depth, rp.Y, gz + z)
+    end
+
+    if type(possessor) == "number" and possessor ~= 0 then
+        if possessor == id then return nil end
+        local model, croot = F.KeeperCarrier(possessor)
+        if not croot then
+            return { kind = "hold", target = spotFor(bp), look = bp }
+        end
+        local cp = croot.Position
+        local cv = croot.AssemblyLinearVelocity
+        local ahead = Vector3.new(cp.X + cv.X * 0.25, cp.Y, cp.Z + cv.Z * 0.25)
+        local plan = { kind = "hold", target = spotFor(ahead), look = cp }
+        if model:GetAttribute("Team") == myTeam then
+            return plan
+        end
+        local gx, gdz = cp.X - goal.x, cp.Z - gz
+        local toGoal = math.sqrt(gx * gx + gdz * gdz)
+        local mx, mz = cp.X - rp.X, cp.Z - rp.Z
+        local toMe = math.sqrt(mx * mx + mz * mz)
+        plan.carrier = croot
+        local inFront = inward.X * gx > 0
+        local central = math.abs(gdz) <= goal.half * 1.25
+        local towards = -(cv.X * inward.X)
+        local holding = st and st.RushUntil and now < st.RushUntil
+        local want = cfg.Rush and inFront and central and toGoal <= cfg.RushRange and toGoal >= 9 and toMe <= 26 and towards > -2
+        if want or (holding and inFront and toGoal >= 7 and toMe <= 30) then
+            if want and st then st.RushUntil = now + 0.5 end
+            local lead = math.min(toMe / math.max(F.SprintBase(), 1), 0.4)
+            plan.kind = "rush"
+            plan.target = Vector3.new(cp.X + cv.X * lead, rp.Y, cp.Z + cv.Z * lead)
+        end
+        return plan
+    end
+
+    if not F.SilentAimModules() then return nil end
+    local SA = getgenv().MystrixSilentAim
+    local BV = SA.BallView
+    local rel = ball:GetAttribute("ReleasedBy")
+    local relAt = ball:GetAttribute("ReleasedAt")
+    local selfRecent = rel == id and type(relAt) == "number" and workspace:GetServerTimeNow() - relAt < 1.2
+    local state = BV.freeSim()
+    local pos, vel, spin
+    if state then
+        pos, vel, spin = state.pos, state.vel, state.spin
+    else
+        pos = BV.getPosition() or bp
+        vel = ball.AssemblyLinearVelocity
+        spin = Vector3.zero
+    end
+
+    if vel.Magnitude > 12 then
+        local params = SA.Flight.params(ball)
+        local gy = BV.groundBallY(pos)
+        local list = F.ShotPredict(params, pos, vel, spin or Vector3.zero, gy, 2.2, 1 / 40)
+        local side, lineX = goal.side, goal.x
+        local prev, prevT = pos, 0
+        local cross
+        for _, e in ipairs(list) do
+            local p = e.pos
+            if (prev.X - lineX) * side < 0 and (p.X - lineX) * side >= 0 then
+                local a = (lineX - prev.X) / (p.X - prev.X)
+                cross = { t = prevT + (e.t - prevT) * a, pos = prev:Lerp(p, a) }
+                break
+            end
+            prev, prevT = p, e.t
+        end
+        if cross then
+            local lat = math.abs(cross.pos.Z - gz)
+            local hy = cross.pos.Y - goal.ground
+            if lat <= goal.half + 1.0 and hy <= (goal.top - goal.ground) + 1.0 and hy >= -0.5 then
+                local lag = 0
+                pcall(function() lag = LocalPlayer:GetNetworkPing() end)
+                lag = math.clamp(lag, 0, 0.25)
+                local plan = {
+                    kind = "save",
+                    look = pos,
+                    path = list,
+                    from = pos,
+                    at = now,
+                    side = side,
+                    lag = lag,
+                    cross = cross,
+                    goal = goal,
+                    speed = vel.Magnitude,
+                }
+                local depth = math.clamp((rp.X - goal.x) * inward.X, 2, 6)
+                local tx = goal.x + inward.X * depth
+                local hit = F.KeeperIntercept(plan, tx) or cross
+                local tz = math.clamp(hit.pos.Z, gz - (goal.half - 1), gz + (goal.half - 1))
+                plan.target = Vector3.new(tx, rp.Y, tz)
+                return plan
+            end
+        end
+        local sample = list[math.min(#list, 22)]
+        local focus = sample and sample.pos or pos
+        return { kind = "hold", target = spotFor(focus), look = pos }
+    end
+
+    local depthIn = (goal.x - pos.X) * goal.side
+    local inArea = depthIn >= 0 and depthIn <= 23 and math.abs(pos.Z - gz) <= 34
+    if cfg.Gather and not selfRecent and inArea and pos.Y - BV.groundBallY(pos) <= 4 then
+        local sprint = F.SprintBase()
+        local mdx, mdz = pos.X - rp.X, pos.Z - rp.Z
+        local mine = math.max(math.sqrt(mdx * mdx + mdz * mdz) - 2.6, 0) / sprint
+        local rival = math.huge
+        for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+            if model ~= char and model:IsA("Model") then
+                local team = model:GetAttribute("Team")
+                local r = model:FindFirstChild("Root")
+                if type(team) == "string" and team ~= myTeam and r and r:IsA("BasePart") then
+                    local rdx, rdz = pos.X - r.Position.X, pos.Z - r.Position.Z
+                    local t = math.max(math.sqrt(rdx * rdx + rdz * rdz) - 3, 0) / 31
+                    if t < rival then rival = t end
+                end
+            end
+        end
+        if mine + 0.15 < rival then
+            return {
+                kind = "gather",
+                target = Vector3.new(pos.X + vel.X * 0.12, rp.Y, pos.Z + vel.Z * 0.12),
+                look = pos,
+            }
+        end
+    end
+    return { kind = "hold", target = spotFor(pos), look = pos }
+end
+
+function MystrixHub.Functions.StartKeeper()
+    local F = MystrixHub.Functions
+    F.StopKeeper()
+    if not F.SilentAimModules() then return false end
+    F.KeeperDiveEnv()
+    F.KeeperDivesModule()
+    local cfg = getgenv().MystrixKeeper
+    local st = {
+        Acc = 1,
+        Plan = nil,
+        Controlling = false,
+        DiveNext = 0,
+        PokeNext = 0,
+        SlideNext = 0,
+        Moving = false,
+        Dir = Vector3.zero,
+        RushUntil = 0,
+        Fast = false,
+    }
+    MystrixHub.KeeperState = st
+
+    local function downed(char)
+        local bodyState = char:GetAttribute("BodyState")
+        if bodyState ~= nil and bodyState ~= "Animated" then return true end
+        local mod = F.MannequinClientModule()
+        if mod then
+            local ok, anim = pcall(mod.getAnimator, char)
+            if ok and anim and anim.body and anim.body.active then return true end
+        end
+        return false
+    end
+
+    local function release()
+        if st.Controlling and st.Cm and st.Cm.Parent then
+            st.Cm.MovingDirection = Vector3.zero
+        end
+        st.Controlling = false
+        st.Plan = nil
+        st.Tgt = nil
+        st.Moving = false
+        st.Dir = Vector3.zero
+        st.Face = nil
+    end
+
+    local function refresh()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        local team = char:GetAttribute("Team")
+        if team ~= "Blue" and team ~= "Red" then return false end
+        if downed(char) or F.MatchPaused(char) then return false end
+        local root = char:FindFirstChild("Root")
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        local ball = F.GetBall()
+        local goal = F.KeeperGoal()
+        if not (root and cm and ball and goal) then return false end
+        local plan = F.KeeperPlan(char, root, ball, goal)
+        if not plan then return false end
+        st.Char, st.Root, st.Cm, st.Ball, st.Plan = char, root, cm, ball, plan
+        st.Fast = plan.kind == "save" or plan.kind == "rush"
+        return true
+    end
+
+    local function steer(target, dt)
+        local cur = st.Face
+        if not cur or cur.Magnitude < 0.001 then
+            local look = st.Root.CFrame.LookVector
+            cur = Vector3.new(look.X, 0, look.Z)
+            if cur.Magnitude < 0.001 then
+                st.Face = target
+                return target
+            end
+        end
+        cur = cur.Unit
+        local angle = math.acos(math.clamp(cur:Dot(target), -1, 1))
+        local step = 12 * dt
+        if angle ~= angle or angle <= step then
+            st.Face = target
+            return target
+        end
+        local rotated = CFrame.Angles(0, cur:Cross(target).Y >= 0 and step or -step, 0) * cur
+        rotated = Vector3.new(rotated.X, 0, rotated.Z)
+        if rotated.Magnitude < 0.001 then
+            st.Face = target
+            return target
+        end
+        st.Face = rotated.Unit
+        return st.Face
+    end
+
+    local function drive(dt)
+        local plan, root, cm, char = st.Plan, st.Root, st.Cm, st.Char
+        if not (root.Parent and cm.Parent and char.Parent and LocalPlayer.Character == char) or downed(char) then
+            release()
+            return
+        end
+        local now = os.clock()
+        local rp = root.Position
+        local kind = plan.kind
+        local speed = F.SprintBase() * math.max(getgenv().MystrixSprint.Boost or 1, 1)
+        local active = cm.ActiveController
+        if active == nil or active.Name == "BodyIdleController" then
+            local gc = cm:FindFirstChild("GroundController")
+            if gc then cm.ActiveController = gc end
+        end
+        local goalT = plan.target
+        local tau = kind == "save" and 0.04 or (kind == "rush" and 0.07 or 0.12)
+        if not st.Tgt or (st.Tgt - goalT).Magnitude > 25 then
+            st.Tgt = goalT
+        else
+            st.Tgt = st.Tgt:Lerp(goalT, 1 - math.exp(-dt / tau))
+        end
+        local tgt = st.Tgt
+        local dx, dz = tgt.X - rp.X, tgt.Z - rp.Z
+        local dist = math.sqrt(dx * dx + dz * dz)
+        if st.Moving then
+            if dist < 0.25 then st.Moving = false end
+        elseif dist > 0.6 then
+            st.Moving = true
+        end
+        if st.Moving and dist > 0.001 then
+            local mag = kind == "hold" and math.clamp(dist / (speed * 0.2), 0.15, 1) or 1
+            local want = Vector3.new(dx / dist, 0, dz / dist) * mag
+            st.Dir = st.Dir:Lerp(want, 1 - math.exp(-dt / 0.04))
+            cm.MovingDirection = st.Dir
+            cm.BaseMoveSpeed = math.max(cm.BaseMoveSpeed, speed)
+        else
+            st.Dir = Vector3.zero
+            cm.MovingDirection = Vector3.zero
+        end
+        local look = plan.look
+        if look then
+            local fx, fz = look.X - rp.X, look.Z - rp.Z
+            local fm = math.sqrt(fx * fx + fz * fz)
+            if fm > 1 then
+                cm.FacingDirection = steer(Vector3.new(fx / fm, 0, fz / fm), dt)
+            end
+        end
+        st.Controlling = true
+
+        local serverNow = workspace:GetServerTimeNow()
+
+        if cfg.Poke and now >= st.PokeNext then
+            local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
+            if not (type(readyAt) == "number" and readyAt > serverNow) then
+                local model, distance = F.FindPokeTarget()
+                if model and distance <= 6.2 then
+                    F.FirePoke()
+                    st.PokeNext = now + 0.25
+                end
+            end
+        end
+
+        if cfg.Dive and kind == "save" and now >= st.DiveNext and char:GetAttribute("Role") == "Goalkeeper" then
+            local ballFlat = Vector3.new(plan.from.X - rp.X, 0, plan.from.Z - rp.Z).Magnitude
+            if ballFlat <= (cfg.CommitRange or 45) then
+                local diveKind, rem, fireAt, lat = F.KeeperDecide(plan, root, now)
+                if diveKind and rem <= fireAt and rem >= -0.06 then
+                    local lateral = Vector3.new(0, 0, lat >= 0 and 1 or -1)
+                    if F.KeeperDive(char, diveKind, lateral) then
+                        st.DiveNext = now + (diveKind == "Jump" and 0.8 or 1.5)
+                    else
+                        st.DiveNext = now + 0.05
                     end
                 end
             end
         end
-        local groupCount=get(3)
-        assert(groupCount>=2 and groupCount<=6,'invalid groupCount')
-        local selectorCount=get(15)
-        local groupMTF={}
-        for i=1,groupCount do groupMTF[i]=i end
-        local selectors={}
-        for i=1,selectorCount do
-            local skip=1
-            while get(1)==1 do skip=skip+1 end
-            assert(skip<=#groupMTF,'selector OOB')
-            local v=groupMTF[skip]
-            for j=skip,2,-1 do groupMTF[j]=groupMTF[j-1] end
-            groupMTF[1]=v
-            selectors[i]=v
-        end
-        local symCount=#available+2
-        local decodeTables={}
-        for g=1,groupCount do
-            local length=get(5)
-            local counts={}
-            local lengths={}
-            for sym=0,symCount-1 do
-                while get(1)==1 do
-                    if get(1)==0 then length=length+1 else length=length-1 end
-                end
-                assert(length>=1 and length<=20,'invalid Huffman length')
-                lengths[sym]=length
-                counts[length]=(counts[length] or 0)+1
-            end
-            local nextcode={}
-            local code=0
-            for l=1,20 do
-                code=(code+(counts[l-1] or 0))*2
-                nextcode[l]=code
-            end
-            local tableByLen={}
-            for sym=0,symCount-1 do
-                local l=lengths[sym]
-                if not tableByLen[l] then tableByLen[l]={} end
-                local code2=nextcode[l]
-                tableByLen[l][code2]=sym
-                nextcode[l]=code2+1
-            end
-            decodeTables[g]=tableByLen
-        end
-        local favourites={}
-        for i=1,#available do favourites[i]=available[i] end
-        local chunks={}
-        local chunkIndex=0
-        local selectorIndex=0
-        local remaining=0
-        local huff
-        local rpt=0
-        local rptPow=0
-        while true do
-            remaining=remaining-1
-            if remaining<=0 then
-                selectorIndex=selectorIndex+1
-                huff=decodeTables[selectors[selectorIndex]]
-                assert(huff,'invalid selector')
-                remaining=50
-            end
-            local symbol,code= nil,0
-            for length=1,20 do
-                code=code*2+get(1)
-                local tree=huff[length]
-                if tree then
-                    symbol=tree[code]
-                    if symbol then break end
+
+        if cfg.Dive and kind == "rush" and plan.carrier and plan.carrier.Parent and now >= st.SlideNext then
+            local cp = plan.carrier.Position
+            local sx, sz = cp.X - rp.X, cp.Z - rp.Z
+            local acts = F.KeeperActions()
+            if math.sqrt(sx * sx + sz * sz) <= 7.5 and F.KeeperReady(acts.Slide) then
+                local readyAt = LocalPlayer:GetAttribute("SlideReadyAt")
+                if not (type(readyAt) == "number" and readyAt > serverNow) then
+                    F.KeeperFire(acts.Slide)
+                    st.SlideNext = now + 2.2
                 end
             end
-            assert(symbol,'invalid Huffman code')
-            if symbol<=1 then
-                if rpt==0 then rptPow=1 end
-                rpt=rpt+rptPow*2^symbol
-                rptPow=rptPow*2
-            else
-                if rpt>0 then
-                    local value=favourites[1]
-                    for j=1,rpt do
-                        chunkIndex=chunkIndex+1
-                        chunks[chunkIndex]=value
-                    end
-                    rpt=0
-                end
-                if symbol==symCount-1 then break end
-                local i=symbol
-                local c=favourites[i]
-                assert(c,'bad move-to-front')
-                for j=i,2,-1 do favourites[j]=favourites[j-1] end
-                favourites[1]=c
-                chunkIndex=chunkIndex+1
-                chunks[chunkIndex]=c
-            end
         end
-        assert(primary<chunkIndex,'invalid BWT primary')
-        local count={}
-        for i=1,chunkIndex do
-            local c=chunks[i]
-            count[c]=(count[c] or 0)+1
-        end
-        local starts={}
-        local acc=0
-        for c=0,255 do
-            starts[c]=acc
-            acc=acc+(count[c] or 0)
-        end
-        local links={}
-        for i=1,chunkIndex do
-            local c=chunks[i]
-            links[i]=starts[c]+1
-            starts[c]=starts[c]+1
-        end
-        local sorted={}
-        local k=1
-        for c=0,255 do
-            for j=1,(count[c] or 0) do sorted[k]=c;k=k+1 end
-        end
-        local text={}
-        local ptr=primary+1
-        text[1]=sorted[ptr]
-        for i=chunkIndex,2,-1 do
-            ptr=links[ptr]
-            text[i]=sorted[ptr]
-        end
-        local i=1
-        local seg={}
-        while i<=chunkIndex do
-            local c=text[i]
-            local run=1
-            if i<=chunkIndex-4 and text[i+1]==c and text[i+2]==c and text[i+3]==c then
-                run=text[i+4]+4
-                i=i+5
-            else
-                i=i+1
-            end
-            seg[#seg+1]=string.rep(string.char(c),run)
-        end
-        result[#result+1]=table.concat(seg)
     end
-    return table.concat(result)
+
+    RunService:BindToRenderStep("MystrixKeeper", Enum.RenderPriority.Input.Value + 12, function(dt)
+        if not cfg.Enabled then
+            release()
+            return
+        end
+        st.Acc += dt
+        if st.Acc >= (st.Fast and 0.04 or 0.08) then
+            st.Acc = 0
+            local ok, ready = pcall(refresh)
+            if not ok or not ready then
+                release()
+                return
+            end
+        end
+        if st.Plan then
+            if not pcall(drive, dt) then
+                release()
+            end
+        end
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopKeeper() end })
+    return true
 end
-local alphabet=[==[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~"]==]
-local data=[======[?/9f4iG0)z4jN0eABDp59h&u:.8~B"*>B"B"_~*>3w/BBtBtAQIj%(AADvV}e_N9+$>EiU1>cFC"n_qF@qQAFtaPr^cFAAAA+>L14ZgR0AAAbL=cGrW)y?SSXgFB7($`]uVe3&u6%q2;l>K=|/JEI4w!)*CBg[Y&LLo$V{_~/vL!<By}nF,;]!$XDe`Ow%ftme~=VWiIp]<tg,n](CT)s}cW%[vB#&N!B%X_:pim)(sxUePtm^Y|?/J#e.9{D>P8clC4A_l_@g~U5Tt::2n}jujQRTe_YLn$1/Us&va,uwtrjgm%$bx;&%K9au6U.hb<g|f1VOKj$97fepGs[G6?w![Q6fu&@(G=CCEAyK"|Fba:olRbSqrI)U0XHANAAArd`b(HAAAAAAn``P5zU*w&_+[KVGmXP.*d[w.CA_c=v*v^K$T!@`:Ue%c;[)_B,Zy|Eo%eorJ#w]oCrXcpmi#$0O!j=0oy`b5aZuqpQ$Gr`a0*v^/;vlSfk6qQ{+vR]UJFk)R|E9OoW=6o!oJjmrx#Nn={+Uz*E{l.om5alw7FXFB#stx0;os,ABmL;WqCaAUAAAAAl%KC72ZL0ANBKAAATlL<R$V5M"_;Xa2Z6>38@l_72E0AD"Zby4oIPzR{$DvDAAC"Ea9e)}14Qp7C:CH|D?h9+p]gP}DLN>a9On~gG.wv)?|icPqCAAC"dTsk~.Q%`ItKLpubg>q*n#:(2:k>Mx4&($f7%KgyR6}=eTw*B2`.Ah`Qanv}}IA}M3;8HAhy$bOt%`yW5FYpH%Lh;x1b}QhF;2;s/a*^92B_fc%!eF>|>%qT;E%(LSZSn^sQG"h=d;EyU>"8]%4&=g@%Psg3cWA/?q#CiKhaNBZL>WRtPDjHbfJr74R.%WFrRbx4QTaC9B[5wcA}X0<:0Nl4O/BtGAAAYAK"R/3D?vL`DzIN:e`61ck~(zKre0M:i}]dNl1xGAAAf/pOKN36WDHX0WDAbC&RoAAANJAANcuGuWvD0E;BSCgw5uiM~4q5WJy/em>W(FnZ^Xme`6E:PxrVn];Ca/NBAAAASq#HDs)z5KS9,||)G`b}_B9OFQJ+oof|Ew~~k^5}$n|g*q.^*Ot(9HRaoO=~qwVs8~Fq=2{b3gA:6qrrENG@@`IZ2_~{a+`:V~g939OXWl|rB]9{LGNYD@oC0gSdS?Pt=C1>!^?Uj]O`av29%_&C~.enmb9n$I>")4!Z?v?{L;31+=n,aY!8lNadFz=f!!/IQb?iljSzcrnRKaQiu0+0]MhjaYX0.Rydqa{iB#%<KaIaJdhf020iy(]+Mo+GW<d*e!?7#uZwkDG0MHm*U$bH.ZrG*ZRb+ZMamZUU|MDiQ2u<(PKd}Q@P8z8!6q}ko0W/"kB#(HFzK*vl,R<F[cefQ2[7pl5J_+1Z[Y+RAROfe)q6(z+EV$pM6RQn!wA<OPSz|:vzqRTm!Bex:5[h_PCR+R`cFg_dNq;{zr56!x_P54f2mJ3EP#AlY:Xvq0S5uE~[TNJBamojvOedOad@a2Tdj*(SdY30<4@k0i.d+E91}a=0F8Ga)G*k>8nfXJO`B:IV&>z/iZO)R`h]Li$myKS4P`Attm7>+pNmAMo_"3,tUE=&}TP*_y4h{ZjL*j(~cz*~XXD/ri.1_^]Xx`P_L_Atg&xXkDn)8^J|j(?U.r4v2d"ILuaXL0EbvQllkA[s_}eHMSp&$XI*CAyuWi]IFTW)]hDAecAOGR"4#5sC8k~1Wo"b&btE>/VObF`~y)@)&v!sK]CF9po2GMifsnquYL@J6v$J4L6F3CBuE)G!~5vR>Ai]WL|J6rY$N"0=hz:2iNjm`{EJ0nr8|EmJ<86Ly5Y4[{&vM7guM0.S?QN/#SyWhJKOnYzWXx_a:yl:mXYL_t`91Av#1ty/"m;l1,!,&TWsrjB5a&]jvQ~nQJ]Ba:0ShZi4iqGK=&kYk2.>3>oWAJ9?6IfT)_%$[GTGZNk$Hh=2dbPhr61pNJ{FxSq:Tk1;McXB68,2IRG?4VgI<~2I.u9uG4u^QA?^7vC3o}]lTugBlduZ`xV):iQm`XP.?J}|:iAr"+k=gnc(;6A{oeWz*8e,%5%X{@];py^#N3=0VEm~]+GT>fW9O;%Bt@J44le#zIMRy{1R:M1pI*;)]pKilG+r1r{]=M*QG:yR?m>)Ssu]$9@C[[[/H@a9;:)`BBZqW$T(p>D84M{~i^rk&*w9_r?ySmLrkd48(50#,qCZMrK5`ds6h[o+w&lJyZ:joAoR9ct4LV;<Opo$]Mkq9Y^Wu%n,qX,H)*^jr04GN1>Hfe!PM10GcO9PsHUVLsB.sj*HpU.ZHQnG>k+nnHjQ;a@zP#b2sgeJv5pg8k00l2Bdh:VNFtg==T@@sq6nCkCAEhRRTc?a@`q..c#h0X*pWnD,j$RBf}?!"0_C,HU!XmD4zmRUdd7veTZ@0e}XJ?sO,Z"wr$)C9S4R%E+]kp5aFKZ~@D_M+68hQ1]C$d,R{:Gnc,?CheFJTD93t@Kn&Sk)xHkrQy|g()z2),@0~{2O]^$;R|&L"}Y#%>3:J>nC/sxpN*~}A0,+%<,BW,XwF)f=&,EcZgPb2#V@*qt=P22UL2WF/&`m]cMDFQ0X`i`|%,?O|%Q|;&?xA"]zG/aJsJF2)oGii}..?URB:rI`^]aQ&&dn+8ZmfYZ]@?e#Su7,VSh>|fMx1>CI18"GO4j`+=smNqnZW`n:7p6:P}ObBSVW@e1#Qts,Oc<d&HTp`so$EWnw@^_x,5}bN%[&J3t$&^V4=wd8~M#&49etx#f:^0:xg%"W+.1,=|y`Oer{!P5J|lre@|;sQR92L[dVl8L/)rngGFp&0z5<oiQu"<S.8@Gy17}zJq!g"*OdT6]U,d0$^!q%Aj^==:skElRVf+/:X~UoQrq>:H7?WC89C4RD7vm;}wpZ^Sbo{0%qGm2#I{`7yCakoza,G?.IpreK<{O!%.$=W=;x;It_Gr5qhTqjuM|s}`"Y3jgp^pvR}?!90VyV_9p|Or;G1U4%cp%_T4U]S++m`{odE[y&)w>9qZ|nQ~wzIsz@Bb%!)3W~4y}^;rhg1^PURNi%8gZ9+w6I{r8alW%]1s:N!/[:0hB7qTLM.|GH:D0R1#J()rYxWS{fw*2TL4Y$oTM:)9&rFmF:f$ob]_YFP#,&%0Ih>*J(I/DQ>j8^$8LM@6?.lbHCw9@LH,];{5T.!P*W!,Xi^zjyK{e{w;.MCA$sDf`l:#vs$Pz_^$M__30+[BC,WnSU2;Z>xQAY|Cb*^jrX^(gSCS3E>IzI"FNlq?dLBQL3fHqtEAF6Z;Jh_NNus4kH|kCpvzvWm|Mj]|Q|KtrMcY)3y3p?d43KR=HWvKpfg_CI&EsuVF":L]X*OKrdjX3D|o}#~?OCGu.(mO?&qm>E^2>@)BknWXzQMFc.tN}qB.jN}R+h[9&1~QVCg$j^p;&M<a@?H{r5p(9?cp]N?cbZ/Hd.Q_Tyft{@%1S%m<dSOuLr[v]T*IaZJV11`2SM>vE|m0OL!e,6hCY5*,sfh~KCG!&Kd1!xIDSMH%_u]Tu"n0JtHjUjbLCQWiab8eEHJU"QkwR,~reBm9nYMo.J0l%D`hWUsFQChxCU?G*{d)iu4("G$&kxG<:_=*GSw6sg[N2SKIC3L9q?=^$~=Ee**{)jC5n^;w2)53b3?#._Y8lkbp$?[1<&TM)ky5wkApV^l&zhA[nFqZA|be^>8eVrrUR<!;ta1t>p2QTCGstr6dT8b1}?<+HJ`zW9wbLpcB?8ql(qX.]b{k9[Ez!<)PO:R=)CIl,Gv4zlj%$/D]Hx~I!zZ>!jEJ=dD,}HOnlHSnl$pE4/]lP32V44L4+*%pN7kqyM7V$)40I[IS,$Ll!ik$zMlg#;#kc*sd,=|"Jq?#R5,&Vqs=,]c2Z:LN/4kd=zl)w]NnDP6HJ5u4?lf;5|Yq|mP,E80o}$yv2{%J/jtM[axo+D:pzV+yfi~;&_s0,!*qH%MkKe]?>>NYu,}f=@sQkr{z^?uQ/Sn26jKL)5U%6@_oUf"w26#mL9icZMrd@fB>32qb?^dl^iB0U`/)~f>U(e2Nr6{UtXBSufo#r!&m.?xrP<Ls)3eR<,velT36OumLx&VDt*YD}!}n)D":${G9!|OSa%yI8l:jD{"M=i=Gh0`krebQ{zs7xzy_93%zNQ6f/IWMl$".:#D|xjT+w!i8>#?NHQsF"d~6pHrr?{685!!@hp!BW&dUGEHkuob3fONyl%CLmcZGV:N|gv8egnR6%H#%z(v5DWT10+yq*%qfOFDM;`4#5n:7qfq:qH+vWfg9UaXH#@>iS(Ew>G^}Gw7?Lag>>1TaL2e[E.a(Z9=Q]KaE0tP+#wN.x(VB]Uh_92dkntR>p|2S+8^e`&41u?ZI[_J.sd|dwSCQ5A5C?a=pv%mzsK8C33R$X&]irn=Imz8ry|T(VY{tl&*biyvHAeU/]3))5gwnqh:w`4|YoaM<%&3DvyKVC2!YTGCIfHhUA"7)&S(n6tAYq!Ka+m{JWE~z>iz9XT|UcD,]m=U20"%_);H@DN>Q_lrE7$~?QxxSSlV;D>d25CmY`Q?6dK;&v^FI;uT1mu5bqJxquG,=z*QZbdq*rx}6K<]J8RnU`ebm1OA;_OR6(U@P(D];~+wxY=>%>U<;ea?Ys&j9K+pKAG5rO=*9t:,p[iH8?dI&nbX}5%N#1>*P6s[2vh,)bqTh{#D2M`~,)bAII2b{0$8]*l#3an$P(D#Qgd~!v+)Q.B<mD2p{P;cvw8$dTnS;&#_m=rfbX`eqLlgI4!JcP<Yqp*D+~=D)5pfF#JXs0=G[*`mmzxKpY1)`J]^P@I;U8;yV~o|O|%tYs93$ImRZ{g"Ys}+aSs0Vlt+99;t:Ad.3F)b{KIa,fVD].ra^0LC#`al{%i6k]l2ZS,aZa$S@W${$|,F9U?>8Q~BX6O_("7V^ik#F?3i!e=w_lXD{xTeHBi[r5dc[,@!$">R06kd,{Owlbpxzkb&{A4LBPr">x||evks0^BtP{;@batS#c?sC5m9o>NKEjcx$))gbbgdU@Fm^WF<%Y+,:UTymOVx2"UnwZf8#bln8MQjoud!~KbD_5oSy+L/#YhTBx*$+%%,%gfJ;Ofd"M462hv:+g%Co5^`5cJ1f7Y9o1|v9@XK|{:v$rCZ+wR8,a^!NoNXg43m$!&O0vh[mW%Rn}9S(=*~jgIvni+FU7L8>OT9K,*0]{u@<*cQ7~PDPl6|UZ3Yt6Q7$@|n&r(C9weCcw6F&=]N_.@9xb@3mU?K[t~T^/!mxxSD83iFV609_Gp9vO6[P}H@)O9n{4Ca!j[doe75.dXU?:pW}|iu7{g>lCWj>Jk3E0[Tm.u,6%J]b<$FM`>OUq~R*N|wmmjKlY*`/6~O1z=NnYvw6Rr>)=!,Ffa9ich7:.qz+q{ml"@46HR2jV]A_{J1,oYfIAD1e.^+t^xjT=n3ZZmdFj{U&P]Ip4l3)]c0h@gI^cK_bdt5JZ0yMLg2dQ_i8n$"0k:OTm3z*o`vy:+B@"=ZkB:z;hrW@ZP6%^pj8tUb.?:$/0S<>zv4u"H{&Ako+1<zo`z?{drVGqcr3hpK*^JDA#e^7!X*ul$e;Plp@cX"hvU5k1fyx#=)$Uapri9B.F3Ax4!tB|Si+0@he2g,91z>/dj`^)I5Q_g/6.SgxnS@VNFAh%PH*)K?X^d&;zVAJs6S#fpz<`]pU>Z>]r:snTrRKl:jT58G:Ps}^;ps"a&6cSPV:KM}z%C)y>|Lo`9`z2q?l}=Za4fW^Ia4#erYE]z4M}me%7`P#x|Fjqf?4xsX]Y`{:LiL6P,d^vlw#7b&cJ#y/3p4K9=s@ZzPe^~@f=a%>_P#.heD>frq5Wnb/WhQ!aaI2%/4rg8!w6U@yI[M;>OW3fxmVOuT+huof*<b,+&q^kNHV7$/gSOr%O,LU>aVHEdlN]npv0/.3?2B.}QzA^d<`~vBDZlP&w$<73wy4;0G|@.yB:)h:>2^P47rsK_jc3oy6mzK?Y$X[?,XXYkw#I0wRszISF%wi*dbyQ&~yC<gZqhdv/z$]X!~/eB!KnHx`[@<:p[3}qo}VND.qsZJ}+>frI>vZ9Q3(y]+~6gN)Vpg{=lGXJ*$rH;DYGBp0cvkM842A6(gV`fT._y@9D+~Kk<xhN[Qp+HoiC;AG5^M,@9Z&"sm9<V`U2aSpo~.%h9t4_QVd"IWp/HmT.1c;mZoq,U[p9572Cid#nOJ}qQ|UF|n=Q(USa,?|*5FU=:L|XKSSexxz4,u8_!5UY2ogXP6#5wlIaP9#LmmOxmyud&CS>DwgI6y`"nKSGVO9cOnKP0(2(W`M7q2PMnbp]n#ieYqa<rhu/S"s?+M{*kXVD*sr6%b@OIzud2)"U~l704NB<?2^=c9M~s>yu]N<E`H<mS.Qk~YSo$6Lf.j$.379c:?eC@F@noSsr89zR$^lLcr{$iO|=!@XRsI_/]i%`e>[V/LJ&@?G!.t3G@E/N>7.92DjTP#d^!n^uyM@=2(~^<eJZ{eT5a$ptodIA"jF(Syh;~Bir~E&GI>=<^z.rrCji%KS$^m&K{M/o3vGx<nLRzW@MChHJezfOH$^_L69G|;Q$[Nnw3[*$!~|v}9}K~{_9oAWf),c=^s.9uMJ2;#bPgB"BbJJ_*TeUL@`.s9T~JvFMpH!X4Z!+rHI(:B"S[Pq)YM2i~0$zu#R,8o86={U];k&f"L~wji5CWY.e]}+ms%)wk@%7Q~s,KSnd]InW16s/2)|4%i_:n8[0,h_q2N|Kq~bG^7KGqJPx>7~V^P3^`t>_&9G.9cxw2X}hyX&SEU%(s:n=gh63UC51pSJ,#6LRHv|0t%HT4![Ju{*h*Fn3idzYhOfS&ng4T;s$E^=n,6P>X3qg`4EWsWhQx~j@[X]5f7_X$QZ5~5<[sADx7b)wgla$c$8H~JEI;~Dfxs]L8*@e^3&N~_&do}ql&c:cT2sZP:P;wC9E[4];<U;oHn1d`SUNH7<>Bo1k/5Q)hh]M=3`Yc(ny^<1&`j_jsM/`INKo[F+V<2TBR.V.]!>JKh.iH~KK/wJ4#PCt{jwt?BP;sB,)+Z0>mTUwsOFIanQ&>]s/2?ndfpW4FWgq8x;ZJ/iH!KWV5;,/#/:0f:`5@(0i*fgIqB07S&&E2E]ufw^w*>:Bnz9X/mGIexc/x!U%atQcv%aNs$_6)R):bH|%iRUp~vJ)jh0pt9U+5vOPh6=S%s(UjPs~^U^<4q.ZdqL[mjd{fjg5kWxb8AI"UNzmrVLCh%Cy<;qbIbryFNnD}a!Dwi>U+2r7_|K;hgy1ZvGyC.(Iz$nf~lZMxM:uYen8(,ml>>i(mCOl6?rj.YY,RNl!N,Yh{tZLoK@4i9w83K(4#>3k|c:!mMJL!#rrq2;X6U_Eh4m&0QeW_O*66xF:,tVDUWxq80#[e,ei`1fUy~ZL}H]f8#q>1o3rW:5w"x4p!Q59>]&`OZ%Td~A,u2^nCP^_b&LUPG&Qn<sO90vRljFT<TrSQ;Tw;tz"M#erz4!VZ$@t=!OF6fH#($cAW14ke`%D0qO8bAq*:bB>q%(^D&X>$kPdx*@e5IvDWf11ZzD,1Q|yVSnzB"~zyx!7TZMk56at6f6E68^`E^6/tQEGRyfre=;FroWD.(*^u"2L^nl&&o7/j+8<twXN@uZzKKSeh!a6DH6sTx*:@SZV;9J6i?[ML70VrlJw7$ZQ8tQs2:Gw6[0x!%nH|O7e}]f=R_[{4;CT7iM~LJ*^|<7m4jD@c{X!2E0_:C;9536DtaA/M;vqQnz4bOiD|CV8vchR|J@G|?sQ>Yg,*V>>w[(=:^C.tHC?]Sv2}d%{LX:7EnW$gADV~swFQ*r,R+}A%T+6ge8EX*,x(9JXR_hs~tEnIqc4rZJaEo9^ypm]|k}KI5fTx(jIRx{!,/=NyQKQpI%F:"s*?VYEn{XU515fB">5WLB0YR]SWD_%ByKoN&RkvjR"v?WQCn8nZKK%HjU2}V7&>t>]sz{l1~}JyqEbO~^hu)hglB`v`,Q<?(v2/a79tdL))|{6kw|2T]essEbX`6jrXs|BE%SIwFs"#N}DWdnd?l]kPg^G.3M@LAx%ddOd^:2>|_F%|$r[|sidqjf??Q;4ZDL3?[Q>ieG`Du,AZWFGS,V*V?qvziSMMaQZ$sW|`Ps)T||j;DMa]#8fCcfy.`5+hb,;1;I0)so9gYO44&1_y?/QAOB"a~RmEPvcLxzT{`M7TYLbGUdwQ}QFP"Edt./w6htoZifbvbP2QOYz1WR`o(v)$K);ClGXJyu##L"I)JE(N_>WuI7.^qgPA{X{XQxl/{~KSI~vDScjL|Dbj$H3%s,=z3yB++A#H%~^67>H4g9$yNXCp&"qduk*uuh.S)4qIa]T73:^:3e>?dD2Kz~H^t?Ot=`}l:~~:cWa|_?)J2r,>$QC^Bm.6^X2iYMyzS@(Gtftt/1{|Jbl.XQlrV!aF~4[(~,#a4`Q5{%p}b@LhR[4Wsb@4.5@y,WGG@FjY@Be56WYL_f|(=8gj$kn/PaU/y4AC_9$BjpeMox%4/r3U@pWrn0g/#i4?Q=#U`H/MbR6F}?Yex2(]WfR3^8#4/brMNCU,,@*8]p8IECzg[&4wXG^(tc>TL>"afjzId*cyvN<PVtYjng/z+1G01z!cC2KQ@d9`B/ZmZ*%ti|CqKKPKN]UY#[p!PjPGc:1n*"wUy1|n]Gh!1H{MsuV8y+VwVB[c&G4HOHPBNcf+p=KLOm{qRRRsV(gO!U<|?q?0*lnkAf|`V/EYPm!B=I9@3^~RDYPq8!PVyVcWo3Tm,lW#y{k]CcJQXYP1<!Dwygm31^f/rw=!^nR*Cy4cs}/#~@?O4p@#liKfNri<+j$bNaZ_V`eQ=.pY)?z^|BBY7NEaS;7VJ(MQ7m*f]l/^ml3mla^{cm70n9%Y%Xgd#<o/t=8=z>*j<DMx=<ep_6$hP<Fnc(2cC8vyQa/9V@[^zC;Ms;:%@Rv<(FaU9&,mF;TNr3TSRxCCN#_:!fU^1x^a47M9/UXmITqT^%F6$3{,>#t3h.n;(eKll38ozeKI=$L1%I[v.@s}lPEsI*$.I]gkj`x_&I"TFfK[7EfQ`z]OZ:O#@8!.5nG5]sxeOS1oj$qDO%[)Z=){j"wevJMksk*j;1<KudDb#oC:}m_zB}gydvlQ$NQ^]85@Iw]Clp{&31jzuf5jv!)0uQbAM(yo#SF|@jva:$omEgA/(!wE?>wfbbA|@O~+}i~:^]y]IpR3"d+El.0eqFM6}#6H.3y.VoO)kd^rMay{&2d|3US1/.`$veqkxP+)gu0%Bdqj>*wv2oELO}uYL_vze/czOH|6HOZVhF%@Yo}}jj7#>vCPBYR5KYLw#H5L3t5~l8<%_zT(fQlx.=B7o/gks,u,>Veazzd[sf[Hx[[K9W=oYekSN2GBwcc43nB6I,Bu&tD2p)*8wlh]d9lS3&_L_W9.s5k!Hm=&H]?jFoq4t/2s#C@G5]Ys{_sV>kGc|[;Y=]al9@<~wI^`Awj"4CV>F*6lDVlPibue[cruMc.&hVV.iZZOUy3,r2?n6@.R}1k5qnW5x<ww)|M<QJNtYJx4`!l72l;,H@X@K|3ODO&n&=aH`0j9:@*[n2dH9(^fEt&p.fx*HJmtEYQGyZ}cQS8gFbD#?38A7F3Na9lJ=jT>8.vf9BT[Byyj_r3&Xwxpx|WoZ@(w?yl`wdZ*T*8nEzHx*T#22pL.&;c9)Ykc1FoI|C/cSJ,9#sAoAM%Y>,k|uWLk|lQdsh(ImE|R:,2i5votx+mn?Jf7<1j36(MoKD6nJ_n`E~_K!pj#QttrWoR#67bcW7(8x<X0B0RBD.Q1+|E.?}.w)xZ1cq[u0/qKW!TAlRi4=T"u+%ZRpzUq#iFH"h^p~&(PMN8z(V),;x|h3B6KGyJtRsi"FM4a;Wb|Ut{lr#>;#G`;YrADCE|Di7#bV[O_Z4QsP^747s[<8`>YpK7sCW5L3;6xW+{.FS%>"~;iNWlu(?&yCgl)tLZM|X:?i?1vl&.VcZI@);kb{Ob@VCWVk%k`n(sx/~G<Wn>r+r#ny0rd+BG`R);7@q+~exoBlYW37Vs@XQOGNUo32wT]75N[R/!iA||O_hfFf_9fZs|y*dE%=)Wxn{&=@WgTCWZ#g`w}Unb,J@lQ116=L>,(4;!L&0`Bq+%*[$d)[50_{h!!qWi?Nt0sP*g+lm0I{c^kK|C8+5MZ/&PO93jBO{R)eUedWTJ>Fqu8i)Zq#|LO5x_iYv~OL%0XK<ht|X2WH2$}VQx}0e^,!thDJFxN<H:];?kHEM;ptI(?Z)`):yi`]VAMDKiKT"8us_S:nB+d8<h$,a5.y6^K4CR,NAGumQ6FLO?J#v,4$D=Vwg~]y(]ctuQ{MYh{S1<[2z9tqaB.;,)iOB5WGA4X<"Ti_AL{"isR+M@cF?uu]~_OPD!K#E}iYGuwN/sE}4p=aLZ=m|UrFW5<!e=2pqpyeujCDX/OR`P0LoXLAgHbM"^vSA,wd4LPoE=*iQ6qk0^hJtBt;VAio%7v82#"A#)Zd[0f6)R>CT,]cIo{Xj}4p1FB((pWr2u$VyV~YJXPkKWu%(0K&G%H/}*3iP&Bb_"TwqTCz]q1f+5]q>AO_X|At[Wq49{S[7?Ljf=e}4uCP?,F};]Q@agG6Q|)r%r[WEGVsx|c/&5+uN5@Jp"*37(/}13{&$I[er_+eGRXgBK=gzZOG~xdR)jd`{J.+:>ft,l.dR{M?W/OCI(9}1#VfTqmWT6:dJf_YgpjvvRn0rxRPQ6V#^?N;u+tFH43scDK8?hP73nkf<R.}Ri4mG`o35%<f>q(Zj>UfFjqdH9tJn?)iH;BLYA[~g79/op>~wr/QR4chA>xAVH;$HQ_p``dg+{hZ&;:hp`W3v>a+Tka4_G#C_=k90$a.:Vb!H@%i(%9,(,sdW`Q,P&wbC+s6ExwkcO|u1QD)P{gZ*qSMza[?V3#m~k<<.H[QgXB=Wc$0sN:QXOB7u+1DGEnfc0_rSuD0jHD,6^Ut&&OFT.}o27zCb<?aiNBdQY(Lxx34}nVYm]!|b|4=N!@_,ph3Q=51=/``%vgPoh[tj,^Ne"^4?GRbrlXsLHH!y"C>hJ#)xr9GFRSX<Qo8ofCBCw4_%{(y;{hf6>~&&K]9I`R,?G(:E4l+.@MCw(q7#yN4I>;V:6ySsi#+gRu~1V/Gfe{;b_4k0cIA)zs984ejD(K|oBRK|(H!gDHxCsnYE9rAnwT<khN!(ei7~u@r>~,4V3~q"[zJ`=>h&/T/Z_R+T0}9m%2B"63o=7`&gR+/Ul@4Dk]y9KvZmt[!3fpV;x|fgMha5`~tKn_RQ.*f"RpCe4w}vWBBx?C2yliBwR*CoE`U?Z<"3+osyHgD}J&AFRDm0$|.i#;i1vV>K7c`__7CLX^Xm)pSi=M:yfG7DOek1Yn>g({;8ZZ.1B;7%9V70|f3a!."[=E<x(fh_NbP:m!B&BVvj>CC9G@{%@d#7X$Te@%+|qkuT}g*fK?X=zsu?t["97:$VR^H/r5qgvY4OCMEbgY`GKN<24+7OFSn&91]_yhM9rgHX<+G(ijw@8qhlf>Z8Lnm<u>NPwh={6p>KL3DH3(vu*9DbP1U*/#@ZG],|f]kkJFRO119lKi_<4#B?Xqjm&#!zY+t7ad0[KG@7#."dRm(]TiWdKY[4p+?&(6J1%]LM>CpB"ijkMkP6tPN4Tw$LSOH>OcMwggJnWYYwd#tN^B@v)Tti]V=Q!#kW4*3=j;@uFalp^Z3|~Sz}B%x:#m1Y0UW_nl0]v:h7F]*0:Jah)L]NV`i3k|{?KgYdl4^S%E_6b??(`<`EGHHsg;M_B,);HEyD?4^*I8[$ToDl_;L@/p1s"rCKAfmrZ{0*O0cR5^,g|z)Zk[#O5,g3lr!<(27J{VP6s;oYxf+`rxqEhxz>d$kM:=6)w,CVsY~f,<DPBzU^$#F;.FL6`RVwMg+^nmX#X$$&J["U=$d$Q>s|MQ>.836`P(h[U+rxC8_;@m|%PT(.12[g}BY?<~8/[<z}`+WsB8S|7(x1FR}i95o:[`xw]6zm&.#`<jfg:m{QC>@wvH7)!`rlh0rF=V3b(d(d}(`DL>W1c!BN)#@5PDxeEDoXBwWO=mzvH,d.vl[M&Z*fH,5j}mV8_v[Y=03X`HeZEAxI^/,oplb4wzGu!R2Iy<DA51$E;.|fJg>!U;c[6O,.NqhIs+@JQAGOW<,LtZsw$4}b3x%keG!LZv/1U=lE4`CNU*TlV7Hf30Jte2#ydf&aKkm$gA}[TVV1!G]A$?iZgrfLmF=l7C":PPh<gKeC=,3}kTev@&dK8b9ua2HDY9T#R_[<u%H@u!!M8;^dH2lcAvU03r(e82W(/8N4DI>*@jHMyBVw5)%RbA{UaHNr)p/NN7WS.R3XaQ|kRJOkFlA+@MZboKvGR!{gmCa@PU4IBQqf8!CRS5vzq@k4kdk0`0$Q#d1RJaR2zL)twE$Ez"PGRzqK=0efqDNtZcvJrubDVIp*"12SqByP|3~A/,2"Jg(y~(SV?7i)^N=TE`wq.lBs%<_lZ&|y<6cNxWrZstrSMY"Q3EKKS:Rb:CRiXEeJcbms|PXc>*F^!M"l%6A3%DV6%j${Hd173`<]H#d9f0:B_j4m=l;gN25GMNS"^XZch|xCl$u},GK9JTI4N{N}#BZb006WwEHhu,@|2z/7so,RJ[se:B1YzOFrV0v4euP)Ehtr+8b._!,$>Un2G.J~N9@KR+nsl{F`YxbDb>p^i|o)2~"INvblj~A_{PFTP88obdW:rdxm.[OrZ*z%Hltm+/8QG|k~@/J`xq~$c_$/(2&hA#`u)wSi)#M.^1(!Wak#k2P%u}zv=Ed:ab`#|PT%RxFq[*seb`7du9xgh9y./|QM9{cOBqu$_Wi3{bD+eYDWU,F.SV>Gx`4~?9Ix[>KH>F~lMWCHDq:e,GS:8yLvy(:(uDU/>>c<c7]uGEB:l{Rw&{l@p9t~lfXK$%F($5ajbnLg|^/Jy[s$7<?p@0t!d>f?D>{fW(c7*CiycQ$^Gj7l>c7N`is3Oza]97/pRo(BE5xtI8+.Bg9lbvBMgvh1a5`yVDYOuOg4AuJlFBktpIB!u2,asrZggX0[f0wJs>tk[@+O|%hS}W(r,jg<|0W3s%ep&:0OPSa+/6<sQp;JxJfQLrUG;#u:#v+FYz}Aex}Lo/HfxJIwLCXOO,<Uw42BBm=i|B1(vSr;([#3_F[1gtBbv3<=[dM4Tbd:1:<*;E{ok9NCRr_^~$`g$V+/3w41`^Dq6lL$Da=5Q_rpS9r_fxj):nquAisCE+8m?f{ahx"9WONM%GV:kEOaYD<vP5U<!c$Ze/ZFzp(;7G:_W*M@Vr)^`CV%8@.>Mh}Vyy9U0m$t?5q2B]d2?:6&S}!!M!_<B|OWa/LqeLl7JD!^q3NwYQtt}J#bBJMBE65Bn/ySTX@RtbpJlmghz,"Pl&^yiq/qU=y(83(>e^Ti7RbHjF_uHV@=[W^j/GAOSG>I%GeasDD!zbQ#%=<H5^morNvH6:Awv[X*Gn9v3=}5Gx}/9XmE[,pLTf[;!QcCc=3)p1HokmB5}OqutF%F5&DzM0?E,e3I$S+h+S(*b"HGXN(uazS(0iBJ#VF{nPZ*]P]Te*9x9oN^"6$V~|%==S/>"qt|D#Tz{9?cO#*bB3+OjL)Q[,exdMuO)zA.s)[/W%u?vf5IrTZSD_hQc/_sE@NNo_=CO&;s(*1=AR<#afoU94c)Z*<2#/iA*g+uZ/IXK}oW"_l4R,q7}9Gq]@wIYAh+U+*+}$"I<4viP5@cSdSCDJZJcRFa""h[byaM{Zq.PIfzc;q_o78VWo)2P_bgRep.D}IxRZJzl,:cLZ;c?%mS4YnN!8>i1cB^*K(v&TKa]"wOek#*6uE<!*bPT6[cn!1E/M*w^=:n(b[99>*ZW)9694k~&_dk2(pOIWUig<TZJk7+0ivZ/*YaIw1N}CtI}{_tSZ.%ea?,11Tf.R>WbO2CQRn5[k_@3x#raRGyXega^$NLwX|h8[TCl:YT;*U%mp!r,Bm{(evV4GO6dj$oReY`Ul(B9tN{_Ed;KuwP{BW#]Q%LGNpzeMhm%VB%xRB#[^9b%[+TeV7L{ktGP>2zqTD:S,$VXRS1?d(Ni0X$~jQ_2Hp<IOO0.z!oHM=JDvZ4aG)+1O2N4I3<L!HEsEfEQJnJvGDmoMFTL~AK}]9SohRKQVOI?GKoqfG6!G!qIjES=,EICZM2BQ!@zoL1_?*,}ZKY<qH&m7m^Omijg[kCnZ$XU.nD0S%ZwI!PG)sgD3{Ns7Nw4yT}2})rdFYxIw2xwSL*Y$"1*#8#iJ"H|OfeXM)jlYtlBk56@W+B4^=4/_DC"xKYRq<8K[q(Q9t[a_q(Z?N]7>I*Y_=;zYLAhv3L(T57D5xcfxeM47n?fDT%<M1L&FlxMX/be"n_.DLPgOd)/7g#O!eEZ0dpD$nd;!lalS#?+f&&V]8nueB&6b$fT.8yf:f;F=:E;x2gP&4==qWnFK>*#!0w*Y;dyzF*]"?!D&hl,y]u(LGn*0q^!6Ai{B1M)tJl~w^dz#$+d;d@$P?j%%_&wf87XN1P:8`v@uma7DK$ex2qktMDiL63zoh8`,tN<v~1g*SdR,^ViI_<3*iE|D{1qIC`)25dEZ*1l5D.x%F^c%mZR`)Ymcpb#cQ58L5w4HB5qC!N3Nf#rz~cI?dZItm/`ht)tn<#pR]a?F*C5G8u;d%EwOb`P/wuhN4|kabKu<Umc!@Cu2SlMur7Ruyo=1JMz(aAmIyCII1B5t4>{SYk]#I|4lr{38j>EFUrV>255C+:^K]lovRYzx,,5(4re$/"M[K6{*,=MeC=vZfX*al5Ca81%dBRmeC+,]eEM#*&JqNI/4CUfp8r=#3|BV3a5biA4Yv1|BdpV4jqZ`$;?gmg1VwE5*qc,hjx7"zlh2SW)$5cmT2c"5xm0*UK*z%7285>E1L5v#0lTK=uUfjFB+cC;:dN>,n:9_,~jeOzbw^pfr?3pPZw&hj6`ic}2`d7&;%s0n)}dG>7e41*|^?6s,B/zMoBY5.#G/k7Sy=[sg:ICTw*67erb=Js$T.>AFS(JEWpD[$)BSc0ir:E=~B,|KE#zQA0rp0;9$.0YD1J#cA,<q8ey)q_*B"3B!T!g|BEk^.,FF0?d!:ZV*C%Q3N;pl>ry]|V8OnB`&O[NhSB&b1@uy()2%B3<!QISOr7Yu7d"Q9d;3#(NB@[jnt3yn:NoB=IUgs^r}aG}L|vgxU2=,9nT>MvgU!&mV!@H4<~[?#.Jo*4.Qi3e2%1h_d2Q:]}c9Q"8^leA|,$q=kp][`AdNPC1&MQAlYou8mQWNC$k.V#A:]wc&W+kU?#9R02Hu/uDvUH$F<N,#C75XZ5iPrXY|h+@_n6NMI/ck4J[(GQx#}a>IauJ*2W0Ge!X|[~wKVr>pK3r$Si+oG:t+zT.8ER@e._e_/Ot:O!J/0SgJdC:777z{A9k$hk21ON:)1a4IdcuO5.lPY/vz)%$R>W/F!GcM8yTv&Fv>mpcSo&Xva&^^%6:Ki,1z|_p@juHRE[>,]i9wM^emUuvgnDxb,UFwB?aOQj$JD5D&B]D%^ilBIQdB2bx~A:#e0y?5E8)gj`K+#,zfN3qOi`=.;2VOShqB:.7!5[^x6OnatxQe1Jj=eK*mefoe`c8m&5[8)1dFOBoz@,!R;?;Mbq#,^u04<p,GpH.>eO#5yx46gv3(mxeu#o_[EZ%4Lmj3Lmw7AxU<Nk*CJ%|;frYM7FeS9N+cDY/WpL!Jzy_nd>aYZ>Ce~`<]#^aV:q+0@<@[b$r`(1}+3ibN)<@=[l,,}z@"Pj^Wa]4wiq9&56wTKJy8[0bC?}4Lzhix1rx"k]^xGBt:DdrJq+`sgq)tfl9v([Tf_F@T73A7qI%<|tSR]jHrNRf]uOTVe$qAX2QM?@p4P,tQFR*Z8cVH"]2_D[B0=rV_hM~nD]<UY<4C@azP<y_%m*fx]Dr7(iYj3*Yeg.$?fY?h(dqtUO.<0jY5iw8<^te+/B4n<qA3uo#%RV,`_pFJzb!2P7C9s)hkaro*UfVkjrB%l8fc1HhbD/?E_6Gjb)j&U@D?.|SODN,N_XNmw)KK~H9a3)4CLX!=WQh7,_~pTC[DWWp[(&^{7m7xWlO38eA9[HI6x0ZqX<<31;U9bUbINmh;M0n5i9I/FKJ!^?iRE9~F+a~5[{`y@M<i4ClxSR"$mwpeig];,#!9q$Nb<nE~%;#s2Z`zIeYXATIrvZ6eR(QIf[(mxky%R>xH?>R3BRdB,C2wG!lGiz2v.K_;x#;fnz+kzDz+?Sr6]IXm=8CZ(c.a]"PD)8nze)zdRDCam)8(/71=^K7i+W!&uP7WBCTo^lb.n{b~mhMj`Gx#wOib<S#Fbb2_rPiC:1OkHJn/Cd!HgL"nBk]j*:b$!<gkV,"9DiMk7{VVyX#u~`cnS;6/houTo%})dLB8FN1iu4<YW$UY}{oJDq,8T>5/lzB[=^Sh8lo3iP[.dnClC!UX]B*h*xgGf5_,Tg_(9g@JCZIj389@qR0u7Zz=rNBbO;EVuJSYfSY=5^g:.]QMMwnH%F_#Mk+t~%<M6_[<9@.f{9:F#{/hft@MA$kJ^7KmxmX5gS#(/{EU+Ucx6ctK_lYtcsM3DdgL1j*+RdO[$:94t8kvJnyp,#97%)"JZ>q.H2!MQDRd%u@y0Knx#+|EF*pU%B3RuWlj_MRA=7$A9z6F&Xf:n;=ZB9~Q`:@_h9g.yMIQ`v=cZF*8$Dx$&t%$hs.A@aUpZB"y=.50bftHqIeZkS/`@;@ht}ukoh;9%eA#w*3&pQ/HMA0qmON,ft7"ZE;L8Y^,xwy88S`X+yu<>)<OmGAYscXJad2G4$eSAU8W=RIX5c1D6TG2Tg$%g[eOZoc1f0E*&Y(!I0Qu=hUM}~E~xx~sK>cZf;AoxxMDuEM`<k>YRNWkPv20W#"}8@k%Nq{_ir%,&3pq7hV%){KgK?EDWgq|_`PeiQ<gk~U3;O+LYVGPRS>qa?2$"D8p,m_tpeSgViPZ)o3U{M56@<+G83n<[u[np<gmL^%9*+O$^2qgR>a,CEE9DO%8q}f*sdDhz<rpoSju4AK/.NS[,n|lv~#gK{F8NJPU*]?|,=v[p2v]Dvu^dQ=USjv==;8{@a>z^R3mM/<+7A)z7R[&2HGk8VQ%w~nX9SmTl{d1$)WSQ][O7H_YUsN("?<LvY4zqxS0]P7rulU:xUOe0b2^0Z_<89(ic94%b6[efAnLouxj1Pk[uaBIQvLGE}gC7(E2:52V=#}%u.<;;&#32;K62}0e(oBV6%)|N=+$M]0$nC<7=%1L.d]r|6<@9d)V#pvFQ>3E>2JCZhH[pGB#W=Qc(9;?5b<F^imso9|t:k)LUTp!E`N9k3?}K+eRKsB37l_0YF2xSfU*Q0E_)1lC@/Uwm.ixz7FyBBj}`Zc<~;g;Y~RIz0D#U=M}T4vRjH}7k~iMS`#v`;I1IfDgG/SRE~*J1r!;;qBmSu;y~kR$4D&NWe,C@=<AEg4)2&W_LBmp!*+`iZ`U9[>RWIe}))Jr>w]y$@4xTu;[G$;P?xzO^ND__s1vph(w]"5zp~<XPw4zJ^D%?4h@4IWw+W7LH_dgu9a8oe*;Ov+U^SzrUNko2TZ?m/|OALWV1DjLoW7.!bXt,!Zu=}h2e9~{}%aKp,ap[a9>Fw`X6%i_]0{u=fP>V?x8=^w<(mQg149Bo3w&S/1K7di`Hn,{W$%0ha(qT[qBemQHS^+1~pQ7XUZ={z|Jh?zFIMIM$=;"fhXsw5Im6wvu1,9n:f2k]u0DNl6DmGBg`)|d;O0:UT~f<<(f)0qWRZ:n@Fso!}/k/{@uciEwr?230dW>G<3L7dED`Xf{ru[sy3706wuhE>rsH`U[^K5]5&q[v,R]j^J090xvONs!a"sU{rW/O`O%uRRRrmwOeLUC=@>gFlpe3i"DvGkf36N6o540TbT.ZdEk+aBeb:}4dLWUx$jp1BXv|QQJ/,~;lh{/y}(&hT`rg&yJ:D9*yrN{tu:In*y%/lySp$P]7E7St1RTzb$KK)qu<ADvb?cE5`FRX6}ZKl]U~c]<_0|O`[GS|uU/|9jX|13+Wm`8{N@n/;%G=q1>Fkw|,l9ROP94c3.jphJDz(|#[v[&e6M18*2:/b{WQbG*5zJ7KDmc^PuD(1Knhl`2ouek;W<Y)^R/&+iR{RzI[:S/zfwon?KohtfcFHIbvG?PYc@b40|?_C{Q9qOJnJKoq7<IZT:ZNVdw7*wE_(8mThvz0l:0>LsnWXJ[&pkYS_zaB2baY5R]itvLtM5FlA!B}P&[Vt:a!Xvj;F*igg"CfDdtPm"lh;,tBxN0J)Wapv91%[BjTi<D8L=uz1iVZn={Hct>mz;8Y.]nSob_T!j+oBwWNp^|qizPcfP/!B(aj^SQR7GetYBZ25FP?Y9>|.V.GZrO/xU2clqg)bImF=r[{lLm=w`hxj{c0GUcEgyWK2mW`C1FkJ)=!mPjRhz]2o4m*blRt(jG^&Ebm|m]I1=&F{m$J32*Eax|]Dua4TC,%!##joB?Z(QetMS_UZ&KQ|IL.[{&3d2;_6O=A6cyYv&L2:I+F]Z`F?ch29crSITTezly*I#K|{Qq>fl^Q;kJ3R..CWpsr:faZp!|xM^tc~3u,@yr4f.DJ+RL8o"niuq29ED>&DPQf6N9eq,]ylOs6#z?8wu3uk[[>l.iy|]Fa;0SJKqZWhZUh{D1?]+N~^SOeaX!DQ[_hE)wA238O<cOk8Y3qd#`%/UD}}%F,T$tg<KI2~!BgitB?js>{r`44|2QS^x6,V9g7#n}_4FI~{EsU;bQPkzxhqG_ZHVJzV:D@%1$e;z#C_FuM#0]C?iWEU/v7?c/lLF6VZSTn0Px2LDAE]x?Cz>WAGEbx&;]WT4NI,jWM+5r#v~RSlS[^&L&nIIIyvecelN;j$+|I?W!@mU8a;EJ*[$@.@Rh8d|al:q%314(+c>j~E/}JdJc=T>[c$i^S8v3]32mO7<_XegheRs<$o>j2a:Y$9fEj*9o3g1Q#=K<f]TI*?wx=mB&by(F]!#xIvwVJFR5&H#2MZR+nfxpw#8I{kzPsSz~eelXhx.=o(C@Iczi!rsH6%86$bm,0~(NvELHY:+}(UI4~:k70B5fYdMc^!S/)M[T3hMLt"5JS2*Zv&}XuZ^7D[TsNsK#c8069,HoM[Am(jl*R{0N+l&`)%%DyI1wB;#3</@iB.TkppflnUs=I[vO"R`#`:0gKsYzH8.V={f7y|kY^VH)Xh^}$vak|GHxmrfUF&CoN4~EYXV!|*fI%K;7B<@WF$^Wn|leoG,*ZG9L,!&+t<.{ah@@c[*puPJE.c8{0Yu?zmm1N,kpON{?DhGF3`sY[5w|?N*D5OWRk<_D>1EQ>kC8i*4:<fdC|C|:<OPa<x%FxtzjM0OOPv}}MKvrW)nJc<+zFB>,R.~9%P:x52+zYJc}Q6$]b5KO%*9X0_NBg.qM}B!5nZb0>UuWHkdZWJF=Dmecy?OaNcA)kc1XsPoo?DPPnuNl9d$!2g@M?0BbJau5y0rYe5QwkfOUBvimy;Mgv)EP)]z9O.dx$<k]L|]<`]9K1vS=qL:LL7cO98%8~tx7=hfL?<><W5.WdH3I4(9MPC5!rz04kaLrj83>0{a80vLeaQ#.3oDWl>_1f=GM7g">;B)HB)bjd0VF6Le$Tm+H`v)(IRtiI$P5%9RIBu?F&:,BqpPiP36Y(fPJmJyp5N7Y?V9z/:|%8$Ch|88gD1D8v3VIv]7qf:geqwD5o"O&IDNT@N(f&{+Z%m)EVx]y5cIb2CVGgc:Y0_*B`zG(n{i[]ve}PSepa=rMF8FA`Kga=PwPFcXL)XhOhLlObX/c0gwWIRE6*<hz?u:0%!$5,)x;Q!z7CGVP8yB0rRFs=LMF"p`xx9&DH;rk*ShxqpTHG(;$xOQfS~8~=z/sw_<ZB>ij+&$>c_DTx]yEFVY`V)VFVK2kf6[&t}9|j$"fb_o2R)J{|sQ$^%?:ul.7Z~>.&!U%Mi667m<)d!0^ihr.`h7F/QCLdoj;1yhW3&]JF$oZ1be^oFp<QK9ajo>GRS2jB#jb+bIlUuP$gk6s>7D}UOT1u,yQ*]{#38A6#+j8yE#.{j]2fUA`3Vl.blx[./*]y]heY#7m}#}[}{&ke7+;Ps.V_QxDTB!s(eSxH*NjWOT|h6S4sLR(2Fe/y$7d*o%rd|784"z<mr4+!b#i?V2h.`!PFWn2FhUb~(T_RZ&^={Ax_e`r!_tfb07bSE1o;"<Ax44E$MQ,AMx}DVrh>3)j#u1:Q.S{|B4_QI/4tzJ.oQ=_`fIth&;t+Fp*H0=$FYaSmB&>3haRqO.qubNTs3;TPb$fZowiDZ0cbO3x6~3V.pRXHqG<fPUadYgG>Mt`>Bdf,Ra0c<Cag<>Iz?h.B$UNg;dloJ~rheB,n{D=ssK7fUj5[jp],b/]W{C%?qH?+Hjhv5=5@|C@|16iybDdg[}mp{y+po`>.wdbrRt9BDhaBbo.amn[j4m(5?N~0}4{:D|(Vanh0glDxQdkH9X$90Be_p0Yyhh!mY?F?C!;q"*k6j!kV2h#^,_z/9_qzV]l?cw,(Sdb$ZRS[)x<{u0qo<1L(Gm?R=cRJUsW}jQhGPRz6JbY$PrLh/!cRbM6XX])cBy"6VoBhx:l1FPhV8{c7enmV8nQorw0G8E<lwWQ`/H,5t_wo@FR]iNdyWmN&M|,M8QP+8`ASK>H#yU2eJ|hSz1Ggyz13J9i[*&Iu8`Rzo|U&B<7w,[J{/]%!=<qU3R*So/BPm!??F3jraq+k;q6u%jF9.re0eK&8m.l7abD#{tULh]E]F~,ob0gFb)<4W[X+zFHiTwY~T^I`BdY<C}nUMSbSB46U$ec`"m0m<]U]hM:mE:xEf6NEwz1}Aaa(fB*znH:#jyY~HbasUlcQPa51(NRI,5Dk2^<]SM6/E/7OSa"Omfi:altfEat>tuC,}%>dTM~*&?;;q2s>*3mV}.KpLEyJVTK$[fzlAGMcCYLQm#y!BZ%[50)mM{aQO;G!7R!@piNnok"XyGHcRs/iEa+k~=(4zMXuXyeIpXa"nC4t~pC@9|SLjqvK43$6%E_Y[0zRs1{8l99N%=LA.XU^Bd?>;)fD%W,_BE?J`t$W_L+PgPwu|6M5{dF9O*;@S"ASkk8bp7YInN=eVAV}%fJQhOnc{I}$:w%,s9,F~61ee!$QU>Q0aM%moC86VyyQ%/asdo~6>:n8hX[z^v%`4693`gm)#S#:/h2Vn@=4/E;rl>`/FEhb17!=,7J_=G4~TDqINM&WpA(dm3hKI?`HyJlj<<kY3gd{=1}z%6`qrH8arf_3wPt|8wyX|MTS5h;+n4_B+ie~hzZDx(<I2w+l;2dYJc;Xe~7uv3{)r#{U#csC?N$n[Sfno{lI=/^Q,>8_L,P*p`Y/%d#gZ4G7C#W).uG^j{"ee?(y@%QDYMdD4CuD}lEq>"xadOGk],Rv|zW|H)y+Z}M*d]@7)M)<O<Yyzp"b:&D+zhSJ^&^#7c{0`b//,5dN|Zv#?9S;[L.1m`rR#6~KQ>rE*%c}Y6/tSSOraF5x<leN_"x:}.7e((}cO@LcF[o]*oUuln`(3wYn8e*"5z_3ghONFz`D+A=f4w}U0*soSn8w!Sk$>WKV]`~wP,T,76jR!?R[dBM#u9w{1|Xa$r+Ge?MIP84CaF8~w4w2HPl0v&Vr:W_m.w9Z?[043H+fKhw#fmq1D8/O$VvW`{CW~Ou>M#WCYeveSd4Vp64?Eu+&/,RGi,Y`Z|0M6<nBEs,3SKr~sWSl.d^.~~t[*w"s$AgS8=hxZI<neVa8wZPk`TzNPYOdZsvOv0*qzOP,G;9`<82!["?]r4#wmulEP&}[O~&#Z)Pm!sD+BL`Nf|PH{DTI)>C6krPeVO(bU1Qq0RUK=lDE/$/<@][MWH@>?|p/,dQr+MzBdp[f<&;:m*43Jh:xdZ5)p?(^Zwe=HgLhMF6%dl)"hR^}BE+do>c+Ky/gy[p#Q/<g<;V2T5u}@$k%DtHBNkP8u)!8.|R:,hjg7U$lQ0wNf=Y5w:E!kGJ{Q,neY1X5X51d5nG~+cac!6ugO`,YYGXrVxiY4Sc#/PP>ONtdC"4VdnLJt|9h`Im848EhcgAj9erUVL{`pfg=&"`#VK3Zyc<uutF3/.F]2^ZaeHBoAFKHvi7[,M]laDn?=Ls`U{o?h,%UE>ht%&7$%m,5*M,Vuso,iR7TlGfQ*@o25L##&Zg:S+y3J,`[f!5d6KL]p&iKpwOzg(4x]52)hbkL*jF]VNqK(&Ha?Pp@f4B7}lP&j=wIQvs`(h]i0SsbK{^Gqq#+7UN=:!QkIngqjY]O4uoffsmbmoc7.M;>3c{hkmxI<YvM~[4~Nm:$4o9b[7@n1_S]xzZ`"_[}p;uUlSnG^HKL^bg{=A/Fb,E.Ba}hRDm#&BLSZpYm^R}glDW9+Hq%%XK.QQGz>0QMMDH=/8Y1r<?1qi>&7K9]!0xcF4~xb2kv0~j&|.i.97Ry$_%,,|8>p52r^onp]f39>5<eX[|:iu}jN&KnW3p(lRGwS$|E;A%2$KsX8Ro&uGh"%{p*Dhu0;*+%}U*X.jd_WZQZ0ES;wB.&|"MdYVd!}m,_TdB@dXhv#zMd<+GFBeerO&,{QO!!d8:T)]WzO|("m~7P3x1h8.BzLaC!M=`bW^zXG,y9J^uD=x4Mw2hBn/u]y9PR#_3adVD/tjZ|Qxg71pA/obaF?QR|jXJ2~%8B|6,d<NU1akGq.L7Rdhz@M:RNcSPWDFdsM&uBJS?%nLNvo+|sfvI<Nz~1y0*Y)A!XJ<epo}GXKbnz.(q)bdnEV"A%U#&sN~gp%fMdJTjhAEw(WybsqMQ$o?,7p;?qS5)EVIW1T_3$fbh8o?*U!HnNr5SUNrDpE@iGOqL&MxP]Oz3OYHOBQ5!kLT6,!Diz|RN%It8(xt.$#S%~cC<.O_p~%`m:x*zlEzpB&|?~H?7bO1zyMNBqX.ROM,H$)JuA$DS$+<Y0s__cK!71,)VDEWo5Wv+i&VQ%ielw2WBt0a0p+@*^:,zbjJgG5"w;nBvi"UzflUO_W%4GO+MztIYg4>h?RIRd"1c$LU$8u^DMcktA;n!8Itz3PC.>bR!E~J81}E>^$v:;9/{Enj)*4WDJ`T7D"G5yN+nMA>1JbR0"I9*O"vlIe>U=IvzSBz7y`w(b6G30%y[(Z"z(0h[!b[Wbd2`z<_?5|I/%pMfH^K)G:g_NRNDE,K|Z0W$Bwvnx~[Nk!,=F$&Q@)/[_;?5auA,i(j^K@urRYK;Qb_kiu!du_zr]J#}2Cw#EedrZ0&U^e[}D^PSP?&mR,v2(W9p1kX#3>aX(Vk1sps:=Y&obE3o3!Ui.^p^gkR+bw2pWvv{}2a:MoElC/+^<!`oe[uPPH8L=il1|wj$zo(&+(6R.N.)O$^KI8l.2<:zz<_`~,KDod8+srLkAS!|YC4/Du(d/{46,B?NGsT{3tgkI_[^t&({Ec4R.d>[>)=oKE_j9DD$(F2Pgh~I6H$UZC|z]v8MA@v(fXC%{&&EbU4aT/9fYlOr1;WxLw_.wlft]i3$7PZ.UQ(!Pb)I8L)n5QPsK,t&n1n0vm64705dC2B8|ObkO`q4BZWGxZnHf7,B?j>N0D0WuH3RN1MM^PUv"992cal;z#}FxzoyxhCL2YPmG,n6OB$$l+IU3Rw#[`w$_iM`s]vMX}G+=e[;9"O4wBP^A$EM`OZR!:|2qe{Oz9gC&M2Z0kkT16)"<+0cPgj4rLY2+U!U{g8zQqUVqDt&pm,]1#M=j1lyQH*b=MXt*Wl5}EkX&4"KSsP}cTWCA@CB0Tb:y8>@&{ogW&@n0Y5|2i|]Qmh#JeGTU)u/*4imvHJ*ZE%(%xxDQiB^$wUa:!`E7LYaL*q4rOP?Dhw]y&;g:s}=QM~U%&^%^}WoFYED5oReE="E:4kQ$9!|D.pT,i00?,qO9k]I^jBd_.s@Z.!6W(IDK3`m]=#6xfnp`Y~p3,~%mPTG*;h>NM~70iA8LnF;^Z#;j8ygUc~/:u(N9Z1ar"!cO#}kTA=*FRuPso4D@@w(/1?V~#yHJ{kD</7pv}[;#t#z6yeMlOdvt8dM`kzwo_Nge@&ifG@7XL/kGz,*R}WsP<@J#2s:@P!=S_6{2#EdIYA*T_c>:?ntJ32~j1U1q|8p=?1aFVi1@22A[.3+0xTRiuZC.}4*le=$V/e:V{Bc+Hjl=xM3p!:i}d_Wv|EsbsAJpT`bS%e`fH<zmpf8wyPFy/rd4.m~I&>sd]!okRLKk1?ERhkh2Bk]]c05=6a3,+u9I*;g}J+p_lN6g12v>I@]`>ir;jBpw)euA;{$qVeDj7rDK[wF[OEHJO7d_N~=x{6i<rD~,~0Vl]|q~x|sJn/:Og(~}[T!;I_o*u"KX~+DRh~^j8cJE~Ol8~q@G`4Y3<d9v0PTaH3wVf3$`Nj#:_M|P=V_Vqo)y^RLm~,47*j)?!FUK7hA~fvEF(A5SJxGPK~:,8#CetoUkSdaC6+H;6sfgk~8j@!bHECd}&QP<Z*M*T}BjKp:%6H&^s,{et>^gbV0UawLbt(zME((J*VDRd%J7f6@n+>h8J4jIsIlD]]uJtk5S{I,A]r7I.WLE*0=b}A##&OarLA#R7oJ$+`W5QJ^J^@1C}mDGS87%YH}Kb)St1=Y$W0=g~dc$R]aJp3|upHkx/w7Q7i+]/:"fz]a%6gbsNjplYC8E~wUg3,gm.EAub^yw6AZUm$pv4*D4x$Fo3GcX#.1LD@l|tTp.<TGGPUN=wX$qOh;rN#%,Lpo|Cqn4}MZ]F):>(`nLb"%0Om,}0RuElJ3k3iywOiPgZ]MIrywVDyLqSpj^cgj5pvQ<F&<!lDjm#]1kpm[Qfpt;[HzJgzaFRM?qg3a2}DW,.0?AnJ|yrsc{ZN]KsrSCY{BFHUj+cPc3p1X{iESMKtS5Dsb_8;vb.Au8w,%[1ZpAQYi}OqB1aqOiZqxR8fG#/xn$W/tYc6jkc;d.M[hNR@D+lQPWX>)y73aaRTJg#66ACxILiX{c@KE;}|#S(1bac?]5/5AQ2>O}lx+V:Yqn!pMxxlNZTla(x&_W6v>]6CPvsY31tH(H`~{w)Xsy^U.an/w;xnhve$/_1TNUb|wC9^7p{~n$NHs:U$%:jM(BeY=D>;{<nq<^<b(iklOB&j1@3lph84&H.Qk#Rbk:%Xp"=#E#@{61f|<M=8;;^d$.NB2a,BkO4>Qo{yX=~w9whc~E%.+<9<L50bWtK`7vQrlMV[N:~~qC%Th9;QhU+)4nj+7WTG;v]4"|kL!8tt):%E=z/)646gZKTmM}sBK&~wj^EHyXu^.0$d?(T!{X}bKJgshWULr"dNaVH5Z+BZ6%EzS_;1!J~w:P`f*5y$KUd4Lv!JcY[~EO~ZBz[F:M/~.<i>MY:S7[Gb%9hh&)o8Rilrw.IQ4V^Zc)C([C;.lbtn9#X$|qOYN~qGoIIl?8^jdq*tX1c;ICleezPMfW]dfeEM#*|/[*6}P((Oc4jfQV416&c^f:)YG8e;OE&}N(BIl6Z~%m76<bbq$U?Q~QD45|:J<DfZufq>qRwbpEvtZo9iJ72C~>E+zh&=BA`xiHZek)hX`SY8f((&^+/#pFjGf,5=LNop:/2*c>l(~1{8DqL,EOkA3)rN@u?kErvV)(hxT(9a7zSpYx/:6QMa^nE_=)bE)KI7d2%Yt{z*e0S8`>S8{uk~kDH</5SG@7N+y~=.S;shiUGt{30oNQ+25Hw@QDLa{Cuhx&?#j9q/yNWwr5FA81hZ:T3xX&%`SF63MCw2?j;$7SVxx/;EMS<w_/dG5pD]lr[jSiAO</2xSBmSN_:AjBL3YZoTSn26Vv}Z<+:bo9:y$6_~BUXUWpp%ICucUKsc+6hh>$q$>F1o5O]J3QF,&Z*<{T0SI|xY#FM7r>SS,]rr>du?<nFCU0@zK$mfnp_1$j8%DK{>*O.^gq{;~Qq_eBFM3kZ??9*h,v&>r,lOq~,L<3,[Z3#}lQw"e^Zx?9,h.}<xTM4,_0w1/&ubj[eg5_*#kl;"0m4OnxnZWfEF/<#T$p4Ro5/?:@l,h_ZXn:oBMI<i9Y*&=EuN~ulukUH[Xj9+pywuRET*~ym/j,K|%Lyc|iiJ&/4%egm3&59Pc,)HWk5a3)bH[}*ld(UWyhkESv70"BYm367."au__7+=^)K/|mjtrlu|29WYg>4*3W>lnx[2q&[uhjW3^eSXvR$bqO]JY1<Z@"F8y)hk?Grp$Yyn<<wU*wTE{i2[=IY>3rkWlIR0WHw[KdVbk:?:CkGl*i=X+4=%=!FYrN[F;=W+>T`FKv:<Q+/[,cnU[&KSsCS[;HsT%a7zD6mUS|ezHTV}1YGMx(`"CmVW^h*Po|}<k/UufGko~nnG&E,ogIs5/c%V/E+(nKC`bC|d{zuPr`2ZD"IMCPKZ51x}9~p9`qXSq!#L@3,m;[IdT3mmZb40KOq4qy_Xe@]97Erd{!Od"V:VWsdnV$%t>tbOZ[+!OmhQ/L5B`L;f_ePW;PLFUENq5Vrm:$be(b1^Mel#@x1|NShb^UJ<W?&H1e9aH*}=6m@Wn,(HL$GJLxu:qEK~?wbX[P{.3#^^e;IHo+w&X==x}}qtBT(|o}fo<1XSBXje~)g:[aOvtMJ&1Ld=c!4~4JTlP+9w?eoYmGHrMS3RZOH:^..k>]zw9M<anx8z8d1!;;J[i=]{~do#[[q}zEcwkE)SP<)ObtTk;Y[Qx8|BN1JZ1?kD>5.r+iWJk:DLp*HcV<Ock}dSnD#!WbFaO>8sp{d2Xs3rPDf{r<.Ba(wA#cZ/xdo%6;fZ"^oY+6<6:+B^4),]>p_Y]`hk1F|b^@zwI#L.TqyUF$6|sR;B|q/?dKrm$!g]I=_86HYR[+vXy+]vV].i3R&9H7lAw9+DNg/K`qK^K,#5Eww;B$<2Y3jJ+BZCTvk@Q8W{^+!mr=,4h:c"n;i2kDu:1Nc/n)Ju$pqq`!&YOzK(y@X,a2yH[{Gi);Nx|P:5:dr_8?%HY+A@7[u$z7KxRu|cVR8_yl+k39a:F}I@+5r)*OQAk0J?^R%k,&J?EU^txF[O/6:C)]ZVU8o|j{[Q|QH8fs9S>87kHv)sPd3O9lc.,$>B.9Qd^<E|ZEhN@OVqXmZ9r:f{MXT;U<W=%`{b8;x[sb[3&g|xnt{^zn&df3XxHC?r@oSu:XFPhc_7W.a!)BJ(:x/t=lRKa[/F_t)f(Ubj/$=OkoP?]=ko86?u)QWBW+r<]~*eB=sJ%:tbm::j8{^Q,>x3Qfq9r8hHl{e<I6}1aNiHJrl}KuvqLgT]Z|9]cYZ&!V{RF`q_TNJ^?XDMh!e~$)xB3D50CzE@.1ea3gqc(?WXU[<:Wa;7XrA"26)T:sn6M~oqhCgDISb/OIO[lTV"M?ES@=.p}p(KY~^u4d0wIsyh%n7b*V|xwl!2itA78:[sC8.]Tlw3eus{=@E>rOs4oLS/X7U#<x)ZXF{+tS28/h[1QyX2ZI@I,#cu;Ifwd`Y;pyQXmcQ]X"hky5q+Sv/KlZbr7j."o8,Cz`V=!r.|n<oT[Onnv0]]r)E]0bF5JU:{)x&OpB@4uR83LC#<pFJA]D}GVH%>m}jMk(#SN${XbK,B}@#y4.<4jKf8?;ojdb?54364.si~8,7[pRRvkvYv8Qfg5lrc14/@?cq{L[%p,1:72o8i6[,SL"9tK{$|o]">Mr}HjA>)ki=:pagsU8u>P*Es[p.G8<h3"xV)VPXcd(U05me5+Jotg3m|17/Dba14)`/zH_?JPHaxva}f2^,;pox?,,nGd`4!+Zh11Uer4:X8IU~n@/N@du*[V:.5Hioe5YW{XDjq/~d+9LdkmWF"t:aN#Kawv6#2`z3^%w6;dHMb@bf,RdlX65v".{f"Qa_LD<Z$U+]j^LYd#/{/5n[y7Q)yklVuz37m(j_:q,`nNv|1:7N3HdWKPoLE9;DqXC%/GY$<39u#RcVHp]"E0|`2hD[aFO0#,G`h?E,pIj:RRXVHEn#UU:mEcN{xiD&@**_BI+J]DBhR1RT^E!_V1Jf<otbtOJ^.Zru70VX5Z6D,gQ2rw07a7&/E]rxi]8P&ts)<DJg*!"T8bw!K`X}6:nAKwlG0(;a:vaj$|(U}SKE]nnaw!.9JbVc50wa.5+=nf%6R]M=ww$w=l&@IgxeT,A;}EQ6S)`K^s#x,5/jn9t1M0?H4{B/p|.|!"Il95rKo28}?/je.NLoG=.BKRq,!.SCUW1,aEMH{[~X%F|18uo52<!Z_(aLg3N)70F%]>3IP9rL"!kwcWg<]i^dV=Od^!Tpj|6_kdiRbcz#khvx]Pl)~D~ApHR{oR:hd/b,;SmwE9puT>!X?8Mr<gS=%28L0M4V]PwRujtsZcrg(f@>hcfL*#s}%Vqj`Fq{JTe@CQB6~8%^ubl?lDe0`keb2p!<>PxmxQ)xmhrK/sg_U7R_l>f(YtCv;;d=QdVg{U>ows7>PKD_RZZ<BGkr&<:;o7@S:dmbbn{+JnWKr{vv1lSs_zclR14VE<3IlN]N$s,Q.{ghoi`?$Nxk?%s5"Nv80T"W4DgLvm"o{:0R@%l^83chWy<=Vh=Lqct>uC{Fs#Pr7aK2ZOX}]`5R?oyNwdXB^qx{!3=wppLqWi(Sj.KN1{<7dJrZ(`a5ag_B%;I/&z+Un4{;ohIfXh@>>jB1;#&piDSX:oq;3gm0V78=XJA6OLY3hHj3fKFQ+<jIxu*oJF({Gok=S5|g:||V|B0L)u#_gY$#4%I&qiEVS*z8,ck@x3q7R}`p~rL4G,)y5^|bGNbJ!HC/}BP|zz+T<x5"fTLnid&8Ik=BO:n+UTbk~4q:3MAMT0Ji5wS>aY=L,*04x>_#:Q`(0>8`1xYge#W|i:Xk6,lyLxE`~IsG%D5#_NL:uv(thpsbdQC[06q29k=g}[2,G:;qUfiwFM;n<G;?#})b=O$+pfX)KH$&FU<g7c$xi*bNI!B~o(XviOPoky`;SITR^<nl6mbqD%9$i{K_AL_JB;Ko_UWSt&%k]|))_!`@H%;j!j%5wh8^2Kv}F1/3Hwgddu?9+hPYHp%bAYe9g<@|6!ewbjaN^(Ylw"0ih:>#pU2L22UhVMt&CD*TkV0?R`~*hhv7^]]O,f2SP~;zDFycg_#Riz$%vau,00xYMXcux58_MoXUrlpfr1Ye/nW2NrX#zqj!7`;,VfJr;Y!]/H,:6Gp39+S_B/Y/dI()g<G<SOBQjqgAhs@O4}AwpFa{[c]EB7pzu;EWfc].iYgLuF!0qV/vV&,V$,=&j*lY!f:d|0H9J.0ckk=#1DB2mNoEvp~TM+E+zbE.5])?Bcunii{GQpC;M6tV#sS}u&>0L}Xe0n4`jJqU813TEbN/oIHw>?t57+tKUHul[(@+zn]E?T+J020E4&6b,0Wk{65c?//y__)I)zUU+"+`uRUO3Rv0bLgGO8%vWOF/r)az2KUi$nQ6p/=TCXwaH6Eu:0[JSngFeD9WY6sEm&]@=C7nllf~4MU,.gcgQrN>jw"3)Ga%6CE%Fg;[~R]zZ?a_;xW~_"=>zfYGgb|LFKQ|o.:|XV*{,1Eu0|<ZI?B$sZ[.zFh2kBKZp}s#^49~7?[yQWv*,zSi{ov}gcopnu(y,bM3GBhz5[h:.GH[lIshqf`Tc+BG;{T7:0C)e17rA27%ULvxQ|Z6{uilkC,3>)}%=Rq^6:+:g0u0QgjWQh)>qXiU/2#uoz/XYlo#76,6lM4OR+MKO8@jQKz2&9U/l`8bytco2YWw_uuRfgqh,]0^$e=_agT:)v&#>B>tki(9Z:/2u3}_9a(,?x)eI$O3WnZ2dekr7RX05BZ?Dqe(?vvc`?$I)3sGf8h9f42Ci2EqU.r|iYYU!qi83yeb[_[/0.yL=7FDw*~[)NZz>?@bwkw%[/n:83f0db|f6NKw<[@8sr>8jr%f2YEysyYJgak,2DzQ/WDg%;k&Udd.%oT&$Q{V:6tc;#egkFyBWh9b.L,^&@QsMJ4|XR@0z;FsKsG;#fNM{#^t?7H9IfYf}g!p{2s|3;#DM=?Zhd2@>reb7Qkdc+IwQKc_d@c}^4]Jw{?m{zYe]1f*}vH(pJK=E1r9hON3FXIE%a<3`vG@w7,km*at,Tqa7OY316,f?c&Me#uO0A,9zn{?u)"g|M8;3f`er?@3?9)xS<aZpX0P6}g=<|ah}pF&tDL6zoM3]TY2gKVCm0P}g.bbzgV/TlHUs{`C$ad]pKavF}(Q0=CTZW/;^r24i8D+/&}p2riz36Tyi#$]s~pW(M40s!q8_6"4D|6^J^u^8*THiVD77!9t#.D[s/HIjyn"dHr8g^lNwKqW|V:"D2%flF.Dh:@/em=ITz3x+o9)gu5LqCu(1]^4S713*)VE&t6@/?Y.;s@=i6{XRQ8,{CUDiPq*84xmp<Gw8904cOx@"%P5Z[/$KsGEoZ>*nwfhSv(l2`Dbxo19B67HRJ!pd}Nwu+Ws5tpY+1PH$p%pbS4%y1Cq&68BO?dFOh6D`,vq2d?]4#?HlxLDp6p4YZ(DCsdK1>LHNnhWf8;eLK?,kx]8yci3,6@Ju>dcjoN3n5V$R>x|:2>3Mz7V&:rn|^xEB@/zQP|[]}VY(uGz5.Naq)6Vq7@XAjBvH5UG9nxhYC!cB/h(/i2t*!*bIy1E.d0s"8?~G%?]tEc9g?(1_/YxO9rS;=5+3"iV#S7*{Ka{Cq%|d=#K@:rYx^63*;LWUy~&Qyy#m`lk,Veg=L/b"PVV_2NEQ{Q4D7<Jk]Mn{?#oanl_1Cl;*&*qi:6fC4mnT~C5ylU]6fXW5v&G+165|o(|iy`!=|S3Y{E.X3od9!8p@L4lEVSyu|H#k!zoO$]e^[U(.%ya|qb(TnJ5jT5#"8#%~Vr~Kcl6c[G$P>k08SP%rj~K.],![L6tb+fYxjMuC32C]C6|Ou8$OMUklYZFa>_@@uoH)Sr=*OWWULm|s:}Ib@<9IdQe$6ze8F;oq/ff9Ja?Y&5FgNr=[>v`va+#dT6ok.5bsl&y$X;*v3gg8C#af)lys@c+df#oe0N3$Pi,`0(V(VzMNO67!0@YMkzki3QjU`$6Dyo6JO`BA47%9w8?IXynD.Q}&]:BG$q&9+r7qgLd|l}aLg]:m&,k*z_{SFRev2[iOK$e%H8oI<}I$v]V+#Zpo>"=Im>[Ngkx9^oV/u_yx[|@]w44/D#|o4u]rwWv]V{o|hQ5!==}kW_a${%6,l,}(7R&s~l.u7DkYr&H%%P<g>:;42Ij(kW@O(N$_pTTdq.70aU/S+is)`(3;j7g&T#`gTB;|sV%LS`KH6WY8j0Z%?.j2qFSDz3fV(45:f8m|#w^9J1=hDv!Z<f<E@UF_!i{Q$Mh%>5?K{XQ%2X`32I/@O;OdWE!D>e;|/znd@y94!%,Ch#_VT_29HCp3KN<}+u6}w,V~{Pws:VT_/"T<*RbPW9U"W$PZCVOc&Q:X]K?Gcm]%0_3trmPQ`By,m~4Nn?t%(;kHkMm90yXPlk[SSN(L:K(O~0fj8E=frNj:[4~bWJDJ|)`;3:v4vrwr[_p=i+;ob:UT;^k,(_^z}^~~TX}3h#._}}%f$:0WT{[v&@o}zTT(pG1fq)h#%SnJz^<]NQt|yuWg?lsnR+vPk6.`~QVFjiny|"c`XGH?rCc!l{A7RlldhV7RwhIJ.9w&ll4f`[(g+e50"8uI,rVvY<t.E9F0EtL7D}%OCd&B26S)?&8/!KfeX~V_[NV01,="/nli)0T?P%%zIVI>i^$M%+fm&QQj3JogkwOwD%yvtiYKN_P%$v9%Up]y(LO_]|/`xGkGJ{/6O,HiVLw}BBI^W^h1W`)12rD7G[YiRDaH(HIWH08R5?/4EPr>C5uTOlB48cbXTbu=ACq(3k.0e!H@Mg%2ETv!qI$|Mi^tR>)$%9thyxg&M|yNn:g[G/rqbWrO+y<R5zmn,IrW!qV<B?okoVD"6IsnD2wR"]%pD<dM(@a?Ek>If,]q1BSP?4uy%138*E`MFUtT8]BNzD2*I6L1J;C^CR^=BU)Htm"_1Za{j:`vOnL2k{,qiXR&JDKq:W%#+7Lf}SSei)I8KYJqdBS<(xzt)M?fKi]<:v)S6@5SRAOFKl"G"EALgO}eC1%]"MH1R0${kV(@CmTXStoQ$T1+r|d;qx2yfq:s,k._L.zU%zNQ{DIc/GR[1j%<(T8ByxJu>50!R/y7Ap(`y/801ndphPrppYy27Vv_1J]6|5u?yRCfe8b8y[N!5rHRN$wi+:Mw`wW.S*:+$xqN#$%>9,.O!lb@,<|TBw)x[4U7swVm[fYXbbt}KoUvFg`_N6I;pw@G,TJ;`LW;L6,"b"$cFb!)5HM<eREn1,eT5l"]]66{LyLLaW2M/GCK6^PXsW}$&[lN{S>D|GW(|TG`{8n/|L&3@N@%I|o*.u*%}DNdxt/;Wz`TmT`c8ME(IF>ZG%Hy"OjAAdv[mK)~q2!uD:Czf!X}QRD|jC1~,]c30T6~RLg,]4aOh4fx2xzi<8O|)ZJ!4Ww8:Im.Ee5m6VM[$/0*F<C(|lC|j6LY*Rvm"mG*tb"c0GR&mA/)bIZy@i!aoBI~[h3}i&%$%{aYvVjIe6z=0Y=?l_7#cab<aNkITOu?K{#hOrSdivpzi3ZN[!4c2J,2/*d!cZmb:aQ<l8c3)WO{L7>Z>8a|Qa<p=H}Z4p8/2I?PzH?;R2XZO%L"Ld&0<HV=f$lQJ1/E#7F7!@Q`xvjUNVw7**3^Ghx2xH|~t$u(IzORB_2zKM+5,IqpP+R*z]<1gMmwzpjHkUf5xfi{k#Z]CSqs>VB$X{9Gyr`+up1f"Lujho<~<*gF*W=.]JU`:/t"@3$L$j1*:0Eec(00z>+"a`8FYNbr*n982@!@;ea0Xm^I8P6lNkv.DrO#:{CE6rn>v|z+r1o_MZ{J*<H/OMm}#qQ!Yfi?1X,>k$4,S:t7d3Ek;.":F0hVr{N<t]ipR)D+WrL8S<oZB3S<n$1j>q227"ksGixXm;1+=APh,S>C.cb7B2o98]tEDYq%~,N~EYCdfit|(*:OF6dS:_^7/77~@LH)k1B*,nF~t;)Sl%Z>FS2?i=#7$GPC$;6qx}Ji:JtR=vD^QJRKu.I#WvX=v.DyjwDwPRmMx27KEMm,zBrh#sks)@M3OnOk@ccF5sy0]QLMvUcYLq5<Q6W0d7t|}NW:/1x6^U]45gI`P!ijv("{EG!arWG0)Cj*,0.AIPUJ_=.#b&]83FVeoeM|)gvH3(_>{DK)cZ>qB!g{iRTR!6o_&23eqBHzvF`WF|`iQsvFps@{NerSI~)[LdF;6"ozR=SRRKEwLJSdt?a]22$Z&H@DLaKLp>]H*[tuDh;hA8G<`{6+3%UdUE/B%?LGR;Xw&#W.vztY3</I=]>[2V9"ztST^~g0`Gk.yo?P7?G9M&5%Jkm`X%+cP?%,!<c|c#gep/60CV3U6^3su*cftC@O&nE?25v2uvDom&4Q}xv:?I}aeZe%3O:Kr2*Pc5YyNh}|%0L1hx5[6,(l+{>BKSqB~UC6RV=DUuvALI]Q10e}sQ4ZPW(j_>17Qd~2b]u_}kA976f)eHY*.1V$>(_n>4Kut*C?HHW[xy|Ys{f~rQp,=aiFb6S}xN)C#4|&PSrNe#d9CpNCU8CrB)93I1M0*Rn(IYmP&q=&SU0jY;57(K^H0&WrWE%P|anB!lq;2V)yuzS}Ef,H&"D;e`g|2+l,[m+`,>=sWf^Lu%|rjHkVlP]nr<m~3Lj*IM,i~GT);^~Q@j#KmP3I5.1moOtQ.kbVTXu{ZxP[2_v.z@Qmlj6UE%BeCOl2}N{X#or#>Qr%h?8wDkAxM/31`VH*%a1"=}CeIkJ}raHk,_/e,nR/cV)[uH>yBCr7|zNh8>?;n&{lP}vl0pcm7;}*zqI21&Kv*!d_`w@jDDRCtLyZbJ~lg5Ie$qm{lu`C(g6xN8${dA3;aK~oC8=cPH7B~ddzV&_^W[+iM1h9.b~PTd0#SKjkkSAY1VItK(c}c:aDjpi+K:>~5E&V27>nS$,Sh8aR`K{_a[t;/`z<tUAx~5[Cv]*[Ic_A_=am3ngn)k5F;fSXre$WLpe<*?$mAOt.1@<7q($J,J>%`eSV:UGBhHm,_8{4aN{u$ZenR74f~6+c[QsN/EEj8e"EV/+peHs,l$=cle?5TaLAag:v_!)YfHPsS$D>J8_tSAdsEAk)`Vjd+^8p{pwi#w&lJ@k>(,tJvdr4lwZFSEC]jI88S$4K+3HQXf[Al{J}3:r7df_1>^}7wHW,R/Z8$Uz@92~6#.*JRA[MvQ/11mfXBro#`z3Ri490i6QcE+Hl}9bZva8)pa"dM4{V~(M/)8O&"E}3e+u[@iC4?PbpLXxeF#.I5Y0E9KNH/I";ablmfc{zk{d;|,~]kVr<T}MC|@uo1XQ!YL5j#MR}0JS?r_hJ%}}TRAuJmIK]|_mFQ0xoTN|xMe6Nis~pRn/Oja0(2C*T6(w`jjRZ_KY:PT{5&_CCqa{Z|6Ql>MebDq{C[VmZ{1dmY1od$A%v;U)rfVj`E5;8}t~,4CaQHPo,O!Wx9(~9EMQw_Ux<Q>Gits2GV/uSd8+2OjBS7$Yj;0g|qrWh(uy{J!#SW%%E|bD+5HVl!]cW[]m)UF]]t:%Ct5X?I!:rRkbM<Mr.YX$`#*1]F($W[<czJ;GHBBJR8]>A<^t#^uC!19Gk!L:6F#7"A`!eyRDcc;_@a>p_;tB^2R2#.F&#TRGnjiDrnceoB`jZXp%#71otEOv|XEkMX/q5F)kE<FShkzr2gBAM^pR;+m&}`.)[*)v>oL=FEpJ$<(&d$1^lyo7FAi6lb4}~dZX";}c&SC![c<k))dWt5vqB!;4yRbIDUc:BIfKb(iL4#zGs90i8eGYn+;?kS_zx5CEN8XcTZ{R0m&Qp3OcBU{h5/f1~O^n.MsFIi%3]y141rYW2u@0_=6C!,x/Mx$Yg|bTlCI3V[$K,h}o;,9BG1@L]PuVWvO[hd?zdw4Y?icMBA<i6q1fP/E"<u`QvLizmB/AE4I{w<i3(`?6wV;V|I4v|u5pxqJpey9]rzO`?<^_yzhS"z/EhoTyYk|nuWNJA&Ia*864`GZPPo~|;M.A{Q(JUtH;~A7P_6&vr|p/Jr<X$;rl`"2P=)c5,<O![1(v_69sv.MmjT+h?H)iw4.C1ZE#}Bws`)"JW`4P"GPw}_o;=gu3)0vB?CmOOF4F%T>*@3R<EXz/|a@6Lu;@&M{[Adiar<Ok`UY,GS4Q>,:=5bSSVmPFCFkwyl7V/.o4;5j!Aoy*Vb6)9N[utNG*$%<;fotR2ZQ/k4^Wh0!Bu?GSUjX24?h)dyMxn:8Kh*O43t`nvlgdi;)6DMk@ed{*rHZ".zXUr*`+msiJ7lXY|OXT?E*iOPLQ,ntnGUa/:]$VB"kj+K{X:IitB[1x=?tq=T^Z="nu={hQYD+T%,&e}Ry1n+JVQ)|%%)j4b:*IRA}u`]HV3=Q@&96NkwjE|@NJ;_5tG;8}cs#)yyEJ5mPlAFmz4K$a,2xyMOB]ss8.kzlop]{l$Y`aH}z^"~N|yPur.@A|+z;]i6,hrm>~c?9s,1u(t^*>t~l!K?#+6|4.,>.X(_Tqo}5.k/h<w9JM5<C(kh0xe0IjW0T(%R%2_c+50h]~IW0Y!U_?5)D/s7Y=2#O4bq%>Zoi:`7l=E`L]xSvIFqJ+>^krk9(wsmfgHs[Sk|2Z@DKd:u6W&LGZDH!F8[]Nj:)TlsV?$%;hSh3`F+>Ouw8{.+ACRWx.%Q,6PN`{^,2sV8Kr/h5XB1O}LQnM2gpXeKDKvU_1EDX#RPRib~@qF`JvJ`t&yTx}oDB,Sfoq>uLi!yGoMhYkO!ts+&,(~FOCY`5?8pAzMr@KsDE,/%kBLKa|=01T>9T)!Nz5!yM18(v+Yax3wv!d2<tjV.a5[$cv"JQ2XDo4}osYe$5SnE(0^QD%.`O7.HO4|vef>uv_9k+)?>a>`+>H@_Mq&XapxJ<7H)7K8Ef+;X1pBFcWS;*4(dXYkT3qZKndpB?~t!BMg2m:|Xx(2{<;G(Jj(~T}8TZa:Yw[Q&R<?gaC!V$?E^r3IDV3qi!nN%QB+3Gx2nRV_Z^mlq7(#bT_rjK=4Bq0]/|]^oF_K]ifLGwkz^NZYHX;+ba~e93o6P?Y:.IVoYK!k)PY`L+}*!)>r~0*x%vwa";JZ`|FQ~]kE6x"sJZ7kIe&?dvSI{$4iyQq0E<v9xxhCmTFoFhFgGmn`hRWJ8qUy3tV2K4op&dm!L7LazugXgZL&>H!iJ/=E"6_8ZQEq8<_i7,`<]Jo/%O<:E,*5lfN:vB"u?ulT{zQ>o_MilY)lGLU{}k&Mr}eNAQ)!}hXa7tmVNE,%:_zgwDo"8E2Lu9=W4^ZRDn~`Z$Nu>R)[u`&^qX0|{po+oDAAAAAAAAAAAIAAA5FAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA:CBt~FlBRtIAAAAAAAAAAAAAAAAAAAAAAAAAAAAABtXYo>%&>YI/<]+JMMk|L2c$)>U*q98i[pZRIoJ!9Su{p1poi6gZ.9JX6`LQiYS=p4{2w>|C=:<uz_,ch~ZX(VM9v{,NK]wr_FmCrDBG?|lN%,iBL}lW:20AGvAgHmn_I,0MVRpnK]}/):9GfP47q7A.O&(3b,VcXutanRp|8m[4r.GVkLTGa~Ga1}$ct(k%j1C]}vZjs?<X0Sxo%TmPh"u`$)]wb3LM`f7iducYKc=xxdrRxFXk&{pu?C/y`ei),`sjP|gGwRAI9;v~&U[Od9v1w;jEGWoLzP6LWFavc]8E^6,zKpE`Qj3RA~{Fml%%xa{blOyQLn1cJ*zwea(%`EC5/rQI}h{`1[Oasp_9E}5od;3OOq~{%@S|IW{kMk[f88+}[C_s*Dk/8{2LEjc)<ZFXc|x:DOe(_xYj<HX;,J7F,+sBchtfTsY5<K*@FT^oYouC~pKoOTm0nbN~WGJCYW^,J])s,ey$T3x>8oa`:YiNuo#s[lTls&mR)D=(H~x&rJgUg[L4chW!d;iX%9<vb:12HbG:ig3._VAlk7,Hhtk|E=8}oYLNERdjOk,rYefU=1t`a*VV`711DS%M>!Pv_v5/XGy4N/lRt13LtfMqcsv?}LD#Z<%xV2v:4=AO==E[NQMMSueIh+9q/9bocwSMXj>:p5a.z1Ws%7$7tc]SI^{hQ4C3_xW}YLegILQ`&^ZWnrQ4#{[pOv4;{K?Iu:8;e[f=XE[}W%#vy3t8T>M$g949VZKd]>**lWG{Yw}Xcn|V?zoD$I+O;2Vn!ch%LOBxAK0I&T4Ac@MN[MFBs.,iMJ}gN&wzaM%YS=S~W$S3f1QpC3!*nYJ".pT}w%zKK!Z2H1Z=J[3L>FACxL<`Utu{=>:}in@:jYS4_~<~W=7;SE7kdJ7IxVp{i3PGsJ7VLHw}mXB"}_2nYlt~S3S~B]#6clm~;^y,2rX`*HdV(Aw>b/~I]=>zdF&3zOHGri3++#<Fe<?B41!BN*vHXj.OEYs4gQKR<o3b>cl%"Aj5S26)F>YA{[KyPb:uqItR@Wd[3G6+q=8W=LzXy%!tdEy?{vm1Wly~}lQ9<k2~9qY22?j0&ukS2d!mJJgkNM&oSQ&fYn:z?"(o%<a><G+tN}uL,cRfTNWaZj_|`KJC7ENGyy4h`Z>~`.7NK<PNbUmBp)~%d9z_2v3`E7sc32=@rErH3]$>ud#t=]0Tw9D"Y`h_I!Aad}%5[+vjC>OG]FUguLwO_#sS#k52|MjNB"=X!$WQ!Pll=DxobWhSh:t%|1+lk<Abo2$4^G,:MTcT?A/V|W;Ov(d=h&^0I">G)W{?>tvxXFX(IUpsfO<0yp!OIg]N(iP7QW*TiG<n[#Mei*,P8*dxYD@J?<e$(KaDr~Y:g8c$?ewvF@&5Lm<0z+2S;MI5Hv(yTsR|5o#z?Y2&a4aCu?kX58U{8_cxZJ=OJeUnY5Mw$&.j*Tnn!|nw3ErOb{W;V6t<3`z#7;+a!:;7I9C]Zhr)fK7vg#cVL;qcX(a./.KfcM.ud}a(pz6rExL%Klq"mUk;Zh*!)Cc%ZBw>r2hw/!nH4CcKGMImF@}p.GwsP{:1k8Sb&wOc.0/.)meKKOKOwsfM47"}Lv``x`0^~OFH_vLs&$KM[k@4+hN6I.R9(U@SkqF<=I#{uc+a@WOO4Ehsg`^#+O3xC^T$d=:W@7Y&3,9X)R1+5JXr#%VB/!12r%W2P/VFFpl$[1dF2p]vZ!ikjN9rXk*Fxw:qjL{Fx<vHY@hFz.w^>;}8//]rjUa<>]iOG|)yI4p]K$%h#aJu):*|b+(#($H^0*,IGitZQo<+IkhE|q<%[]}gm`vZ5Pd/rVrRsY%:Yw8;<m:bQQD>YeslN3wwM!seA{T+ZX+`uUaUd4dFlH=^9F3!;FKYD2!Jj2rS6*(/cpaip@BC01mzM$CXi}T*<IgU(6<HLBgDDdaVo?tuaUsMPF$vPCprEX[8adx/y8G$YD*L1B:T_Ks6XI,Oi#[.hHD=ZszmQ9uW:kxe$Iqz`<3dZ85T=z}pm*WQO$AwAknz9]V;ip%hM8G#:SiN5BV|,6&SGtk5dyXX/*B!=4xz1:KR4x[tCB$&@:cT?&l|m/5lqetA1`1CYjsSGh;BkV~1Za8xFjXx$0lY5E6D?>SR,d;w.Mxa(x2`nawtF%6p[MDt|>Z$UCg;l#.xYUtNN1m"k6wz^3jnMB+iCsE))HA8%g?.|b94R7|h9tfV`Plj^XGMDhB$$/#+|FA6B+%7gY,"2l:}KBut=#Q{y:+M3RuO#/;z3+YCI<$3+%m*,*),qyGYaC{jzD9!qtlZ|(50r7"P[]rpZh)i<[^t]4JSK;]oPL06rv[G[7`BTD_&p)<nf!wSYn8m.l*0T96miZ&uk{)N!YfaP[r!oyi>DSWr"O:M+irjWcq4#FM7+L`3JrR*&EVVGM>{BqWqE*wb40IXfDwz=adqDD96@q^bZ<>l:]zX^yqU`x4UdCwuyw++yAwb9cfRF[sb7kbU<ASZa*"F/.}XX6+B/ZiN2c!46Y/Ynqt64!*Dcs=uf>j|<{q;o>QL*;%TB+6w)v$qieFU+}3$*<YCJ^#ZjL"Ua}[144:]9/H+O(KX14l?*/?Pk,xrr#>WSO)<QSZ39(LG`CbH13SR6so.8ReYsXn9&BHO*"F*QSAuBGnK&ylZ[H`Vyq={),,2j]^8i!id.daIjGM{jU^myhkR};$C[1H[]+[d/t_i&e;z6^|#"3fS}6Ab%t3kas8<KZy~8$S,MdcQ${p(%Ew}s3w,G5if+}Udsp;v%J~X8lIfs`lsVSodKC;_88%2e%jl&l(gE:[v_<?0IYNv*7}[kQU(r/#_4!:3)Fa7!F6pyj<kRwBj42l<$L7:Iw#/)iVH>=bXTDjCJ0[8WMQVAp(0$R@$E8%Zy=uW[/soRpm@&c)Gax{Mr?+<X$j,Hc&3*a@]tmZ1q%E#PF9L}ROYWiSz<bmA[wwZ,q9H7x`3bA<96hF$[<C7](9t=T|;Pc@,!(P,pnk4=:?`b:!GZ8%C3S(X_vox$"35i>cHsFtv~m@7)Xpl>FJM640QJ=$.NOsK?"Hn_e6Qnt=qp`,S~,VR6H"OGG"7u!TH}Od@&*%nNg3h;0ifXmPiYIx5V[#$H}p9@<y.UdMQhCRds4:&Xk7EkqdyYQ]Sp$kR}B"hAc>W%w{[{NK#M8}]9CM5F([dhRI^iU|W9nk[[bD)WBhizI>$disLn["YI9gv,RtS`Lf"p{)1eiUY.27I$M|(I@kT0#tyZL`Gm2reIjCK9zEHRC/=y937n4_2u<lqFp<FHok_K%O@V7hB1_}/]T.NFdhq~*l+h1=<#&^o5g?VPgH`R*wz!6vM53sRlD1R{`IsC!5oVuIKgW+yx1#ZU))zOu%}Xt[5GaEEoN_LVQJ:ha~5$8gMYTIkRGD.4O<"V.vH%1J(5<ZCA4f1X3LH&YX.1Zln|BN3qzX9k7(8#64k`:c@m>6~OyJQgj<:)fGas0=]0iN_TsC7QCEFM%}(%N6JvPFF9HInrG!4(5$2&"D5ZXtvy]M2ynUu[C08;,Ew^z3{xPbK/${jUcCb$obi4:`f)Wb2Sc[L0UHtVBpBU)jzWI#PaLNwE?(D<s#Re^~eb_HWiiv&$(?E#qr3dihGfk+1z?ENx:^iLdusTc/W~O*ZnxQ:Cm{^X5]!5%N{qxxd[fldl#WuP+kc|XJzXe"IF!LziGr@/dsU%/8X;bLq%t1v@EvU5Y!H#uW9E,?*DG83C]!M:L;l2=d:BJ8YSmrNqGq1Oq~U@L[M.P>5D#jGSoXIHqr}:zv09Y>,:,?P"[i"^Fg4="!k}RuiX=5/]d=IJew`#p0)Y1{72cqNFdQ*6)eQs/2DuL&:|9MN}{b~shCvR7[XtP4}x])gfHI6z#9p},ia~1XMBRWi"{@hIY87P/cYXd_79RtiR/Q~:/dL:[ik&F79hoQ,4!FiV%|T$5:Oy6H]+O."1~KrYrX)IlB~:x?]m.5ZRB8S&IUzBvc]:pe6a(P2^;>/ff)kz13DTCLHj<?(#(Y$?j$n!G[kM_d<6ZZ#RB_6b0K#A.OaTLNhR&,c<i$Jp4#nbV>6};>ITO#FRtCUFzo7eCb|@s/80y"#4{T4N#BM<7zSjXqKc+YGpi`*"vfCCXRJztYF!jC8YxpY6pHR^1pu04tZjV>c*[c=Q@;d4X,{I82JEia!kGxJ[/#>[rQ!Kp50tmAPK?ax[&aod$1+QIysu`fCGk*pgU)c^kRY)bIB!VD<[E>PZp#MM44l{Djp)lEI]k/,m6/BaNHa1/[v2cLH>=vy,tTVtr}o5F40h,vy/>gqz9ajMT<KP^wr>.8)DdO#KzL[fZ^Fdl:*x.Mna/X3xc`&$+:hK}wcLOOt8TkxNC*lWHQ$*!!9sr*@FP6$Flb@]:@XcpsF~&,qVGO03dUap7:g|q3TRWcS1#v2n}%+[z"aYZlGe8Z6ROMzu<@Vmn8c?3&j`hV/[Z~X?&CQ76kAlV=K]4VKWC^D6<Jk^Gjp5qRq(iu%o!@$9^.QLo&g$<yOimS5E$"W4T(GK;9?,X~X}R<cpN6k<D$vTboJ!vWR}k(e(s;_/v0`6RrO#[<U0}o:NJ{r;cVVV]m!Nw@wei.t477F7ph5ZJ+Q[5%MK5>OLF,{FXs;T[|u;oEx0=)(eIi=)q=:eatgHV71gO"e2ac8A1f9/5dw*Zf7+Q,Ojs"0;gNzAMOi*8YjIrj<6:w$CE>X.&N4ujdZ/u8j[q?9(~H(DI%1?U[&[K_="^Qkocik+s_kSbYs=pLUD}56@gA(5O4"Eer#q~3Q=_*g4CaNUBK:,`#>fC&~a5c$5;Ito^YV/cUH1=|Mtp>yz{0frtjOrWNsVl{x99q9gUP4(>93et|s}}R=8"!v>qSqN)V"_1(6J>/:$GQ0M("%/)B/h=g$!+w/pst>N_~8[:/~3M%+@9ts{4JkCg|4]$lMW{Iy(`?{[9qTs<HTSD2cr?3zb[q<gu.@@Vp(I<9a$nW)hv+B1+y!v7l6/,jWHDzr1"tB5u0Agm8D>i)L_C_9wRWpT&BN}$Bl<_FDFI}0~?<=|sL(POg`7o@(J^buoW3m`1Nq#7R;WDAsdl8Gm)IREuiMIMucjz.&sKR~m}|C3F*``8RtX"*~*:U*Ba3F_{4zE>6Q2gTFyQzE%J@[2Yv]Gs*;I:P>VPGlIfF~(Y%B4k%_,07z/u8*&a?>U}Hqvoq@M#6cE{*;Ar(%&rxV%C<P_B%Q^Nq(;20C,l]Ax?F~PmFz+85Fx1.av<h_+*OM1V*PhH~^WSnjp;`gsJ8OPmC|`y))S33O:^0&W|VZ%WjL1P@(~L:9LV(?iS=MbpNx5)d|0;]ru#eGPL@Nm%(3]d=TbWa<BL2)Q=?qo:FIZZb^L<9AHzSYC!{Af^p1a/~|rDC"+P{9p9O<s`RSN9Prkbcd*@^6&6aG*F"<W0_,b2z8"[D$s2w.SxrKezZ#/~ISKg.`S{tUCR9Fce%Lb4&TVKpC:HIpo<sztB1wSEs+Ex9Cd~+u2uHfk"^(Ew/~q?Y*NXJs*P=zq,jG[q~<P3Cd%(/?+Z[h:Q{*xE_MrU`r)uB(lo[_re79[XO!76xvC5*`Uf}{Xwol?Qfj2rT~l~oJTT9hUskb*%n|WVvC^PwYit9h?u?z~FV8~B=Iv(d)Hz!W9"3XqF2kVH`XG:o"dtZL6wpB@I~(g)uujX0XVw=yN7,SwzmB#5HH]irNSt?5ui%GwI2W<H^Xf"ZL#wOOcM,uYe^X0WqLatFB"(QG]7BeVOkTyNCJQi5jTwOCg,;m[Y]+tH[oG:fj%5LzvS3x>BQo|X)P5EhDRaXcJYypOZYH"4L;XH>I6Wqi]M|c%>g;5,<zR5em1N8pQa/6I/A;xh;D/YC5H6~Sq;/(j_~h@PjX`9@w!ZgHsex7p${;t.?W%hcpd:W,BBeHgA*"PDfHY4q"gcaFMSfyKpe*;L)MS^FnI>Bb7j(d`yTTRoSc"$`DedHp)F~E6FGGaC~(XZj=#,XU6DdR~5,t+"Pi0(mO`tZXpH2GQA&W6yBZ3u8KoY:1XL`c?BvWH"RjlMHXVE+5XXGHsPvGaOblI7<cZ0bD:u4wBt"ev7MagzEt]f&wn01z|PY4S"CMT?b$D`,:6i)f1ZsSeRtZsX&LE#1nec+uMM*0&m{C1dHGc4oLQ<{$H5neETt$Y69c:x68g!@<7dPmi7Z0y:UA_"We#JrLPB;?1z;m2i)L2&8zD1&,i$Blt4x0@8^Z>M~jXXSbAXYt,!E,%=wjuLdx/5+"?z~d:AEtlX)MkJd,f+zSnLxDKGGEzBzc3"LZ.B?zsci4BYhDwG_UYLTC:C+uN/L?$Ay/rHBdk0iOOBZBwtS9ld%()b)QTP2bkCH6s_XX,7Aw5b}UWFW>;C,kd5$(AupBXn}.0%AtL=&,d[=om9T~NVn~<2tS/WV$X,5+@;}UKPz;[Zwa2Q,z@_vh*pHeG`FTsCv`4.v3;CmD`vUBL`BKg!EcL?mumX@cm&a`CamCNf(7DaBG4FeZ(T1eMsg`gIK?<4jcR,~tTc~le?r1Vi)E=5gDSc;Z"ef5VKKW^ie7PK(G:9{.Q#p,IB^a]Shb?IU#2^WX/G6D!6*pBn/2g,m!=}Mni[Z8CcM9h9[@0HM*B>@EvK!E&.v5!fA|g@}e3N/(7/k;!o{2kYnoVW}Be|J.>gjcsjZF3vtq}7_=NkC|*=aa$3{{Q66`i[oC&v<%P<t$!.3aVIwf!&47X{Sy2.VkJeR]<I9F9R&t]WltS:HEZL7"<LzX@Ce6aB*i._;#;nW@5tLy8+^h:Y#p$4JY=od4yC_(5L+}H/wHq@^iVPirJBX$:aoO7B2[rH.3$.b;3WlSnMm9iuYv.(+EYL5;2QikQ%gZLzRl#WV$=!)fCfRNHMbFp<:3x?"6Cw,`Xt1T@,c5j/me*w>0b]nW*FB?~Va<Kp8U}(L0:4}dgUkJ4GG57c%ObD1Z#DDJ,$}7{=~UR^d(4M|3:m2$!ide>T78vjYh9Z@ORbYOi*MAWP_M,(rhe#;n2IcIIm2T[C=kOJZ3Ka}3Bhjx0.YO|!QvVpXP*W638zkv#Zc.j304446cnBdX&f*h?t((yY*T2orv!Y?c{Q_CT<~IRz*kS_E0Aq%$BvE*"|I="iGY:Ub);ITQQcL^[cZt9c6rRgWBt*d#gx20JqIj.}W?q}^N/_AuvPd[?TOV_)B+<<"5r`|GEikn!<n&*Bnk5.hC9t34<.<*]kr+atOEzDQ@RE"h"M{0n4x}aa/@7AiyrFJ].<hBlF<SVe{Zf;;r]y(ymMmU>s>2s`i4nk~Q[$E^+5oAXJ@Cr3,(&H4.ixh7y=j6yDTTWimHc.iZ=Cq+9l(JGmW@,D6F}HFA.upfi=5BUga&BExTli)3Y3{x"J8:nEA,ADZI<XH[OiY.yG8L6bs$rI}Bh5H8}ZTyRi`Wv1mfJbbuv9<#dreX?L"9U:ICre@Agw)X(,Ln)Wg0^|$UKJ#E!Ikn%By=Ot7uL)v<Ahgi`:DdF80;bU8WnM!QtqU`;!v,]:4+r]ac>{W#!u&:rngNM5zD$Q%RhJWS$ly4|DAj0/P)._^]d[N9OdUH;,iS(L>P%:q1}a321uD3`(8%HjwU@Q(L57QXUMRT8*p@.)&.OcXuYA;AZXf:^j^l+AuibXs_muQg0A%t)0s_|aSsc?&{BRo!?8UD0Keim,v*U?^P~0bdt71&(<jMgpk(cT4e!4%z~N|!W#`v(aA02k;ttZ#988NAT.EY1b8I:M1:oX8v~+LB;Z/t^bf#FE[N=c$P1<yW5#Q]]"7f)gm[yb;&$YVEBd^twv)!az9Krr/ULSh!n8q:=k*y0365j7+!LuD[|nqkwYo6ra^n"c1;AgiN!BEHj2jC7JslBY#t+,W$AFVD3I?3w2f`N~QTltv8[jM0G:a7BwnO!68D5=25qZ0zmGH9m{^7Hj[It+2pw^J8?l/q*nwJkK*c$FpNSS[;#U$m%.UXw6,B,p3z===w.nc=zQki}HQbqHw9!@y]KzyNnOCF@PADBI{i4ix4|U8al2<D_P+U`LM=?:,D!wJ7a^l&/7!+xJ2E#R<f[yx4qzN0U:JJywoM^X;S"g^23NLUU5qQL1j#aDm<]Cy:!m8k%M|D$0EYCC=`@OS*[`=Hp]B%F="Ow(1NEUHB{C%D1E[@*l<F`QrN5#@_xZ)UwP/*rJ:S[gbi.tXuYHAI9%~h)clB(HNcC;{x_@BZ%u@24gY`G.Dq$wOyep~%k4B>._mgJL};hDW84S>.bU>a>3i7#S[f3U!,`M#Di1Mde5GTTw7jb@1m]7#i?plf7"z&:XT,fmSNb&!@){`9K=hE^Y0udJSCN`HY6!@W>1v9ox48:0RWW#WOX%,cavO%?:FbdQ.?)@YY*SNS~O{5dEB.sd_#nRue5vgp`9B5ugUJZvGxaEAK:{EApL:9FIb>t;y.4.18jvz;j+&J7kg6t]!%^IX<k8y%IqsP?NHpy3^:n:j;`o6/Y)[b/${/Tq{.4?K+t}{eb]JRXce%c^A80m)SgJ:X3MCJe9zV&oId$AdXtB0I:!njP2f><+{a5r81!hbdxix/u!ZjU@RT"fp;1eoRVNpCN5*=yT?]R$J/$n#R5@64Vy1C%<YM>NP>4z5a)2.,/G(D4EoYhW4Dt!*YUfnw:V[?yBp=_T}%ppzYdU(;N6s,ok{VlF8/?c}[^bVO@TnZ9PrX{oC6|qhKc74#$:r=7m/T??=nO/ny1d;9,XF]({I^`}1tx=F)7,u%<[+inm1I2/yzoDmVESh|=ASI3r/83e0]]WUn;Ce/_w!,p/B,=JKuoL2aQ7_?6Z9k#DM:=[.de8h85m3`C;_(EAS28M=pY#YDW>7F,Z=kw6vU,kxKu`4rLVmK}h==W)}%tKmo6D4O8MP/iaAA!WTGFM.MkGygn/CqPKpqkD&h1pm4%qfiK0,?4IU!Cbx4!dn!zp5Q[[j]Wa9A.:.^Wa!&IXwbrHR=O+KD|XrNpF`@{.kS}L;n*N~!p3h.r7@5.W&Wr?9@+>|DQ^8uI701*Y4R%W<AH!Q.Fn@M~_G&^c<c^J2XKw^D$YeK5N3[e>3LfLp!Ckmw:WUI%JgtLwiqRFi4wD+O}6>`V3[4yJY7C&BSZBB!>k/h+!WD>0DN?jAYedylsFLh0$C0|df.CGw#Ix[L?y5FSC]tVH1W2K.ShGcw4Y"bs{!+&wmGSd^izHtcyAlZqL@0kn@Z`4%Z`T?l2u2+r*(iov$i{Z##LGSh%V#ye;w?*$Ez(S;Zug_7dis^~R>u_maQIw:SO8J#kM:;bEtP|UWc%)aUZ^|#og1piaP_u1ATiV7y%F=BR`rj,w"jh[}mQKcpeKJ#{nB6wpXC~X~1ZW:SF4??_7R1nj^Z)*Th~UB{JF/1#umBOuBX977FpXl%?1/mQZwfka)ZAJOXK){^zht/bDg]dJZt[IYXN0Ik8iFRr#uM*5"lnQyp/Z#+Iv+P{}Ws95Gh]PdVbVj9dJ[%t:aD+Sd2`RQPi)x1hYjN{::YX:w8%p;hN0BE~v?Cgt76Zu#"*4~O62JX:}/Q}nTFSd%6W[nVByzrwY=ek#%G9PwSrcBw{#d`!_0MQHpxzVB1.<MsvKuAueD3=/F<">B$sc7Bz#}e]TzCwI9XZ@E]Bk3K)@myI;zQNAh7f4)+$@AJlx1`oX`$,yBNTzh/R#!QTUXz&60b7,mi&Ch3dOB`OO!(K)eB1tO0hbjXTv:"^Xj9aHQ$Y@@IE]%N3u0,{ReQy]zj0uBk:WWazXGi9z7LM"u0]:9=XIDbc&tP"iF+!eoC}`AR5rHi*UvGx#^vsIcbY6}e*chZQO/w4[9,dp*%sV,&F8!!)7xO+BjmPYhZC:qIm6{*Kp/MDWp!XT#[Yqf/6yqy@+aiUX>5~Bbb_IkS~OS~(=eA2_v/=H(Y+iljRJBRBarRbSYm&Z%d;H]g#P):rf0Y9OXNb;]M]v}5#PjjRB}HZvCjmy(C2GwWZcZX9%y^he[oL3<6.O5ftE_[lj19$e+Xm=E@llV#H2pJF$3J,sp9Yrg%.0v|q4V]ra^=9UL6Qfr2:!qYY`[DwL+b+R#F+yN6DlNbT@[hIXabO)?OnUcCXVOT/:@.q`WIe,8{`hsL;FP,su=FVRJtBF=5^]/%y3lz0W<C1H;"i4Fx%_aipK[Rq1>dXvgf(#(c&iFQ{!"SUE4RhR*"Y=x0$PY7bAnTcSL=V_H&c=9Pg)fVX!,tT?1Ktdb;cHv<D[u]90;h)N_=aybj3X{ayINyYGxG{)c^Ef83`LrMwD3$1OJXEf|Z?8QXl;R3%bwzrkXy>I#e?lU{RB/UIxrZv?_/nL5#h@CZZD>,G*bHDm%TO,6H7uJ#aX$V9@sY[xBze59#CgWF=kT^h5VrK_OUBq=tWc5g1c#I_<4tUm_y"h~W!f#)c/@MYH$.R/K3#%1.Jkze)RF2.3Pvc6iu&jL%;9~hW.%MxBHOnO0L%?GDLfVNaV<2Ey,:?/dwKeO0f80qEI,@gI<<6;2H$OKTpYY2W3A>+=3VnrUJ50,xY=*bZgUXa4sN.HQu&yD{95xTMZD$sO%xYiwOtq%2zC]PQ:iZ%SS;}4fb=N5Ze>Xx,f7yrZwCEE3e3)cre?b0T5KL`9h<7%@P7.%[l[BR3vF=g)S*7R/Qy,B48vb!}LL:Ynwa30xu{$2.Va><@Bf#0@,2$:Kk)cq0t3QvDCWXxuqlN!"[A$(a~OT&.=z.3`hfsB5bC[bJ2MN_g2$Od>NT/71ggUWI`z}FFS%jOy[6x6O]9j;$?E`|b/5!Oi2lLmUbjmVyTGllsfbYO>s9XzX]W$=Fj8)eB!.3ex7j8kDzi69Dx+c,3DUBJ^qk.OFl^%`2W)|wjn(8NC@h^HL6):s7an#UH}_::q`E:L&!dpVv9[0rQe|aK8jh}F~9KWt0@W?WSqh!{)<i/kHuzg0a"]%/,>xn+)bP~$ahdItBI3(w=%#Ia8HSamv6@`+6]W~O4tuP^])eXQlp/..bThjfrf]MF&*HVJ(K8[D,ES+)w)xnaVB3;&NE.&{FV]6=FF4l*S#E1P#k:dU5,jU8s;_,~!CTo@2t)g#<)T!OdIX<=4R.)ieugE3A_<jzIaoxjwd4;tO71)3WuuvjjS^U[AONdz9KxXL7^y09o^H=[rXy^h(VWgK(F;49.3Eu0Y+&O^M.hD@@"Q*BBm.UE9Yv`#wB8lO6lJ)UUrM<yU.[R7GB%s+v},WF6oV3uJ(8u4gB3pU73S1tvM#FCK6cYqgDmc{P~!AB;W4IrP>_{EYRd%,0,4M|KeVdMtckAgJpsM_[jX~H(4{t:xDe$ix*V7A>JP>LH?8cR)w70U!}AcC%1!s|Z$,V*5)N1()9NhsH|Ky_w#h|]WNc2lq%#TSEg+dUBV;]ybs}rLXexv}`mgxE?P>U>qPGZTz2i?tp(WGUFj=hTN}LBM2)]`MiHRSxk.T:CZYU3.0$!xuVUD~Ok3N#}5[vZtUTjn;`lD^Ll0PLd%F=:`rT];W5]oZ7@u$*1{6+x,Ks9cgd@VG.NC[(1ZfBBH%K>SMelmm:O&bv5w`qJ]~JJ2+XzCZLZvImz>&U|v6=F+%n=|9Y;<`w#Mt<Ns/hxbPffjg3p4QQx(nUXvoZ{k>C&tscamX:k.r/%NX,9LJ3+,v+XBSM#De$Xs7k?r"+A%l:RdMpK477DGv(:CNbXLscN!uptynD,/T%?>n#>@>(R%ts>.mpIQPIeFQ$`t_T,NnRYeTjHIqUc%!#Jw,`<@+:m+Y".A^(XLsF+tg1+/pqH"?5Q`pu8PQGIDQW>WXb>u}4Sj"0SZLV@q+&f)ZE5V}eYMuc{Va"}YAM.ctX`t4pt^<!i$vFgOJHu/bL7FdCE|Q0"j0U)^iL"EE*nkQA[F4q8RkEU;8cWH&7qiL@%FSO*IdL[Fono$lo_M|&8ruu@VcTtnnZTDStsQdt24nH}wgzNDZn;=DG5FgXsM8+*i#*cFSkZ|+QVVBtB@~FgL5"z:h2cEfv3zTt>299[G(gE<99p2}=}N`22Di%/KA`">{K4LYxy8}cU>Tzf;Ihj?OQ2U2mg`"+Zs"M{S:G[3CtjsYIhL"xKC^5<C3WHDdLJe$Lwi[!9>Kt!CVdDt~XgX|NP$ZqZ)&yJqpZim&`{X,72VBzuZouO/^xOT#h1>T[%xXuylKv;L5L{hmZnL*UFHz!qCM{_wT!IYeL~+XF:W[N}4?(mA[FK4pi@}P6EQ&/`b0k<v0dckSkKUyk&kv*=[&ewOX{Lpp*LCu|HZl7N"/"sIEAr|E5AhgQNny5HEi?[Fdf[}sw]Lc>MA}I@.A+.~&PEM{A.`^[(K/2E/k{,<}mLUJmv.T5Q2iS06HDxW3BK]54leebS+8JxEV(s=([%p}4y:WMVR^vGBkn&d9BgzoGZY:K`D``G#o.;CL:b4zAfLa./^naTXpVMbYAgQRv,$|N"Ayh;T8v17Z"4qnaZXPJYCwivJ:aN?cvruSvyAUE7P@_Fi)xI$5Xo"mGpN8FNx]sB5pnAG*dS|+AID0w?qLp~AE|*Ea9NHNRCL24WC.&;ikyI41{s70N``Sm66?vIA;BH"=1JNAzd0`hqBt}.9n}K_9o5[)9kE#`>7b(GGyt1xD"JFou&CPRkAaFlwAj.7x*?E`J&"p:67!WcP>*7j`^SDBD{JJVH:Rf>BF*M)1{@@:yXFvifc%YZL1XhAlUnL,hIA/i~+NC)kJx04gS[?;w+#nR+C)aCE^3Oo=Lt@tMymmDE7hS|QWj%Ud^CAKPH4,c1AOcHH<A?WfJcc?v+A8>r&*k~M"=)p{6zlKVN/;MJ7{h_oeqiMSCA*h"]!P<PB`KoVRL$bPuYM/uBd5R$L59<RWrwQfZ~N3rBKw!%l(j#6u?dYRti<2E2RKa8BmMs{cogYNAe_{"FZ+toC%dzDf/aSB:oW1mk`x>g]enMVZ?2;fp_9v(gS=v*Z}L;?ZOa={xgD<pI@3r(qzDUD28^#^hd8jJt*6mSZxIeHwVf><A~ezsMA]u9[[h#@Oe[SVWx[r|C{|3oDuL&a`x@APJFM`LTn093IP;o@Xt|$9of%zn1q<oAA8L>SX3}^e2:RBL2pY%H!?p&:!OXD*yCw/}!NW2MVM`pd&kBu[kKeUHc/B9"L5tNCe]Uk^L}@wCjb.T9cjwN:GMQG?z;C?p7DNCP`<XYV5rOm..RG%KFqQV.?Xq6cUSG+lBKB~u4rH;;{}7ed!9{v/d!).8arZPLZnK*8]xw&:pR#DF.p^E|wTotKYgWznz97zbEu^R7J4%W`Ofok#l^]:xC;wM{^{$]r0<y.t8^<l:AaE(gjp6>/w&9&h8P6Spk*jwa9%.unMK+^b`^%[e<r<(!`"n6"4+JbEejEvesKq9L97?E$#7A:amy#mKl8$z=<UkCy7F7+1)+.U&&=79*dvl|[R.c2;t>3!n*[{`dJioS.VK#TVz8yR)G+7l7*kS&oFzh@HTOGY,2m>CDop7z#A4/*^`xI?d_YUk%?v(X";nr#BwG+5RDA0Wp1PG8sIQO^a:x8P,^9GB[d.Qv+l0SCsC@CR)cY/IDAbjF*[4&t;[OJiik=QwIZB&#EGOZ4k+1x?W:MkKT.Qj*x<hHeE6eePDw@%F;C4D3XPX^*RUb)W<RF}FTKmR2Rzz)An6RDXD/+Hp>Sgu)Thhyv{v2n/I*Dx%_9(X{@AM$igl;ML*EWsj$H=TFG4>MM2CDQlbDsJDBRgGmG;zFtwA@_/x_TEuS)K.tx*.N}A!6AVBnAjAY)<+LGplzWrf;MF@1[}xB>.>wGxxfDOK!RAyDE)kj,SekY5U+.Q~3(Z|w_73Jp6iul?yt.=t17/jNcOj2sWumlMM7Tm*093D`DI;4NquVJ0:Uw]MA^Mc!*]"Rm[OJCu=Qbq"/WR@@/Fae8!O#4}TO4*fTrUzdlepC=MR*mr|anr^r=GMHUnAgGLefMcdfoSoW1`P8d(@]C^5RTE@>*f0uK_F2Dflpqm1eHEbta?Z]$Lb3GMY}Q/t[,Fl1Z"3p{i2by/|"VN/VFvc~XT5*n7t8951&jy@>Umx}!S#gO2J`L#LIkOl"7@Wyq5VVGplL.NPK8s!_0DZM#8k]<2OMB&%I|x~+9yz(GUH"^<kE<aCu/I;7+>=[96+:W))AY/lEY4SNtY.VYX)wPs_?iBV4a7qXL=awC3(BvQxod~:4"vxai)M%FqG<vwoy+sH`GibleS$Ec7JREszTY[mnTU#O;qEj][]{SBp5CN3uH[}<:_o:K^nuI$*q%PBKM;re#:w`9)dxcTjg/?%APx%o,YgOmGk/mFks>F4j%Qg!.gvzpN1[X,/7=Re@E|l~c/x&T+=p/I%N)45>RHNK+>.sy8>{i>@3J`P/mjdMH873&A[PP?iALur];[FBFp0XK#mg!)N#6.==X.olT`OW3:DG2eYfjt!3)v6R]g/v{kkL].KGl!n:UubHS6ek/]zj<Qf96qjg;^ec:"+!QvAouK,<u&6=5}?;t=:KkttoOP5d6!&z]`yec<<Y=R>xD*H_ytju0=aZDE6MXnV&@YzpDZ)P:GNVg4p5SYjN::6pHC>YQ{zGo90?URfpwlu"H.nq)t`3n|(ifF0RbQ8^pE[U?H6w=5)vh$_"O@fopbca.6`[P{Cf<3_3+_Vnnv5D.r27f@T/ayKw!bqv3@^(]w~#</0{X](E)Y(V/YUT|Itj#OjvV,<Bz#48>z5D0L`wTEm9AGRpp3tjt6m.ohwrFxZtxus/BKQA#.F)$`q9Enl@ZF*1U_4"T66_]77^.m9$W)AzD@wH7kS`:2Co&ki!WwWI0Gy2mLHQnCUignb%ku$}i$W<C&6F,/A"y3DYEPHT5.u2TLvTR@iroV8;{rBsI0Jco@43y#w4F1w[PQ5}RmE|5kag;^+|HGdKA^DBN|9Mc086uyY~ue.VN6002Ug5Ic0.r<0]ysPCtJNlY2^uE>akGI6867RXRCDvZb8RcRPN^sen/sO@R.Zs6q;.I0WJaecgm^(Fx&+:kqmxZbmFl96[I*PTuK6J6j^@MUaFYe.4Ic:r,W]G6X507TtScH6s0q5Ay>Y6794K=>a@!`R|m!8PHjCFa?5UaUlBbCkFacQWNKdEgBx.!)#&4gEW,.MLbr@f*GSo#p0_wF9KNt@lX#GeZ{Oqt_(zD,(U7KlNS0l+kN#++Rv;6l5a2$PwfbR>M8]G9SaX<=FZ0rauS1SmRW%;yxw>d@Y;YmNwfAeizK0hD?SeEl^hY<#cjsH${.6VH:doE>Y,a$mS^w++<[LN6)ijmD!NlpRNPEm/zfO<dO.wmNb/:o0Z$N0Y:^(Pl4a{k47,+IU~44zyp,5dbL[<A%j7XiY>ZvGtN~fvPh5&MJ.&w>y6N[O*P;OC;jeGlMbE:G]v#!MbA2cfO;YPOpGFQ]5,]FZ~Xa.Bz>o8O}:mM6j{Pq*s4Vcqu8.OC)zm0[Z[IbLM#g!jjm,C2*<D1ses6Ngtf%uCS|HEzAefS%#SmcbY.t,Y0]MF$Ol$c6dLf#G%jCw^ZsO[u8!=R32rx7NLHUH1B$4eV>C"Q1p{M]m@BP0mj0m*a<O"1u<mGHZ[5#*Ka_OvO?h@jET$MyDZ8J<$!WP>kne5craBI+Z5/{cElg/eO3N9ksY%2d5s7Bl)gVH!Z!!:BzOFac8(zkb3Oq,=*E6GN|8<fXvz6fevEk2(FM6ZUMH}RTC8:]au~@t,o=[tWE^J+,~C,rWwNV.B6Y16#yh:PF`I}fGVhG[C=G%6#YFs4kc%w84[4.#LBeOC9|RcE0qLvfeLf`v=9/d?aZbz7_~["=^^e8O(zu"{k0dn+OVq/;?0ak!/U+PS+Ubtmk^JGlEcy"QlJ>uMwN~+hp4U7HhsD+qK#/Er"!fxL+h.}rJ4HNhaCIL#L+M6C]VaGVIWk$WOOXN4Ls{;"rIn+ONdEfO+S#4DD$JL11kbr>xaF#_W(2vrF,|Q9f>x6o>+>yDn<7]r:+B43wK(m9+`TI/CUqPAthf#%IG(;Rq.~DoR(,q*O>9h"~(tbl)c`/aeT~s6MEw[qb{)1=a~luVS&J&j+_xYATu].8RD3):D8Iji2ZBHW%J7T|S$hA60Ev.>7cARF9K[Jh|hP(h+qB~X3nNKK+aGD5B+~2v(I+|L:?F9AaD2BTCVr%"uC.uNz,Y[WyBwsKU[2XlSFhsQZCRe.BQsm=[E`YkU9Hq24gtHv:v2i4+BVvSjHI4@`?z2xcvdHIRZ|Y2#Q(mw!#c".LcidUj*w/gvZ&nl(hK~ho&q;$0ZqjnmB06TGE]4b5`vI91W2t~8Dfjzn(o%bxQ6%u!bB!Tg`M`OvB.N;)C)3m9Hz{0)j{/*GCTy$!qTuQ&tZ(VL0B+j(<7a*x@jsQ.4vH/QlNE^{:hl>+/}_+;Ve~OcYGt]:rzbYNv)4.M^W1@xJ)thw0k5JqR3GD5*ksi`vRv+hZlGiJttcCww;"yBgXR#0C*GGKGRJ<1+MHM*hNH"F{5La!6gSoG5RXtlwMCpA;H0iDXtiNNFiu!4L^7dxD#1DP5Z)$A7ONRBD|WvZnS~t>d{H=004Yc2w%(&lmOyjaY<7)S*MZOyR4&!mLBLMo[2f]V/Ef$;cWoUOPHwfj"tdnAnXv(dO.?#`&;o=K1ZqN|!zq4]{9JVQp1^;/Q%/j1Q1dbS{5uk_R,*[X|.$#rBN@dR.K+=e(V0pj})C><=oXJiW"`[E<9[[_stl7,`&O?uGNX![69%GhiyL(3NZtxUn<<}(WV[tYs^:ZRb)+GVmhUyxG["xXlf~5#woP2`FDDx,p}+>J4ag8mJV5]37|<$kZ[,|!;$2<j#mW[4}&M@V?}eO"IE;Iban2+7b|@[5^!e]>OxC)2W*D@c|;Jt+fslH/DkF/&6~u>.dKE2m3nLf)=+bpzb`I?]Im_bG}"%y6_x3z`"3H|d>F:|KWg"~L9Q[3.<m+RdZK&H_8S~}`rTEV~*ZKLSVtuy?a|n8wFU!;$r]oBh^qu&t1G3O}o]OgI](zv_?k:tp{La;x[D1JBK>Y!1eS_Ztq:Tkt&7O|n(00|gHTa8mhU.Qc~V{YA4APD!6x*v69NEwj:_`$$,/FFb9{7pn%Drv!!m3u(9n~Pm`{qpPeF8.xQ#K*}|<hU0|BSj&!6`0&RRZw+S%m!Go_X%XP+DqvYyXm;P:vA[qtonV]^*3"aWX/?p}Lv&[^h<poUimbl`?@^y|EbM3S/1:!(S3hT_7^$h;IfrH/*+!5I5OWaAA,e>v7XUtV7h5A{eWV?n7Oa,[kMIpyB81@CsQb/_J{[nY}zs)oy5(,wV@3_b4mDUplm2w>Yj>H1fPI{rP>)y+1^hSs_`bUCLBgb;xt1;884$M//[H^|7W(qOX:y/F6!<oGPV2+uh9zZ=<`I@f6|TTP5;w)oe{avh(j86T^3)1;Y<7Ay5:z(1d.uhK>1z~p2RoqM8yvH}2dh}ORZ]|sg7i8EUk>PuBuM$wi|Tp&Y*r>hi;L1tSsVn|%&C}5my(EzG;`G}{a8~V]5k,8*?~HNU1gibv^Je]f4H&t,Fj*b<L~9ySfGKG~R^[/g)A]Y/R"xBDP1#7]kp;[.Lc63whX!]%Hq2nsB0Zq/N0WvDSl:CctCUa`Ty>~t}2#gI1W,}Y9G!&v)umolKOFjrrdo^,+:M];+F}3bP8~8h{mcnDb/<bs]oL&#@l>%?z)eZ5~$HH7/"V7p:C)VGpjiNy=F)OyVf(5mDx:1i,:C3Z+%|d$;UZ0Tw{:CK/F#iD?~>bxlcFL_VCEmpz5I!:3r4w=:~@:zPu;{JSD0d/jiV%&FfAGBSM>|<k793}xnLM}~~9ok0V2){>L&]TCj,;s$T}:7C^B3&^F|:DhY]C&,)#c/p=0;1y|d7F;;XqX%#vz:jzjfMPBW"+9CI_3yyJ"vz}QR(M=%]cq0tB~t<|=`D0/~:;{^K3^.t>,$JS<Ht9kn6fM~eRe2FWD@UgR&pTX9bH6n.;?9{K@`cU=KfjPp|g}L<awwT|Jb<anWtT9DFtK>2p$Mv/#<AUJ`X^uZ>Ck8W5hPkvb(iI`TW5]wW<kjaslro^5T7zGSx:8Vfs9la1pZs=ASu5<5L@H`SCpC]DmOz$:Y!>//$bieY3N5K/JFGs5UK/xLAdUKp4sjhj{XN8Imqy?OmwdFmXeM>7@*MYMkhc7oUMle:9P<Fty>/o(`KOq[R8.G8((tTdz{GBfym1<VsC^6W)i=+1rk~B==X?_^=vvcjtP@@pOFZOC*G/S=4b}fu*~YkC!:{]$Jel8,"Z_?yaD$O<^9X715.8u+$;@EcB3+eK)*H%`X:I=Ir`.{82vS&qz81fa|4u1{)ewvH3FAh)Law;/@4@q.hP<M}B,d9/&E{n"v.IqI$pLc|k}&6(O?f&L2TILsEEYMOZQ`.S_lL7qS_Fwe~s_&/;N&d]^_,Kz1N:c,*!3|U9)u<~lF4L}(F7N`xuTD^M$=%ge[Am=+DD0ipI_NH_#>I#STMy,CaS[8Zau7XBly`9f|XW*dO&A4ZJfLhtV47j~}z0(~Z(x_GP_]IkuDatHY[3KXZ/g`VgMV6$2rC?Lj@(GKmJtFX<MGQiSA?j`R`A8ejWK.c#zbJ6)9BPfG65]0Cf<ePiqwP/vNU6.*3JX:a?{YpM~8+i]y.U_TF2C*Zh0Ex!`qL,+Ui?7XbmR&Z=vL77:%pj0yRM/6|0]Io9(zl&u=Y^d^lYBonfZK6j7$N!XR!0TyvC0JD~rdvE_otW]=8|8oIcWjv1EW.GpJwiOj!h<^sZN(Dhd3bU(sT.]ysW0&~].X0[&&&hbvYfGo7hb8(;2ez6a7]]tRGR$X/dnz61B*?`&yAwuE*E^QGGH0^zAkSXNa2TkSQL({MfjEEt}*.:B1esKW/cp<Wcoe5Cz"]}#*3~V;2lA)4a/jiXCk$"Pl%Z{>jY`Bu@Hq`X(]Q<}w>Y>8$rx!@~BU$krVn1({Av2{DHp`&D_<YonB+RETqtQG4mkK)mhEs$~4K4hY]Q`w394nZ[w@~cYrQ:;i[z`Eu_xt/a=sX~2J9W7uI}!Ou&zl"+J57A(KYw4`;Zh"j?UBAtmu7ttEZuLUbn}(W9)M)q6EGq5Wy;N/;6_bHI)3X)#?f~N&*~}gpdi2CGOi1|s]>lic,p82$2T]lT4N1ZLl"ahzjD.?u8t.9*[#]+wmBVvY(+!yugQlM3.Rw*u%ljP!c^G@N.[T6.T]5=a2dRLC,uxNxz5m9oru_ai6`=f>|mNC%JhXjX+_s^}ULD(yPvN],(1juE#T;6>AnShgPZBN6.~wM3WKAnsCyxMZhCwc4GyNWoyP<F>1}Ed(jg;%XK3W~$Q1JNRk)2w[FZFfqN@jYOxJFzxjSYAw^jC+}^tJu3nC(G40:pBp=p2zfe|gT>WFo5/uap@*h;poSw4u]/#fBjCG6q6ck+MI2TH2f!a&|0nDz;VjqCIprbfd`XM%(a0=j?{EnG|Lb"w%WA[c<M:Y@M8Pi>HyTIszG+_GoN`c)nVILcnS`wZ7={Tp83dM%+/tmS#mRz*MJ$/2;Pk$az.:"=<T"w{*C%s!t:A>*.lY^X}S[@*f/z(n%g2%JE@{Z_IGpTSR1z%(X;qK?Y:F4z^noru%4meC.]KI:e$nx2&5Y$~=/0Ci,Hmw9ZpLxc5x<o124uPu<@koxGr6Dw{W,MF3mx~L34ty?8j2V>+,zk~VRQ3p{6C,@(#yXj<hmqlf*ZS/&y1[IhD`v:+({VZp[[1`ku+L+.xG3LBYjN<M%kqNCmzWn,Bl#LCF9gQ0rHr<lf",DadFjGaO6Drloz58YYN<oIMx5E.Iv(^(WrZB[cCY^CuEZLW>tu[NGc^39E>~GRK#ry"!"bqQ~$3O<o|KfRfx&8AevBsMa6UK7x0KV{8$P.qK8~AzmOxriOiyl1Ut3(>+Oi0dV~1C5pd5OmnV)yRR[UW4.[R3e3,1{E{VPw4l^Ec~86h~7z8mz+Vrs.V%vFm2O@CM1i*2W9_,z75#R/UY0WmyYcad7U{n2Ums5B*c,5Km0v^F2d2X$@y?J<q1uOY}3n0SyQ*/w31|RwzU$$*c:zyz(Z6ZMK|n993lqD_HQwzK(RqG;`}PunZGR!;fmgx8ntWyKkxV&LAc#=|w^%!ZJLL:J_xiw[N)qby4))cvX7RbV_rR$_,3`3/]G0OrKJ([4B~*(^uIRB|?yk_GU)}[[>X4i__C14,I<{>]<ip~|tq%d1q5;^(6xe6pV6Z"/|$Dw&(f^V,}}sEGM~O10#774*6L7K_S=p?.%_7RdhMp~wDc|I<>wV%:ck&z_%ef(=&sYKYEr0T7LC,qK^K6?e*qR:ldOoE)q1vWHw[Cqjprw>tE7@#X~d_>:>00SmSiY;BKQlblxHX"5kNy;3E4s~&Dp+A8@Q(D`c1txH(y9Bmq;VSTm>a?&~]GR/Q(P5aPuE?V=aBR+"KW2=dipa]Wr0J,~YUknMG..%$$QRLvXrWVB"BI#4HOd5s"KN}K3ydy/]T$AN4S[tje[)@@W/631S`MA4R./3r_Y%tsFpCrmJDH8:vxc+}:,F]?(hnK,.2r|}H6_Nys4S<)6)Y7_h#OjhKd44I@69$sN!~;jjf%A/"rF%UlQ2jax`V|ra>^k;4l);Bbu7kH3:GuJXP2B7@L,)~,xDLS`3;KZPl7q$57q*4oYLP<v,tc{/"b(bRl{97(jAGdY]niISTZ8Ka|/>1BxDhtTe!wC6UK,C,bp1HR2s22t8^fPT$Pr((B8d:hkvSyVF5/%]*p{IC+9^9Vj^i3h_0gV<E,A2,ZZU$fFH@RTYZeTNwIT6lXdv=g~4Jsp<,X]MO}w)MHtt^DEw^q;42Kumfzx?$VVo`]iXc|)nzfI,TG](<3tZaLzb(JI$<e@LvmbTr<E]SfHbXj]p.}DCUt"5/t1F8rQ@;YJCiV2|?c;hw~d}xIB^8BlWyPI|58,PwWOml+U#s)?JfL:~+v4hqzH6EbbtSah]u{G#C@P?>y,e1iO1ic`5H3:3tA{ft<+7a^fii(L.:twO>x7.:=`>:|>=R/])Pj}Vg*%MS,LwV~n>}WT7#LQ(9o27YHf~Oc^2h{oziTSv6o7X]mecXs;DgSJN}m2n^L>4nG`~&[C>pB,1a25}(k}&FLpgS`!j+P]r:wE`/(ynMW`"%UG(E`G{+rXt}m`e9vcte$iD`g^l<OuE1R|o*{Ou%vNVI~hw`.&~YLo?^.8JR#?N9kXBQW*<(wXLqPK!uKkA%b/7fHbnVG+`L"|R|>s+}qT0w|8Aa+t)<FQs%Djj>W](7WbLFY+t~4CY=MX2`#g!vz%l/hE9_zIT)SOyiE.fGdb*pIBJ$?1kJ4|dx*jir{btY)zB_MQwQ!2k%N4&?5w}B$(>C/sV#S<gFi.@Wu=/C@<O:u913|92{aGHXD0k=,|766`=R,6vMI%W/sOH="d?GcdR"hCQX62N*RT6J/IV>/E,KsE<VSi^;<Y<^}Z)Xw"Nhj#+_XqFT?zufVsn~$11WjIbS5DPPn{r*^*VW}F@>@&%+T7m;6b+wOm.nYbB9"X,sk[t}.tsLsD,itft`V!sqc*)UU~;5m:y^i!zQ~D?r^cn:.>y.wMe.d|hmRm)[~s7hx~X)AQLG9FAMR_cvzRX`e;?E3/[~pGrnDh|2vsu5S&Q5=5ESi/Gm5zB"NCKGiP[hXCLtl"g#z:aA8tB[MP[q{d8s:]]S3DsVD|T2WlMhc+u!Wyt(Y8t%+S;?ACc,*rxv}D6!JTH[y;r0V~llXvGrnWgSQy|?35#*F@JDX^x5hn#`]nGu3[xJhHu]F`a6(Y4GBs1?N33[%6ZwVaBEt65&CnTUt,YTN.EzV:SwdmU4;<m:;~iIvky@XuvEy2EN(sn6"tdXtXIqP62>b]K8(?VJKmqa&Hi4M<(SBb(:fI,6Fnb#G3u3|WTUm}V`XH0q?1(5&S/|)ivMR^`k:8OFQXL2Gyi!E54<<Lx9F"_^+c`1|oL!`U@UR#RLL)qM^?raL=UUc8_hpEk$ZjJ*H&+f#SC?7l65A!tq+{hcmAX`=YN<F8H[oZ1ZotL8Vmilb0P4mY]3(&elGS)7C/kRWpf6E=h89X|P?RvA8*,TO>cVek%q/2zs0jZw1yD%5B*J7QA,nRJmtxB1P6iEHA8dJ`[nB.OI!LP&Gt[G=wXH1u:{$ACUk(!lod]i.yoKMI,hcwULvdMpmPhT_JUcmtm3a=4ArdIDdJR5W*qsvgG`k2HFt2BBDeM#f0Hc*,<2`4I);Ym|grb1VFUZ2t~2!bSH0&@J*Ki9SAwpAtG=r0_](=$J"";q>IstN,8qF_S;LhD+&{qdvJ:==*%oRNPmnkj#51.3X!WJXV|s(X*vn_8C)?9|t_~K@rN{m;/M4G3sGnh)T4sX.^{V;jqMlwwCf[1^X|Qd]@1q)p!2Tk!,VP_}.Ln"<=Gh^t#B[MS[^HS5uYU~X%s!*aJ!,^[,YNb;03g_VkqX>m&YEmNr",,LYU)o1S<_k;MQEeXAe4woGXL|;wFO~VYO*M5V~2Za:=Ks&ZoZrt~5s6[X7_9OePl/KWUpV6fz_`.|JKHY/@b4~hX_9?8NRF4!;j5ZBe]ZdUG?P9iJg~H!MMfdf0Gm{*RtN~l^jE:aOTX)wY!oIr?^?IB1*3M*=Q[m:;:?_?+m3Va<C"LBAmW@ZB9LHh6|=L;5%R;J$FRPicjA#"8~4&21DF</`jERI~oYwnXPffz2ao5_$#ka4(5,?ZL=I&MZAFV4.u7N&F|@9VK4phBQh2%SZr?g+!J(M,4OHM0&y@A2K~VfX[o_P1weV*!Nk<?/KD}!v(%3=fWI<A%6te3i(JV+5!T0241GhK!/VD/I);*}U<"GekF?BsJon[U.F[E;O)FZXKrHBw,EWq`fY]quKTtK($=_g;]Q.0bR`qD)TWqQ)(clpi"AmyMgd>}3*`iDy=l}OrK:5KF;7)8AkvlAQ=g~)nZM:+c?h~l,zKC$+$0~c+b=>xkLtV:mq6spob5z4[XQm7_97)a@a#EKniip#Z&Y/DkAFG>?Z$KO5FQ>B+x?Y8W{wv<J`YxjCNiK+_I!rsSb&+goIY"9O0GcH&1*yjd.[sa+jL=!YzmKl2#Jr1g[<X9>Y>xFf{1UzwI]5RO9R~e5ezb/>3He"Jt3xzXF;8wUEBi~Y:ixH:XiCP"hA@C/N#($Mmu[Jr4py&a=.&%j/Jt`::OQ!1kpq:E{CZRFB#M7X{Xxft"MSqm:C]uVzw8GbAwpokzEX+2v!Ea`ygYwG.ZtI+&kK_X=p%z}L:`]wZFc~%upea=7l|((]h89@x.fXmu!]r,J=Uae|r5f&=*cldbsU2:%FJpGp;0z_<#EV1yL`_)osKtgKpv.tvNHPWGaQgoFayBEai]hz[FvWvg18;2htZM+(I_c+Jv}|6;G%qmcRUXv%^S)1~;T|!(O?=lS$^h;4x>+yqFwIUo#teiD.4sM|/xwj8JPF:uUV{QSO*C2*SW|[ps?X5p2FAQ;J.@Ckyn]SP_LT^F/.~scgY~,F07@u+FNeA8PH3Dq1dR2OaAd/3XjD1PxtMHat.!;)20W!WedDYT#r{HG"ARmvE%9WEGsT8|L0FGs]rjlS3CVBQ`QCF+eR_tD:_+KPy(zsPc~xoTx|7)aB%rz^0UI7%O#X{dDAL*fcU"hHMA9"6A0sSK(VA$dtEOacn7qMh^J(EhDJyjtxoGK_UPiKgYw^m:9+>fw[(Cd<vO%p>uYtNMP.3VTSXSD=xOfL7DQ@q_gOqH2#|5?*G:.wiZBFR/zzbHtHba!y;C."Sd64"W(zw2^HDBLF@v{!o4Hr$?Vv%M&Ls)KClc1HjSn&03_3c[I4#9f~Yo(A&Ir5QYXD_Cbn0"T3|Mlg1wU4G.q<QRuH2Rr!Cg.,kk5"pl`c;H#f_d8.W500ONxe^5$fAja1?rd`O0z])x><0lj142^yi)yk*<rF$@}KSK@x!^H7AR+OM:8:c.HtxE~@yvSud5%Oq!we[U?WPhFP7gPtH$Q|XSS4#wxXiYb0bHmZ0!S4c*7BhO##SE0tdkE4g!)h|lSHXsg{8u2OMyEae9*Z8Yp2n)u7mD>K%UOJ[p67GNcQ#8UE8onXec&h1VE=m+^Xs?P|!H2U/o?jSn[a5"(FD~yd(^fotq6.O*}l[wP[WCH.oIS,lfr.,NIew?K1+pRC4F6Y<{5S9Krr~S@%"{W.3F(;AM;E:qL?~*y9U7=&EEUVr{s@5MgBS!RxJt+vA}%T,.nDv{ql@/1[*(jj}WyDOW;Xd{|SD1GWwM"XsGw$k(yHvZ&&l9LI~IVCiNhbHDRC&4t1dZ=jP+?EMSI#2#Z={{ljn8c:&w[IWd=1Uw<./[M4AIe;3B|0C3kxtW(@yum%7:WtW)ZIpB}Oj65QFC9Yo4#BbLmBRtuG@0:.]b{m{Y{CYq{`DhKZQ@_RfoQt;P0E:SG^9~nK?gTLn]eTlRRD"jla&EQO|FjAjwOY]%3)N~RdwW/`]q!r*2LEw|3SZB*[(M]IHWBU0:VR.HHzY4f=rsp&;S`acC_baSQRFMJBNM~F@5?P[Q5sK%/p62T]d9P"Kbysc=kr$NK:CI^KMsq}xSV]VTu<O`G}qpC6VWV|LY?Nw(H}V,=uMAhiU[:yrHBE+a2boEXT]$w<u#L|1Vn|/|SJOCbX4E$4iXcv44!Kl`c+VHjZ!4|xrv2W!z_V2/NJJ]?^{+)9j}en)VD0l~rWo!bp3yt"O!mBcT&Rszy:uVQoM/?rS#rsh5=Vy3rD:N$<CFsqY]*|7[QF6O}u_/=#i985(S1#YL0Lq3:]~C`}q7cG%~]90%IV1Jo;b{T}KP+THykLI#W0[#kYy9Ya4[nk~5(|<#cm5.6rB<apc^@<0g2v8M)S,]tm(5=M)IrMX!|!{<yME7fWTqdLw}q0@M,>l/m3}}Ofa?z?XlU}n6KQ2N|dx/_{t:Fo;1PCkdjzUDpBtPs1bCuB;iAD,[@,_AR@XP%cBwIW(EQ81gb5~+UDuZfhAYEN{ulYEi1#<z0c!|4CDXf:`RvZ1dsip7szizr,&%rRrYT01;VdBtjbRw_,_I07Cif/9P?B~QlT[YZ*N7J5zZaS7D@Z3P{k]D"Y3GVY1SK*9PC:`XXRwPCdF}^!}JcjW}sarUb=JN}n@J%cjZH$H+>6FjE5?PxuD9nH#qDYS=Xd:4MYGEEP1cB1A$re]+|tS8RJQfh8xf,Z3%xNGwJ1u7(o|$Xurdpmn&&Eyn+i|*K<tz$USfg0w!cg?gzS)&pw$vU!Z2?#b:ATp$&%)e{%)iIMVw3H18i5#]5JM]k]=wM;/xbQ?aBSP~73Or+VXEQ%(,#jl*qlB;*4E0Fl1g|zAUsRX$z@7pIp|qp|i>ipH4=Yy4^&WuMw;uDl:6oG98j5(!%P[g+g=dF#WucODGaep69LvYUHvD(DDlvSRjhZ,5zDS@pV@@<Vu_/*xV&61br$b25s~qAyjxJKJ=Kn*p#|9Hyis{B:=DT_mT!mo&2qhuSE93t+ghvNXTqarU1%+r9oel!NqI<)b_e24Z#}{Mp^C<@|[VK2@rt2e!Iy:w=@7{u/qCIw%Cs5b/W`"k=!Phw1!y7NG#%PQj*B$cWCLDmG>K9mLHG4+9Tt,698r)F?!L&YxOVFL.%!s?lD,+B25=6m`9uS`JIUeZZBuBOI)UD?HyGh<AIe9ZKfY3QS}%&w+6;5"}OlSG+2k@_O[B=$p9RnovpffPm:ml{)EfxeTt}I:q:M[9YYbGYTK*j:s1*ZhBX|H+]7R2{Vgj]yPxkWF~&thbE5IYu2U[*E|Kg_JeH}.R1un?=N_7VcK`%+.d8tR_}Ij/0#39j&(B4eddFK8V7+Y*dkFL3hI7AW&qL:9Q<0"DoGBW;`L{n!L)?^tCz2["[p9pp`7P.bDE?_V7(_2+_{7FL{9gjbfF9uJK3%M+K`W~b/iZI9hR)Mzq~#MT}+g3~m:^EDErPN<l+bC[^p}0xYnq{I#4UJe98!NU|%Zual{w"/.^/d(/TQQBbl3H`ui+ytGKy@@>IUe]g]yBJyVU7AG|em9(>f.C[Bm0p`QV1{tc(MwVy?m_Ez}hYM9m7y.t"~*5H),VJTGxdRRh?yuksF"AqD7L4W(]T]*s/vx)?7~uaOIHv6C6/bj`~FA#]MN!09MKc<uw7/x|1$.7=>AH1zMY%.OyY{I4wV+>]n(6n"|c1WhH"er;f?aS!HhhkEsBfH0n<s[2Y6x7U87yEGY0E^aBO?e{PL6y&X&uS|!?|_2Xjs1}`WC[}DLcQl_+$amw3GioaPce`s8~Jv;?()NehGSrnibcGjE7%]oJ9vCad[Q*s#1E9(n77?bl@H={9`CnMnc|>1`GlM$&(e";CwsE:2^N=3"kG$<bcM&;/*F[GMV8`0e3A8e1QwhXB2P2v+%}#XEIr;M*}|KJo9aN{??}=jZetranO^ag^1yPGsR#?tX&u*o9+qxorBJtYk>ade@F1XA5sLXjjwUzRIJ"s[I~0e)sXimrMj;X*SV@KnNEb%Q6=Vw0$(N<3+=r_(lp!YRzmob1%^^7!3}6e;CD5qgJn74iY&t(;YSsA_~Mp)9y"*#o;%2t!22[AO1[7_m`[Fr,,h2|M4"AUjv/=yb3CnRO8+;YYO#LQS0I0k]3~v~hWmFT^JSVeeu_rzSo,2Kr`WWc3p84LR8UoyWhWfPDwbvc,P]fber5Ek[rVIQW15NAs~T_>NXd~F#7Qh3OR.s4!MqXgE=ilE!)oi&hJ~6HjDZUAmG!2!Q"WxGM!5s6d(!+(T)PX3{i0ie&WJo?oi(PRQin=LE9}<LFT!u<sm#Le8.Y35VU#r_xwzJz9)XDS";5Gadlu/@t~&N{WkGy4,Hl<X*>MI!=Wtm~6mLwP@w=GL`^}ov.Wst>[~Rz?G%tQD>V@(,!bsc^/FGMdG]?p1p%TnOqJgZB@~xf%]O0x:z7S(ZZ4P?8AKX72R/4FvWv,D^r,*lnY,e,Q#?l>#F}g$&Yab/z}}x&7?Y.QC*=,}$W&#TF.MGzeSa)q@lE[%^ngecD;tL3ZB4Z~I3(}xj"QLxbjZFsK|s;z_f+1y(aAM`c1N7@C;=_nP0EbDfoiDI6`]e}01,E+;6UlsmExGU"NH!IPiiD>;1(}Mj&(,w.?9G60s+RSdT(@"*rqS}M=o2}SZpXM7SBI0/t;T;H^ZCf/X5R0Z{2ID?Ab{ZzGpkS,kWE:43u9RE+uQ~{"ZTfP$<wAMMHp+.4,0a:lM>VDz}_sD7?p41I60qRGO9X,[(>wZOo20Opms&4=J_vPH~BFjBeB5}u0qskLFmJyx.%WEe!S.$qdJ{TtHY3UH%yT#s$JP"<A>D8ZJ+M#YuP(1bY;6d0$eQ>j1**VmbupInmwWc:[~Cl":vD}!*1V/?^C[9..bFZ/A`.{LEnKoP&3_WyoR]>~Ld+!O^GTTamB=gS5}{[I_;GQ8W`j`2[;~^6EBP[|"1>sB`LSI}M;C+Utpm>*mL>X</=}]ji[Eyq`*J$r}XYZOy~A^2+2IeF?My8HvjhVF8y@Jaq&gLIhV48)!pWV|E!P+eb1B"7Yd/?U!PGRXSO5E35iw81YzlzMB.egO_Ji4vb1]7R~fx[_^ifT^~*vKLBNtfwVE~hd3(y>"yXM6b51L]hg"Y&.h#*a/zj5W"l&W>_sUt6~AhR?e*gNZ=2@D$~,1z=al|U@8WGIU0k2(n"$Y{e{lrWgNJCA"BvWS)6LI@CwEGO}_$r#|x$^~!U20F)n)(Iw5eY|j.}Oj]6+~*Z.FZ#aa4uLkISC7x771?achrm,%X2Q8l#Yl1e,3_CIKe+TKi=1E#0iG,FRZL+iu0=($HBJO24xXKDfueQsdcyPHrb@GY;m<PgBe|0>4g#UVg`s2z~EeT.B5sJeH<XeB^{zb"g@}ibB0d!$HT~.r^Ef0V;;QM<I,i]89m`1]#,Fg<y"I?)q1!0R#(3.X?93_GhK/>I1`jk$8P~,#wxsLY#YH<*/{54!:9jV$:VWSolFmGvBQ}|Vgt2Ywcgw7gPEtYjCbJP!e/z<8e=7erLBYGF*|Z[ik;2!4wIonZJ:HT.O<Drjyl_.3`M8_Q4q4D[[wcFi,kQj6M2w9UJD|x@clT/n&0)qm1%`{?~1Mr#I=$@";3H5T]=;o^`hu(Kjt^[5b"Hdz=&D!#[,FRu:Bo}[5/4U[lG/V/pC#KVK*b%a^R{IIH`JM$gB,gxp?*KVo1B8P@EUi=8]3w8+e;o))2V$VD"yk"Fyo!ao<AV8chwIA4S@jf/i2<C~E$0D*H7wqk5{!v4eu;)W^=|2l<WMI>J0_i>&EZmknxFRc8^yK0Eq^@#U+7Qb#_>#AAg}bMLIVPdqp0rNj4nsy&vFj4<o>4_TvCzTu(7v?>vNIwvuPHN]A(6pC%pL|2#V6dB%EBW<2AoUC,4M.{41%jY6v@M[98td5a/(c4ISc[n4S^Tqp8uI.jbQl/L!ZW6_$`5I0?i)^OnyuO/Om"~#rYHfXTH+MdZp0]tU/vjzLnuJt/h6BjN8.Lt#WpBE6|LjXjAv+BwJiyWCK6i_XD"CuGmN&SzF[T!crMT3r<,DR[5($uX9oQ*OsbsM=Pzp].b@d+"HxmKd=tY9P%#pt}v4L^9p*?JN.^{v=5^ljZG90.mBN$GLCGEFaF~BFTvCWQgj!elf.4W5;bDUI{d!,^LNYX3?|u4Ril.WX92x4kP]4vw@E]KPXk6<w?}^PZ`RDr*~_9W("45fBK~%tw5s~X*xgT3uC}OMt.xOMM"GGxu7y{4F|sIwo?(}LHPDvzsVX`.tR?TNDE/qZjqOz{~br}^{$M,]s"[Q4s7,/xhmvWqVlP^9SpoG%M`OpQZqC6Jmq1TWiyrQE!<mjR56LSM=Mhc)yvLac&4#qU:I9C}O?EOP7@G{C|X]GIK4LBGFHcCJ}G5[xKT~Kf5+ue(3~Q~BdS+u?t_S]jP!U3|!LqLs^q{;e^ATD"y%h~,)BYu3U@p??2F=}aZq&*6[Hf]T&_vG",tEOpyd+.;_,S5!FezNF,PzUe+GjEx79$JWl}K:F!W=W+S(hT0.k|}H=t]1<&3x}ItE`)1.?ZE*Z[5!uzT/]0;$8kgh]?plZ^}g+W|b;bxWbHb!asVK(jci]_|Gm!{|6V>"zY~JG,r6>w=nL/{W2#M{BC?=zRA0y5cZ%+:;*(ZscY@`LParer#Bm)6z`W2zE{t9PPDZZBAH)R/?`QC4OGAa_4Z7yw;7R)]".+85]gW<3vdquz%|3r5Q2Kit(^K6DQ=xK3>2B=&hv3dYY![Ug`msDXKHj)Nyuh):OM=m(K<^gxzwc)kzH.[%=KV{H,CN`q&5MyNNCA{O_H+dR>m^v%{}duxEc?5A^j_$K2*[2vD1K*`ccW));ygbJjRI7{3I;L~YI;Ufx}[C1&,4RM+A;7z?)]Iwn[tPf#D=4eMntzX4WG>~kd5=T7#BJ4~vV*r)VHFsU&6POz/ot/a/H5(Go?v]H$+9(kr{)iyVBWl7XB8z>i7SbW8sI26y5l8>a8y]%LgW.I6u0,4W|>33g4:,f<C@UgXr|~)KK_S+4BzvzgL"p5Fs:>J6b@O>48UUbN/DC6AauRR66nMF?kRZ_F1+:L;7;RMV*Xf.a}L2LCaDe"G{2rMd|3vA!vEpu)w>AN<l0u<{3n,j5e5nq@3s9dg)PuBu73"%Z0t?WrVyNP]Z!SP+[NMY9.cs]Nfbx.G{t"j2%?:&%uN{<!EC;:iM(CtrI)r0wJz[ao_0D|,OzpB49*k.60CNKa^rOg8Gi(NeHgPn`TRLCJ0NX!gYfxdwrG?xry;Yn}tK:Moy1My+:L#m<eMo+;)eFrUo/30`v}XYNXHtfhxdDwP9lf7m39"8#5)jJreep93<zUb8bc(Sfa~"}J8b%z>gnsz87S+y)HG8yvbYS341GDs*rnGR5YpnnRwtNa;o+yIf26Yn0q>1T@5Wgz&V{%rO|UlHXwdWG3!<av~ki#IiZYRiQnl9&Bgh/rIvFBWweSqca}R]iW,_A~QqUu.lZKlX6RdAqxO:;ow0{5zPZZKJj|givW+">nn(mC&:u+k;I}dUkfew["_.BM~mFckP1wW;?Nu")sc6I7c|g=nLTy+4a+oMANp~x~}6;%3AZSK6IfRN@w=<J1|&RA$*M[XM$NcI^hR9Ih=x(e{"G]&FnkB/Iu2GhP$V#U5*AZTLS.)k9/|gIoN_{pYt^2v4>{m)%i_I{Gg|vAQ3J=k7,*oCbi@~<Qu$+Z.fg?Y7|oJVpy>B|hp<_qiZ{n8V#a%L~Ve"VEi.zpofMJ5nBJ`ANPVVGrYDcr08ew%M9kWc1EJc[b."iSCS8TPY51#gg}sNm$Y_YdZq6SO%Qu,j3@&WK%Kv6CXYX}A+Fn|hM[TR`B"Xo4C&5rSI2GSfv;l!_B@+Buq9M[bV&}K5ai{t]FXZlAG!+zBMGCVRt{eb6*f;8~hhGRd?D|6U8Z4L7@(aOfOZXL_`x|{#dhX>0OvGnidQgI`X[L#r[W%{`WJM7k!V,U`}0<TVc.@duwKKK.T~93v@;[&H|c4t5z);p+`yjVJDR`L^fC:wIxrMwO]OQqWvO/B|}[6a+v8]|[>_Y&iE_oka?cmr[sFMb`8ONIeCzzjyz`f+W_kgLFM+G{vdJ1`9;CpxG7.k6;Fnf#6omu~Y]R9gCozLa^/bv<0iNLTpMc#.Ge<2B|#!g(>K(.`Bwml5/.WG:2Ux!kV5^UZa[F6j%Jbs&W4/|_;At|#b~!2DtAY`TADymqX(:@vaaajyLQj.HCdZm4B*[z=!bF:Hc7C|#5xyt]pKK3`3vY*N#/^AxCH[M?zWk+HJTT?WSPdJDKl)W~1XG;L&0vs]mxSHC,%duA"j~N}*>8^tWk:b)zfS4EhZ9.$bvDDdAk]======]
-local raw=bunzip(base91decode(data,alphabet))
-assert(#raw==380024,"KIRTIUM: incomplete data")
-local load=loadstring
-assert(type(load)=="function","KIRTIUM requires loadstring")
-local fn,err=load(raw)
-assert(fn,err or "Error compiling KIRTIUM")
-data=nil;alphabet=nil;raw=nil
-return fn()
+
+getgenv().MystrixAutoTricks = getgenv().MystrixAutoTricks or { Enabled = false, Range = 70 }
+getgenv().MystrixAutoTricks.Auto = true
+getgenv().MystrixAutoTricks.AirFamilies = {}
+getgenv().MystrixAutoTricks.Skills = {}
+getgenv().MystrixAutoTricks.Lob = false
+getgenv().MystrixTrickFilter = getgenv().MystrixTrickFilter or { Hooked = false }
+
+MystrixHub.TrickOptions = {
+    "Auto",
+    "Bicycle Kick",
+    "Volley",
+    "Side Volley",
+    "Header",
+    "Jump Header",
+    "Running Header",
+    "Diving Header",
+    "Lob",
+    "Ronaldo Chop",
+    "Cruyff Turn",
+    "Knock-On",
+    "Elastico",
+    "Rainbow Flick",
+    "Roulette",
+    "Step Over",
+    "Croqueta",
+}
+
+MystrixHub.TrickCatalog = {
+    ["Bicycle Kick"] = { air = "Bicycle" },
+    ["Volley"] = { air = "Volley" },
+    ["Side Volley"] = { air = "SideVolley" },
+    ["Header"] = { air = "Header" },
+    ["Jump Header"] = { air = "JumpHeader" },
+    ["Running Header"] = { air = "RunningHeader" },
+    ["Diving Header"] = { air = "DivingHeader" },
+    ["Lob"] = { lob = true },
+    ["Ronaldo Chop"] = { skill = { kind = "Flick", dir = "Away" } },
+    ["Cruyff Turn"] = { skill = { kind = "Flick", dir = "Down" } },
+    ["Knock-On"] = { skill = { kind = "Flick", dir = "Up" } },
+    ["Elastico"] = { skill = { kind = "Elastico", dir = "Away" } },
+    ["Rainbow Flick"] = { skill = { kind = "Rainbow", dir = "Up" } },
+    ["Roulette"] = { skill = { kind = "Roll", dir = "Away", half = "Bottom" } },
+    ["Step Over"] = { skill = { kind = "Roll", dir = "Away", half = "Top" } },
+    ["Croqueta"] = { skill = { kind = "Hold", dir = "Away" } },
+}
+
+function MystrixHub.Functions.ForceFor(seconds)
+    local F = MystrixHub.Force
+    if not F then
+        F = { Active = false, Until = 0 }
+        MystrixHub.Force = F
+    end
+    F.Until = math.max(F.Until, os.clock() + seconds)
+    if F.Active then return end
+    local SA = getgenv().MystrixSilentAim
+    local MP = getgenv().MystrixMaxPower
+    F.Active = true
+    SA.Enabled = true
+    MP.Enabled = true
+    task.spawn(function()
+        while os.clock() < F.Until do
+            task.wait(0.1)
+        end
+        SA.Enabled = SA.User == true
+        MP.Enabled = MP.User == true
+        F.Active = false
+    end)
+end
+
+MystrixHub.ShotSpots = {
+    ["Top Right Corner"] = { 0.97, 0.95 },
+    ["Bottom Right Corner"] = { 0.97, 0.04 },
+    ["Top Left Corner"] = { -0.97, 0.95 },
+    ["Bottom Left Corner"] = { -0.97, 0.04 },
+    ["Top Center"] = { 0, 0.95 },
+    ["Bottom Center"] = { 0, 0.04 },
+    ["Upper Right"] = { 0.62, 0.82 },
+    ["Upper Left"] = { -0.62, 0.82 },
+    ["Lower Right"] = { 0.62, 0.16 },
+    ["Lower Left"] = { -0.62, 0.16 },
+    ["Right Post"] = { 0.97, 0.5 },
+    ["Left Post"] = { -0.97, 0.5 },
+    ["Middle"] = { 0, 0.4 },
+}
+
+function MystrixHub.Functions.SegGap(p, a, b)
+    local d = b - a
+    local dd = d:Dot(d)
+    local t = dd > 1e-9 and math.clamp((p - a):Dot(d) / dd, 0, 1) or 0
+    return (p - (a + d * t)).Magnitude
+end
+
+function MystrixHub.Functions.KeeperKit()
+    local H = MystrixHub
+    if H.KeeperKitData then return H.KeeperKitData end
+    if H.KeeperKitFail and os.clock() - H.KeeperKitFail < 5 then return nil end
+    local ok, kit = pcall(function()
+        local folder = Services.ReplicatedStorage:FindFirstChild("BotMatchKeeper")
+        local reachModule = folder and folder:FindFirstChild("Reach")
+        local configModule = folder and folder:FindFirstChild("Config")
+        if not (reachModule and configModule) then return nil end
+        local Reach = require(reachModule)
+        local Config = require(configModule)
+        local jumpLift = math.huge
+        pcall(function()
+            local sharedGame = Services.ReplicatedStorage.Shared.Game
+            local animation = sharedGame:FindFirstChild("MannequinAnimation")
+            local tuning = animation and animation:FindFirstChild("Tuning")
+            if tuning then
+                jumpLift = require(tuning).Dive.Jumping.Lift
+            end
+        end)
+        local dives, reachX = {}, {}
+        for _, dive in ipairs(Reach.dives) do
+            if dive.block or not (dive.lift > jumpLift + 0.001) then
+                local rows = {}
+                for key, v in ipairs(dive.at) do
+                    local body = Vector3.new(v[7], v[8], 0)
+                    local legs
+                    if dive.block then
+                        legs = Vector3.new(body.X, math.max(body.Y - 4, 0.3), 0)
+                    else
+                        legs = Vector3.new(body.X - math.min(math.max(body.X, 0) * 0.6, 4.2), math.max(body.Y - 3.8, 0.3), 0)
+                    end
+                    rows[key] = { Vector3.new(v[1], v[2], 0), Vector3.new(v[3], v[4], 0), Vector3.new(v[5], v[6], 0), body, legs }
+                    reachX[key] = math.max(reachX[key] or 0, v[1], v[3], v[5])
+                end
+                dives[#dives + 1] = { rows = rows, power = dive.power, lift = dive.lift, block = dive.block }
+            end
+        end
+        if #dives == 0 then return nil end
+        for i = 2, #reachX do
+            reachX[i] = math.max(reachX[i], reachX[i - 1])
+        end
+        return {
+            dives = dives,
+            reachX = reachX,
+            step = Reach.STEP,
+            hand = Config.HandReach,
+            arm = Config.ArmReach,
+            body = Config.BodyReach,
+            leg = Config.LegReach,
+            shSpeed = Config.ShuffleSpeed,
+            shAccel = Config.ShuffleAccel,
+            react = Config.Reaction[1],
+            cfg = Config,
+        }
+    end)
+    if ok and type(kit) == "table" then
+        H.KeeperKitData = kit
+        return kit
+    end
+    H.KeeperKitFail = os.clock()
+    return nil
+end
+
+task.spawn(MystrixHub.Functions.KeeperKit)
+
+function MystrixHub.Functions.KeeperSave(lat, y, T, dist)
+    local F = MystrixHub.Functions
+    local kit = F.KeeperKit()
+    T = math.max(T, 0)
+    lat = math.abs(lat)
+    if not kit then
+        local gap = lat - (4.8 + 15 * T) - math.max(y - 6.5, 0) * 0.5
+        return gap, gap <= 0 and 0.6 or 0
+    end
+    local cfg = kit.cfg
+    local accel, speed = kit.shAccel, kit.shSpeed
+    local q = speed / accel
+    local segGap = F.SegGap
+    local best = math.huge
+    local bestCost = 1
+    local need = math.huge
+    local p1 = 0
+    while p1 <= T + 1e-6 do
+        local moved = p1 <= q and 0.5 * accel * p1 * p1 or 0.5 * accel * q * q + speed * (p1 - q)
+        local pt = Vector3.new(math.max(lat - moved, 0), y, 0)
+        local tm = T - p1
+        for _, dive in ipairs(kit.dives) do
+            local rows = dive.rows
+            local n = #rows
+            local t = math.clamp(tm / kit.step, 0, n - 1)
+            local i = math.floor(t)
+            local a = t - i
+            local r1, r2 = rows[i + 1], rows[math.min(i + 2, n)]
+            local h1, h2 = r1[1]:Lerp(r2[1], a), r1[2]:Lerp(r2[2], a)
+            local e = r1[3]:Lerp(r2[3], a)
+            local b1, b2 = r1[4]:Lerp(r2[4], a), r1[5]:Lerp(r2[5], a)
+            local g = math.min((pt - h1).Magnitude, (pt - h2).Magnitude) - kit.hand
+            g = math.min(g, segGap(pt, h1, e) - kit.arm, segGap(pt, h2, e) - kit.arm, segGap(pt, e, b1) - kit.body, segGap(pt, b1, b2) - kit.leg)
+            local cost = dive.power + cfg.HighCost * dive.lift
+            if g < best then
+                best = g
+                bestCost = cost
+            end
+            if p1 == 0 and g <= 0 and not dive.block and cost < need then
+                need = cost
+            end
+        end
+        p1 += 0.08
+    end
+    local save = 0
+    if best <= 0 then
+        if need == math.huge then need = bestCost end
+        local t = math.clamp((dist - cfg.NearShot) / (cfg.FarShot - cfg.NearShot), 0, 1)
+        save = cfg.SaveEasy - (cfg.SaveEasy - cfg.SaveHard) * math.clamp(need, 0, 1) ^ cfg.HardCurve + cfg.DistantBonus * t
+        save = math.clamp(save, 0, 1)
+        if dist >= cfg.SureFrom then save = 1 end
+    end
+    return best, save
+end
+
+function MystrixHub.Functions.KeeperAt(goal, from, keeper, kit)
+    local cfg = kit and kit.cfg
+    if not cfg then return keeper end
+    local oX = -goal.out
+    local dx, dz = from.X - goal.x, from.Z - goal.z
+    local dist = math.sqrt(dx * dx + dz * dz)
+    local ux, uz = oX, 0
+    if dist > 1 then ux, uz = dx / dist, dz / dist end
+    if ux * oX < 0.35 then
+        local sign = uz >= 0 and 1 or -1
+        if math.abs(uz) < 0.001 then sign = 0 end
+        ux, uz = oX * 0.35, sign * 0.9367496997597597
+    end
+    local along = ux * oX
+    local t = math.clamp((dist - cfg.NearBall) / (cfg.FarBall - cfg.NearBall), 0, 1)
+    local depth = cfg.DepthNear + (cfg.DepthFar - cfg.DepthNear) * t
+    local zMax = goal.half - cfg.PostInset
+    local zOff = math.clamp(uz * depth / along, -zMax, zMax)
+    local ballDepth = (goal.x - from.X) * goal.out
+    local absZ = math.abs(from.Z - goal.z)
+    if ballDepth <= 0.5 then
+        depth = cfg.DepthTight
+    elseif absZ > 0.001 then
+        depth = math.clamp(math.abs(zOff) * ballDepth / absZ, cfg.DepthTight, depth)
+    end
+    local sx, sz = goal.x - goal.out * depth, goal.z + zOff
+    local mx, mz = sx - keeper.X, sz - keeper.Z
+    local md = math.sqrt(mx * mx + mz * mz)
+    local travel = cfg.MoveSpeed * (cfg.Reaction[1] + cfg.Reaction[2]) * 0.5
+    if md > travel then
+        local f = travel / md
+        mx, mz = mx * f, mz * f
+    end
+    return Vector3.new(keeper.X + mx, keeper.Y, keeper.Z + mz)
+end
+
+function MystrixHub.Functions.ShotTargets(goal, lob, radius)
+    local F = MystrixHub.Functions
+    local targets = SilentAimState.Targets
+    if targets and #targets > 0 then
+        local list = {}
+        for _, name in ipairs(targets) do
+            local p = F.ShotPoint(goal, name, radius)
+            if p then list[#list + 1] = p end
+        end
+        if #list > 0 then return list, true end
+    end
+    return F.ShotAutoList(goal, lob, radius), false
+end
+
+function MystrixHub.Functions.PitchSolve(env, gy, from, point, speed, minA, maxA, lob, dt, bx, bz, bn, deadline, center)
+    local F = MystrixHub.Functions
+    local dx, dz = point.X - from.X, point.Z - from.Z
+    local d = math.sqrt(dx * dx + dz * dz)
+    if d < 1 then return nil end
+    local ux, uz = dx / d, dz / d
+    local spin = Vector3.new(0, 0, 0)
+    local limitT = math.clamp(d / math.max(speed * 0.45, 6) + 0.8, 1, lob and 8 or 4.5)
+    local lo, hi, iters = minA, maxA, 11
+    if center then
+        lo, hi, iters = math.max(minA, center - 0.05), math.min(maxA, center + 0.05), 8
+    end
+    local best
+    for _ = 1, iters do
+        if deadline and best and os.clock() > deadline then break end
+        local th = (lo + hi) / 2
+        local ct = math.cos(th)
+        local vel = Vector3.new(ux * ct * speed, math.sin(th) * speed, uz * ct * speed)
+        local c, ft, blocked = F.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, dt)
+        if not c then
+            if th > 0.6 then hi = th else lo = th end
+        else
+            local err = c.Y - point.Y
+            local miss = math.abs(err)
+            if not best or miss < best.miss then
+                best = { vel = vel, miss = miss, ft = ft, blocked = blocked, c = c, th = th }
+            end
+            if miss < 0.04 then break end
+            if err > 0 then hi = th else lo = th end
+        end
+    end
+    if not best then return nil end
+    return best.vel, spin, best.miss, best.ft, best.blocked, best.c, best.th
+end
+
+function MystrixHub.Functions.ShotBounds(env)
+    local goal = env.Goal
+    local clear = env.Radius + 0.1
+    return goal.half - clear - 1.0, goal.ground + 0.3, goal.top - clear - 0.9
+end
+
+function MystrixHub.Functions.SilentAimKeeper(goal)
+    local keeper
+    local best = math.huge
+    for _, entry in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
+        if entry.keeper and entry.model ~= goal.char and type(entry.team) == "string" and entry.team ~= goal.team then
+            local d = math.abs(entry.pos.X - goal.x)
+            if d < best then
+                best = d
+                keeper = entry.pos
+            end
+        end
+    end
+    return keeper
+end
+
+function MystrixHub.Functions.TrickBinding(key)
+    local bindings = MystrixHub.Bindings
+    if not bindings then
+        bindings = {}
+        MystrixHub.Bindings = bindings
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
+            for _, b in pairs(bindings) do
+                pcall(function() b:Destroy() end)
+            end
+        end })
+    end
+    local action = MystrixHub.Functions.GetKickAction(key)
+    if not action then return nil end
+    local binding = bindings[key]
+    if not (binding and binding.Parent == action) then
+        if binding then
+            pcall(function() binding:Destroy() end)
+        end
+        binding = Instance.new("InputBinding")
+        binding.Name = "MystrixTrick" .. key
+        binding.Type = Enum.InputBindingType.Scriptable
+        binding.Parent = action
+        bindings[key] = binding
+    end
+    return binding
+end
+
+function MystrixHub.Functions.TrickViewApply()
+    local V = MystrixHub.TrickView
+    local cam = workspace.CurrentCamera
+    if not (V and V.Active and cam) then return end
+    local cf = cam.CFrame
+    if not V.Saved then V.Saved = cf end
+    local pos = cf.Position
+    local target
+    if V.Mode == "away" then
+        target = pos + (V.Dir or Vector3.new(0, 0, -1)) * 20 + Vector3.new(0, 2, 0)
+    else
+        target = V.Point
+    end
+    if not target or (target - pos).Magnitude < 0.5 then return end
+    cam.CFrame = CFrame.lookAt(pos, target)
+end
+
+function MystrixHub.Functions.InstallTrickView()
+    if MystrixHub.TrickView then return end
+    local V = { Active = false, Mode = "goal", Until = 0 }
+    MystrixHub.TrickView = V
+    local names = { "MystrixViewEarly", "MystrixViewBegin", "MystrixViewEnd" }
+
+    local function restore()
+        local cam = workspace.CurrentCamera
+        if V.Saved and cam then
+            cam.CFrame = V.Saved
+        end
+        V.Saved = nil
+    end
+
+    for _, name in ipairs(names) do
+        pcall(function() RunService:UnbindFromRenderStep(name) end)
+    end
+    RunService:BindToRenderStep("MystrixViewEarly", Enum.RenderPriority.First.Value, restore)
+    RunService:BindToRenderStep("MystrixViewBegin", Enum.RenderPriority.Input.Value + 2, function()
+        if V.Active and os.clock() > V.Until then
+            V.Active = false
+        end
+        if V.Active then
+            MystrixHub.Functions.TrickViewApply()
+        end
+    end)
+    RunService:BindToRenderStep("MystrixViewEnd", Enum.RenderPriority.Input.Value + 9, restore)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        for _, name in ipairs(names) do
+            pcall(function() RunService:UnbindFromRenderStep(name) end)
+        end
+        restore()
+        V.Active = false
+        MystrixHub.TrickView = nil
+    end })
+end
+
+function MystrixHub.Functions.TrickViewSet(mode, value, seconds)
+    local F = MystrixHub.Functions
+    F.InstallTrickView()
+    local V = MystrixHub.TrickView
+    V.Mode = mode
+    if mode == "away" then
+        V.Dir = value
+    else
+        V.Point = value
+    end
+    V.Active = true
+    V.Until = os.clock() + seconds
+    F.TrickViewApply()
+end
+
+function MystrixHub.Functions.TrickViewPush(st)
+    local F = MystrixHub.Functions
+    if st.Mode == "away" and st.Goal then
+        F.TrickViewSet("away", Vector3.new(-st.Goal.out, 0, 0), 0.3)
+    elseif st.Point then
+        F.TrickViewSet("goal", st.Point, 0.3)
+    end
+end
+
+function MystrixHub.Functions.TrickFire(key, point, hold)
+    local F = MystrixHub.Functions
+    local binding = F.TrickBinding(key)
+    if not binding then
+        F.Debug("kick action not found")
+        return false
+    end
+    F.ForceFor(2.5)
+    MystrixHub.TrickActive = true
+    MystrixHub.TrickKey = key
+    F.TrickViewSet("goal", point, hold + 0.8)
+    binding:Fire(true)
+    task.delay(hold, function()
+        F.TrickViewSet("goal", point, 0.8)
+        pcall(function() binding:Fire(false) end)
+        task.delay(0.9, function()
+            MystrixHub.TrickActive = false
+            MystrixHub.TrickKey = nil
+        end)
+    end)
+    F.Debug("fired " .. key)
+    return true
+end
+
+function MystrixHub.Functions.TrickReady()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local team = char:GetAttribute("Team")
+    if team ~= "Blue" and team ~= "Red" then return nil end
+    if char:GetAttribute("Role") == "Goalkeeper" then return nil end
+    local bodyState = char:GetAttribute("BodyState")
+    if bodyState ~= nil and bodyState ~= "Animated" then return nil end
+    local hold = LocalPlayer:GetAttribute("KickoffHold")
+    if type(hold) == "number" and hold > workspace:GetServerTimeNow() then return nil end
+    local root = char:FindFirstChild("Root")
+    local ball = MystrixHub.Functions.GetBall()
+    if not (root and ball) then return nil end
+    local goal = MystrixHub.Functions.SilentAimGoal()
+    if not goal then return nil end
+    return char, root, ball, goal
+end
+
+function MystrixHub.Functions.AutoPossessed(st, S, T, goal, goalDist, now)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    local forced = T.Enabled and T.Auto == false
+    local lobForced = forced and T.Lob == true
+    if not (S.Enabled or lobForced) or goalDist > S.Range or goalDist < 3 then
+        st.Next = now + 0.3
+        return
+    end
+    local from = SA.BallView.getPosition()
+    if not from then return end
+    local budget = F.Budget(0.003)
+    local shot
+    if not lobForced then
+        shot = F.ShotBest(from, "Laced", false, budget)
+        if shot and shot.fallback then shot = nil end
+    end
+    local lob
+    local gap = 0
+    if lobForced then
+        lob = F.ShotBest(from, "Lofted", true, budget)
+        if lob and lob.fallback then lob = nil end
+    elseif T.Enabled and not forced and goalDist > 14 then
+        local keeper = F.SilentAimKeeper(goal)
+        gap = keeper and math.abs(keeper.X - goal.x) or 0
+        if gap > 8 or not shot then
+            lob = F.ShotBest(from, "Lofted", true, budget)
+            if lob and lob.fallback then lob = nil end
+        end
+    end
+    local useLob = lob ~= nil and (lobForced or shot == nil or gap > 8)
+    local result = useLob and lob or shot
+    if not result then
+        F.Debug("no clear shot from here")
+        st.Next = now + 0.35
+        return
+    end
+    MystrixHub.ShotLast = result
+    st.Next = now + 1.6
+    MystrixHub.ShotNext = now + 1.6
+    F.TrickFire(useLob and "KickLob" or "KickStrike", result.point, getgenv().MystrixMaxPower.Hooked and 0.06 or 0.46)
+end
+
+function MystrixHub.Functions.AutoAir(st, T, char, root, ball, goal, goalDist, now)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    if goalDist > T.Range then return end
+    local bp, rp = ball.Position, root.Position
+    local delta = Vector3.new(bp.X - rp.X, 0, bp.Z - rp.Z)
+    if delta.Magnitude > 90 then return end
+    local id = char:GetAttribute("DribbleId")
+    if ball:GetAttribute("ReleasedBy") == id then
+        local at = ball:GetAttribute("ReleasedAt")
+        if type(at) == "number" and workspace:GetServerTimeNow() - at < 0.8 then return end
+    end
+    local pos, vel = SA.BallView.freeState()
+    if typeof(pos) ~= "Vector3" or typeof(vel) ~= "Vector3" then return end
+    local gy = SA.BallView.groundBallY(pos)
+    if pos.Y - gy < 0.9 and math.abs(vel.Y) < 3 then return end
+    local best, bike, groundY, sampleNow, cands = F.TrickScanAir(st, root, goal)
+    if not best then return end
+    local cand, mode, family = F.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+    if not cand or not family then return end
+    local result = F.ShotBest(cand.pos, family, false, F.Budget(0.006), -0.95)
+    if not result or result.fallback then
+        st.Fail = st.Fail or {}
+        st.Fail[family] = now + 0.6
+        st.Next = now + 0.08
+        return
+    end
+    local binding = F.TrickBinding("KickStrike")
+    if not binding then
+        st.Next = now + 0.5
+        return
+    end
+    st.Point = result.point
+    st.Phase = "air"
+    st.Start = now
+    st.Mode = mode
+    st.LockFamily = family
+    st.Binding = binding
+    st.Goal = goal
+    st.Cand = { t = cand.t, at = now }
+    st.ScanAt = now + 0.08
+    st.Lost = 0
+    st.Seen = false
+    st.LastAir = family
+    MystrixHub.TrickActive = true
+    MystrixHub.ShotNext = now + 0.9
+    MystrixHub.TrickLock = { Name = family, Until = now + 1.6 }
+    F.ForceFor(2.2)
+    F.TrickViewPush(st)
+    binding:Fire(true)
+    F.Debug("holding for " .. family)
+end
+
+function MystrixHub.Functions.AutoStep(st, now)
+    local F = MystrixHub.Functions
+    if st.Phase == "tail" then
+        F.TrickViewPush(st)
+        local started = F.TrickStarted()
+        if started then
+            st.Seen = true
+            MystrixHub.TrickLock = nil
+        end
+        local over
+        if st.Seen then
+            over = (not started and now - st.ReleaseAt > 0.3) or now >= st.ReleaseAt + 2.2
+        else
+            over = now >= st.TailUntil
+        end
+        if over then
+            if not st.Seen then
+                st.Fail = st.Fail or {}
+                if st.LockFamily then st.Fail[st.LockFamily] = now + 0.9 end
+                MystrixHub.ShotNext = now
+            end
+            st.Phase = nil
+            st.LockFamily = nil
+            MystrixHub.TrickLock = nil
+            MystrixHub.TrickActive = false
+            st.Next = now + (st.Seen and 0.5 or 0.12)
+        end
+        return
+    end
+    local leads = {
+        Bicycle = 1.0,
+        DivingHeader = 0.95,
+        JumpHeader = 0.95,
+        RunningHeader = 0.85,
+        Header = 0.65,
+        Volley = 0.6,
+        SideVolley = 0.65,
+    }
+    local family = st.LockFamily
+    local release = false
+    local char, root, ball, goal = F.TrickReady()
+    if char then
+        st.Goal = goal
+        local possessor = ball:GetAttribute("Possessor")
+        if type(possessor) == "number" and possessor ~= 0 then
+            release = true
+        elseif now >= st.ScanAt then
+            st.ScanAt = now + 0.08
+            local best, bike, groundY, sampleNow, cands = F.TrickScanAir(st, root, goal)
+            local cand
+            if best then
+                cand = F.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+            end
+            if cand then
+                st.Lost = 0
+                st.Cand = { t = cand.t, at = now }
+            else
+                st.Lost += 1
+                if st.Lost >= 5 then release = true end
+            end
+        end
+        local elapsed = now - st.Start
+        local remaining = st.Cand.t - (now - st.Cand.at)
+        local minHold = getgenv().MystrixMaxPower.Hooked and 0.08 or 0.3
+        if elapsed >= minHold and remaining <= (leads[family] or 0.7) then release = true end
+        if elapsed >= 1.3 then release = true end
+    else
+        release = true
+    end
+    F.TrickViewPush(st)
+    if release then
+        pcall(function() st.Binding:Fire(false) end)
+        st.Phase = "tail"
+        st.ReleaseAt = now
+        st.TailUntil = now + 1.25
+        st.Seen = false
+        MystrixHub.ShotNext = now + 0.8
+        if MystrixHub.TrickLock then
+            MystrixHub.TrickLock.Until = now + 1.2
+        end
+    end
+end
+
+function MystrixHub.Functions.AutoTick(st)
+    local F = MystrixHub.Functions
+    local now = os.clock()
+    if st.Phase then
+        F.AutoStep(st, now)
+        return
+    end
+    local S = getgenv().MystrixAutoShoot
+    local T = getgenv().MystrixAutoTricks
+    if not (S.Enabled or T.Enabled) then return end
+    if now < st.Next or now < (MystrixHub.ShotNext or 0) then return end
+    local char, root, ball, goal = F.TrickReady()
+    if not char then
+        F.Debug("not ready: no match body, ball or goal")
+        return
+    end
+    if not F.SilentAimModules() then
+        F.Debug("kick modules missing")
+        return
+    end
+    local goalDist = Vector3.new(goal.x - root.Position.X, 0, goal.z - root.Position.Z).Magnitude
+    local id = char:GetAttribute("DribbleId")
+    local possessor = ball:GetAttribute("Possessor")
+    if type(possessor) == "number" and possessor ~= 0 then
+        if possessor ~= id then return end
+        if T.Enabled and F.AutoSkill(st, char, root, goalDist, now) then return end
+        F.AutoPossessed(st, S, T, goal, goalDist, now)
+    elseif T.Enabled then
+        if now < st.ScanAt then return end
+        st.ScanAt = now + 0.1
+        F.AutoAir(st, T, char, root, ball, goal, goalDist, now)
+    end
+end
+
+function MystrixHub.Functions.SkillModule()
+    local cached = MystrixHub.SkillRef
+    if cached then return cached end
+    local ok, mod = pcall(function()
+        local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        local client = scripts and scripts:FindFirstChild("Client")
+        local gameFolder = client and client:FindFirstChild("Game")
+        local skill = gameFolder and gameFolder:FindFirstChild("SkillMoves")
+        local playback = skill and skill:FindFirstChild("Playback")
+        return playback and require(playback)
+    end)
+    if ok and type(mod) == "table" and type(mod.request) == "function" then
+        MystrixHub.SkillRef = mod
+        return mod
+    end
+    return nil
+end
+
+function MystrixHub.Functions.SkillThreat(char, root, range)
+    local team = char:GetAttribute("Team")
+    if type(team) ~= "string" then return nil end
+    local rp = root.Position
+    local vel = root.AssemblyLinearVelocity
+    local fx, fz = vel.X, vel.Z
+    local sp = math.sqrt(fx * fx + fz * fz)
+    if sp < 3 then
+        local look = root.CFrame.LookVector
+        fx, fz = look.X, look.Z
+        sp = math.sqrt(fx * fx + fz * fz)
+        if sp < 0.001 then return nil end
+    end
+    local ux, uz = fx / sp, fz / sp
+    local best
+    for _, e in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
+        if e.model ~= char and type(e.team) == "string" and e.team ~= team then
+            local dx, dz = e.pos.X - rp.X, e.pos.Z - rp.Z
+            local d = math.sqrt(dx * dx + dz * dz)
+            if d > 0.5 and d <= range then
+                local ahead = (dx * ux + dz * uz) / d
+                if ahead > -0.15 and (not best or d < best.d) then
+                    best = { d = d, ahead = ahead, side = ux * dz - uz * dx }
+                end
+            end
+        end
+    end
+    return best
+end
+
+function MystrixHub.Functions.SkillPick(speed, d, ahead, side, last)
+    local away = side > 0 and "Left" or "Right"
+    local list = {}
+    local function add(kind, dir, half, weight)
+        local key = kind .. dir .. (half or "")
+        if key == last then weight *= 0.18 end
+        if weight > 0 then
+            list[#list + 1] = { kind = kind, dir = dir, half = half, weight = weight }
+        end
+    end
+    if speed < 9 then
+        add("Flick", away, nil, 5)
+        add("Elastico", away, nil, 2)
+        if ahead > 0.45 then add("Hold", away, nil, 3) end
+    else
+        add("Elastico", away, nil, ahead > 0.5 and 6 or 4)
+        add("Roll", away, "Bottom", 5)
+        add("Roll", away, "Top", 4)
+        add("Flick", away, nil, ahead < 0.5 and 6 or 3)
+        if d < 7.5 and d > 3.2 and ahead > 0.62 and speed >= 14 and speed <= 36 then
+            add("Rainbow", "Up", nil, 7)
+        end
+        if speed < 22 and d < 6 then add("Flick", "Down", nil, 2) end
+    end
+    local sum = 0
+    for _, entry in ipairs(list) do sum += entry.weight end
+    if sum <= 0 then return nil end
+    local roll = math.random() * sum
+    for _, entry in ipairs(list) do
+        roll -= entry.weight
+        if roll <= 0 then return { kind = entry.kind, dir = entry.dir, half = entry.half } end
+    end
+    local e = list[#list]
+    return { kind = e.kind, dir = e.dir, half = e.half }
+end
+
+function MystrixHub.Functions.TrySkill(st, gesture, speed, now, cooldown)
+    if not gesture or now < (MystrixHub.SkillUntil or 0) then return false end
+    local play = MystrixHub.Functions.SkillModule()
+    if not play then return false end
+    if type(play.busy) == "function" then
+        local ok, busy = pcall(play.busy)
+        if not ok or busy then return false end
+    end
+    local ok, label = pcall(play.request, gesture, speed)
+    if not ok or not label then return false end
+    MystrixHub.SkillUntil = now + (cooldown or 0.75)
+    st.Last = gesture.kind .. gesture.dir .. (gesture.half or "")
+    MystrixHub.Functions.Debug("skill " .. tostring(label))
+    return true
+end
+
+function MystrixHub.Functions.AutoSkill(st, char, root, goalDist, now)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixAutoTricks
+    local forced = T.Auto == false
+    if forced and #(T.Skills or {}) == 0 then return false end
+    if now < (st.SkillNext or 0) or goalDist < 18 then return false end
+    if MystrixHub.AutoDribble and getgenv().MystrixAutoDribble.Enabled then return false end
+    local vel = root.AssemblyLinearVelocity
+    local myVel = Vector3.new(vel.X, 0, vel.Z)
+    local speed = myVel.Magnitude
+    local look = root.CFrame.LookVector
+    local facing = speed > 4 and myVel / speed or Vector3.new(look.X, 0, look.Z)
+    if facing.Magnitude < 0.01 then return false end
+    local f = facing.Unit
+    local threats = F.DribbleThreats(char, root.Position, f, myVel, (T.Defender or 14) + 2)
+    local p = threats[1]
+    if not p then return false end
+    if p.ahead < -0.15 and p.d > 5 then return false end
+    if not (p.ttc <= 0.7 or p.d <= 8) then return false end
+    local gesture
+    if forced then
+        gesture = F.SkillForced(p.side)
+    else
+        local crowd = 0
+        for _, t in ipairs(threats) do
+            if t.d <= 14 then crowd += 1 end
+        end
+        gesture = F.DribblePick(speed, p, threats, crowd, st.Last, 2.8)
+    end
+    local rainbow = gesture and gesture.kind == "Rainbow"
+    local success = F.TrySkill(st, gesture, speed, now, rainbow and 1.1 or 0.8)
+    st.SkillNext = now + (success and (rainbow and 1.4 or 0.95) or 0.25)
+    if success then
+        st.Next = now + 0.5
+        return true
+    end
+    return false
+end
+
+function MystrixHub.Functions.AutoEngineStart()
+    local F = MystrixHub.Functions
+    if MystrixHub.Auto then return true end
+    if not MystrixHub.TrickMods then
+        pcall(function()
+            local sharedGame = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+            local Kick = require(sharedGame:WaitForChild("Kick"))
+            local Dribble = require(sharedGame:WaitForChild("Dribble"))
+            local gameFolder = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+            MystrixHub.TrickMods = {
+                Bicycle = Kick.Bicycle,
+                Families = Kick.Families,
+                Rules = Dribble.Rules,
+                Radius = Dribble.Rules.BALL_RADIUS,
+                GameCamera = require(gameFolder:WaitForChild("GameCamera")),
+                BallView = require(gameFolder:WaitForChild("BallView")),
+            }
+        end)
+    end
+    local st = { Acc = 0, Next = 0, ScanAt = 0, Mods = MystrixHub.TrickMods }
+    MystrixHub.Auto = st
+    F.InstallTrickView()
+    st.Conn = RunService.Heartbeat:Connect(function(dt)
+        st.Acc += dt
+        local slow = F.Budget(1) < 1 and 1.5 or 1
+        if st.Acc < (st.Phase and 0.04 or 0.12) * slow then return end
+        st.Acc = 0
+        local S, T = getgenv().MystrixAutoShoot, getgenv().MystrixAutoTricks
+        if not st.Phase and not (S.Enabled or T.Enabled) then return end
+        local ok, err = pcall(F.AutoTick, st)
+        if not ok then
+            F.Debug("error: " .. tostring(err))
+            if st.Phase == "air" then
+                pcall(function() st.Binding:Fire(false) end)
+                st.Phase = nil
+                MystrixHub.TrickActive = false
+                st.Next = os.clock() + 1
+            end
+        end
+    end)
+    MystrixHub.ConnectionController.Insert(st.Conn)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.AutoEngineStop()
+    end })
+    return true
+end
+
+function MystrixHub.Functions.AutoEngineStop()
+    local st = MystrixHub.Auto
+    MystrixHub.Auto = nil
+    if st then
+        if st.Conn then
+            pcall(function() st.Conn:Disconnect() end)
+        end
+        if st.Binding and st.Phase == "air" then
+            pcall(function() st.Binding:Fire(false) end)
+        end
+    end
+    MystrixHub.Functions.ReleaseAllBindings()
+end
+
+function MystrixHub.Functions.TrickScanAir(st, root, goal)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    local BV = SA.BallView
+    local state, shift = BV.freeSim()
+    if not state then return nil end
+    local ball = BV.getBall()
+    if not ball then return nil end
+    local params = SA.Flight.params(ball)
+    local groundY = BV.groundBallY(state.pos)
+    local list = F.ShotPredict(params, state.pos, state.vel, state.spin, groundY, 1.5, 1 / 30)
+    local rp = root.Position
+    local rvel = root.AssemblyLinearVelocity
+    local rv = Vector3.new(rvel.X, 0, rvel.Z)
+    local mouth = { x = goal.x, z = goal.z, halfWidth = goal.half, top = goal.top, ground = goal.ground, out = goal.out }
+    local best, bike
+    local cands = {}
+    for _, e in ipairs(list) do
+        local p = e.pos
+        if (goal.x - p.X) * goal.out < 0 then break end
+        local h = p.Y - groundY
+        if e.t >= 0.2 and h >= 0.9 and h <= 14.2 then
+            local reach = rp + rv * math.min(e.t, 0.6)
+            local dx, dz = p.X - reach.X, p.Z - reach.Z
+            local r = math.min(5 + 14 * e.t, 13)
+            if dx * dx + dz * dz <= r * r then
+                local cand = { t = e.t, pos = p, h = h }
+                cands[#cands + 1] = cand
+                best = best or cand
+                if not bike and h >= 8.2 and h <= 11.3 and st.Mods and st.Mods.Bicycle.inZone(Vector3.new(p.X, 0, p.Z), { mouth }, 1.5) then
+                    bike = cand
+                end
+            end
+        end
+    end
+    if not best then return nil end
+    return best, bike, groundY, workspace:GetServerTimeNow() - shift, cands
+end
+
+function MystrixHub.Functions.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
+    local M = st.Mods
+    if not M then return true end
+    local ok, result = pcall(function()
+        local cm = char:FindFirstChild("ControllerManager")
+        local gc = cm and cm:FindFirstChild("GroundController")
+        if not (cm and gc) then return true end
+        local look = root.CFrame.LookVector
+        local pos = root.Position
+        local vel = root.AssemblyLinearVelocity
+        local mouth = { x = goal.x, z = goal.z, halfWidth = goal.half, top = goal.top, ground = goal.ground, out = goal.out }
+        local aim = M.Bicycle.aimFor(pos, Vector3.new(-goal.out, 0, 0), mouth)
+        local locked = M.GameCamera.isLocked()
+        local data = {
+            now = sampleNow,
+            pos = Vector3.new(pos.X, 0, pos.Z),
+            vel = Vector3.new(vel.X, 0, vel.Z),
+            facing = Vector3.new(look.X, 0, look.Z),
+            leg = 2,
+            maxLead = 1.45,
+            canTurn = not locked,
+            target = cm.MovingDirection * cm.BaseMoveSpeed,
+            topSpeed = cm.BaseMoveSpeed,
+            accelTime = gc.AccelerationTime,
+            decelTime = gc.DecelerationTime,
+            turn = (not locked) and M.Rules.Turn or nil,
+            ballAt = function(t)
+                local p, v = M.BallView.freeSample(t)
+                return p, v
+            end,
+            pitchY = groundY - M.Radius,
+            aimDir = aim.dir,
+            aimPoint = aim.point,
+            family = M.Families.Bicycle,
+            zone = function(a)
+                return M.Bicycle.inZone(a, { mouth })
+            end,
+        }
+        return M.Bicycle.find(data) ~= nil
+    end)
+    return ok and result == true
+end
+
+function MystrixHub.Functions.StartAutoTricks()
+    pcall(MystrixHub.Functions.InstallTrickFilter)
+    return MystrixHub.Functions.AutoEngineStart()
+end
+
+function MystrixHub.Functions.StopAutoTricks()
+    MystrixHub.TrickLock = nil
+    if not getgenv().MystrixAutoShoot.Enabled then
+        MystrixHub.Functions.AutoEngineStop()
+    end
+end
+
+getgenv().MystrixSilentAim.Targets = {}
+getgenv().MystrixSilentAim.TargetKey = "Auto"
+getgenv().MystrixSilentAim.Range = 300
+MystrixHub.ShotIgnore = { SideFoot = true, PushPass = true, VolleyPass = true, VolleyPush = true }
+MystrixHub.ShotLobs = { Lofted = true, Chip = true }
+MystrixHub.ShotSeeds = {}
+MystrixHub.ShotCache = {}
+MystrixHub.ShotCursor = {}
+MystrixHub.ShotFamily = nil
+MystrixHub.ShotFamilyAt = 0
+MystrixHub.PreviewCache = nil
+MystrixHub.ShotHint = nil
+MystrixHub.DebugOn = false
+
+function MystrixHub.Functions.SetSilentTargets(value)
+    local SA = getgenv().MystrixSilentAim
+    local list = {}
+    local auto = false
+    if type(value) == "table" then
+        for k, v in pairs(value) do
+            local name = type(v) == "string" and v or (type(k) == "string" and v == true and k) or nil
+            if name then
+                if name == "Auto" then auto = true end
+                list[#list + 1] = name
+            end
+        end
+    elseif type(value) == "string" then
+        if value == "Auto" then auto = true end
+        list[1] = value
+    end
+    if auto or #list == 0 then
+        SA.Targets = {}
+        SA.TargetKey = "Auto"
+    else
+        table.sort(list)
+        SA.Targets = list
+        SA.TargetKey = table.concat(list, ",")
+    end
+    table.clear(MystrixHub.ShotCache)
+end
+
+function MystrixHub.Functions.Debug(message)
+    if not MystrixHub.DebugOn then return end
+    local now = os.clock()
+    if now - (MystrixHub.DebugAt or 0) < 1.2 then return end
+    MystrixHub.DebugAt = now
+    warn("[Mystrix Hub] " .. tostring(message))
+end
+
+function MystrixHub.Functions.ShotEnv()
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    if not F.SilentAimModules() then return nil end
+    local ball = SA.BallView.getBall()
+    if not ball then return nil end
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    if not SA.Radius then
+        local ok, r = pcall(function()
+            return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Dribble")).Rules.BALL_RADIUS
+        end)
+        SA.Radius = (ok and type(r) == "number") and math.clamp(r, 0.5, 2) or 1.1
+    end
+    local env = MystrixHub.ShotEnvCache
+    local now = os.clock()
+    if not env or env.Ball ~= ball or now - env.At > 0.5 then
+        env = { Ball = ball, Params = SA.Flight.params(ball), At = now }
+        MystrixHub.ShotEnvCache = env
+    end
+    env.Goal = goal
+    env.Radius = SA.Radius
+    return env
+end
+
+function MystrixHub.Functions.ShotBodies(goal, lob)
+    local bx, bz, n = {}, {}, 0
+    if lob then return bx, bz, 0 end
+    for _, entry in ipairs(MystrixHub.Functions.MannequinSnapshot()) do
+        if entry.model ~= goal.char and not entry.keeper then
+            n += 1
+            bx[n] = entry.pos.X
+            bz[n] = entry.pos.Z
+        end
+    end
+    return bx, bz, n
+end
+
+function MystrixHub.Functions.ShotSolve(env, gy, from, point, speed, curve, minA, maxA, key, bx, bz, bn, lob, stepDt, iters, deadline)
+    local F = MystrixHub.Functions
+    local fx, fz = point.X - from.X, point.Z - from.Z
+    local d = math.sqrt(fx * fx + fz * fz)
+    if d < 2 then return nil end
+    local dx, dz = fx / d, fz / d
+    local side = Vector3.new(-dz, 0, dx)
+    local spin = Vector3.new(0, curve, 0)
+    local limitT = math.clamp(d / math.max(speed * 0.45, 6) + 0.8, 1, lob and 8 or 4.5)
+    local dt = stepDt or (lob and 1 / 45 or 1 / 60)
+    local gravity = env.Params.gravity
+    local pY = point.Y
+    local pL = point.X * side.X + point.Z * side.Z
+    local seeds = MystrixHub.ShotSeeds
+    local seed = seeds[key]
+    if seed and ((seed[3] - from).Magnitude > 8 or math.abs(seed[4] - speed) > 2 or math.abs(seed[5] - curve) > 2) then
+        seed = nil
+    end
+    if not seed then
+        local hint = MystrixHub.ShotHint
+        if hint
+            and hint[12] == lob
+            and (hint[3] - from).Magnitude < 8
+            and math.abs(hint[4] - speed) < 2
+            and math.abs(hint[5] - curve) < 2
+            and hint[10] * dx + hint[11] * dz > 0.7 then
+            seed = hint
+        end
+    end
+    local th, ps, a11, a12, a21, a22
+    if seed then
+        th, ps, a11, a12, a21, a22 = seed[1], seed[2], seed[6], seed[7], seed[8], seed[9]
+    else
+        local q = d / speed * 1.12
+        th = math.atan2(pY - from.Y + gravity * 0.5 * q * q, math.max(d, 1))
+        ps = 0
+        if curve ~= 0 then
+            local mag = math.min(0.5164 * math.abs(curve) / speed, 0.3) * 0.0541 * 0.213 * speed * speed * (env.Params.curve or 1)
+            local tf = d / (speed * 0.8)
+            ps = -(curve > 0 and 1 or -1) * math.clamp(0.5 * mag * tf * tf / d, 0, 0.45)
+        end
+        a11, a12, a21, a22 = d * 1.05, 0, 0, -d
+    end
+    local maxIter = iters or 8
+    local bestMiss = math.huge
+    local bestVel, bestT, bestB, bestC, bestTh, bestPs
+    local pu1, pu2, pg1, pg2
+    local nils = 0
+    for i = 1, maxIter do
+        if deadline and i > 1 and os.clock() > deadline then break end
+        th = math.clamp(th, minA, maxA)
+        local cs, sn = math.cos(ps), math.sin(ps)
+        local fdx, fdz = dx * cs + dz * sn, -dx * sn + dz * cs
+        local ct = math.cos(th)
+        local vel = Vector3.new(fdx * ct * speed, math.sin(th) * speed, fdz * ct * speed)
+        local c, ft, blocked = F.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, dt)
+        if not c then
+            nils += 1
+            pu1 = nil
+            th += (nils % 2 == 1) and 0.12 or -0.26
+        else
+            local g1 = c.Y
+            local g2 = c.X * side.X + c.Z * side.Z
+            local r1, r2 = g1 - pY, g2 - pL
+            local miss = math.sqrt(r1 * r1 + r2 * r2)
+            if miss < bestMiss then
+                bestMiss, bestVel, bestT, bestB, bestC, bestTh, bestPs = miss, vel, ft, blocked, c, th, ps
+            end
+            if miss < 0.08 then break end
+            if pu1 then
+                local du1, du2 = th - pu1, ps - pu2
+                local dd = du1 * du1 + du2 * du2
+                if dd > 1e-8 then
+                    local e1 = (g1 - pg1) - (a11 * du1 + a12 * du2)
+                    local e2 = (g2 - pg2) - (a21 * du1 + a22 * du2)
+                    a11 += e1 * du1 / dd
+                    a12 += e1 * du2 / dd
+                    a21 += e2 * du1 / dd
+                    a22 += e2 * du2 / dd
+                end
+            end
+            pu1, pu2, pg1, pg2 = th, ps, g1, g2
+            local det = a11 * a22 - a12 * a21
+            if det > -d * d * 0.05 then
+                a11, a12, a21, a22 = d * 1.05, 0, 0, -d
+                det = a11 * a22
+            end
+            local s1 = -(a22 * r1 - a12 * r2) / det
+            local s2 = -(-a21 * r1 + a11 * r2) / det
+            local m = math.max(math.abs(s1), math.abs(s2))
+            if m > 0.25 then
+                s1, s2 = s1 * 0.25 / m, s2 * 0.25 / m
+            end
+            th += s1
+            ps = math.clamp(ps + s2, -0.7, 0.7)
+        end
+    end
+    if not bestVel then return nil end
+    seeds[key] = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22 }
+    MystrixHub.ShotHint = { bestTh, bestPs, from, speed, curve, a11, a12, a21, a22, dx, dz, lob }
+    return bestVel, spin, bestMiss, bestT, bestB, bestC
+end
+
+function MystrixHub.Functions.DribbleThreats(char, rp, f, myVel, range)
+    local team = char:GetAttribute("Team")
+    local serverNow = workspace:GetServerTimeNow()
+    local list = {}
+    for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+        if model ~= char and model:IsA("Model") and model:GetAttribute("Team") ~= team and model:GetAttribute("AIGoalie") == nil then
+            local state = model:GetAttribute("BodyState")
+            local r = model:FindFirstChild("Root")
+            if r and r:IsA("BasePart") and (state == nil or state == "Animated") then
+                local rel = r.Position - rp
+                local flat = Vector3.new(rel.X, 0, rel.Z)
+                local d = flat.Magnitude
+                if d > 1 and d <= range then
+                    local dir = flat / d
+                    local ahead = f:Dot(dir)
+                    if ahead > -0.15 or d <= 6.5 then
+                        local ov = r.AssemblyLinearVelocity
+                        local vel = Vector3.new(ov.X, 0, ov.Z)
+                        local closing = (myVel - vel):Dot(dir)
+                        local ttc = closing > 1 and math.max(d - 2.8, 0) / closing or math.huge
+                        local ready = true
+                        local plr = Players:GetPlayerFromCharacter(model)
+                        if plr then
+                            local ra = plr:GetAttribute("PokeReadyAt")
+                            if type(ra) == "number" and ra > serverNow + 0.2 then ready = false end
+                        end
+                        list[#list + 1] = {
+                            model = model,
+                            d = d,
+                            dir = dir,
+                            ahead = ahead,
+                            side = f.X * dir.Z - f.Z * dir.X,
+                            closing = closing,
+                            ttc = ttc,
+                            ready = ready,
+                            eff = d - math.max(closing, 0) * 0.25,
+                        }
+                    end
+                end
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.eff < b.eff end)
+    return list
+end
+
+function MystrixHub.Functions.TrickStarted()
+    local F = MystrixHub.Functions
+    local mod = F.MannequinClientModule()
+    local char = LocalPlayer.Character
+    if not (mod and char) then return false end
+    local ok, anim = pcall(mod.getAnimator, char)
+    if not (ok and anim) then return false end
+    for _, key in ipairs({ "kickS", "headS", "bikeS", "diveS" }) do
+        local s = anim[key]
+        if s and not s.done then return true end
+    end
+    return false
+end
+
+function MystrixHub.Functions.DribblePick(speed, p, threats, crowd, last, rare)
+    rare = rare or 1
+    local sideSum = 0
+    for _, t in ipairs(threats) do
+        if t.d <= 14 and t.ahead > -0.3 then
+            sideSum += (t.side >= 0 and 1 or -1) / math.max(t.d, 1)
+        end
+    end
+    if sideSum == 0 then sideSum = p.side end
+    local away = sideSum > 0 and "Left" or "Right"
+    local d, ahead = p.d, p.ahead
+    local list = {}
+    local function add(kind, dir, half, weight)
+        local key = kind .. dir .. (half or "")
+        if key == last then weight *= 0.18 end
+        if weight > 0 then
+            list[#list + 1] = { kind = kind, dir = dir, half = half, weight = weight }
+        end
+    end
+    if ahead < -0.15 then
+        add("Hold", away, nil, 6)
+        add("Roll", away, "Bottom", 5)
+        add("Flick", away, nil, 3)
+    elseif speed < 8 then
+        add("Flick", away, nil, 5)
+        add("Elastico", away, nil, 3)
+        if ahead > 0.45 then add("Hold", away, nil, 4) end
+        if d < 5 then add("Flick", "Down", nil, 2) end
+    else
+        if d <= 4.2 then
+            add("Roll", away, "Bottom", 6)
+            add("Elastico", away, nil, 5)
+            add("Flick", away, nil, 4)
+            if speed < 22 then add("Flick", "Down", nil, 3) end
+        else
+            add("Elastico", away, nil, ahead > 0.5 and 6 or 4)
+            add("Roll", away, "Bottom", 5)
+            add("Roll", away, "Top", 4)
+            add("Flick", away, nil, ahead < 0.5 and 6 or 3)
+        end
+        local wide = rare > 1
+        if d < (wide and 9 or 7.5) and d > (wide and 3 or 3.2) and ahead > (wide and 0.5 or 0.62) and speed >= (wide and 12 or 14) and speed <= (wide and 38 or 36) then
+            add("Rainbow", "Up", nil, (crowd >= 2 and 9 or 7) * rare)
+        end
+        if crowd >= 2 and d < 8 then
+            add("Hold", away, nil, 3)
+        end
+        if math.abs(p.side) > 0.7 then
+            add("Roll", away, "Top", 4)
+        end
+    end
+    local sum = 0
+    for _, e in ipairs(list) do sum += e.weight end
+    if sum <= 0 then return nil end
+    local roll = math.random() * sum
+    for _, e in ipairs(list) do
+        roll -= e.weight
+        if roll <= 0 then return { kind = e.kind, dir = e.dir, half = e.half } end
+    end
+    local e = list[#list]
+    return { kind = e.kind, dir = e.dir, half = e.half }
+end
+
+function MystrixHub.Functions.ShotGate(from)
+    local goal = MystrixHub.Functions.SilentAimGoal()
+    if not goal then return nil end
+    if (from.X - goal.x) * goal.out >= 0 then return nil end
+    local dx, dz = goal.x - from.X, goal.z - from.Z
+    local dist = math.sqrt(dx * dx + dz * dz)
+    if dist < 1.5 then return nil end
+    local range = SilentAimState.Range or 300
+    if range < 300 and dist > range then return nil end
+    return goal
+end
+
+function MystrixHub.Functions.ShotPoint(goal, mode, radius)
+    local spot = MystrixHub.ShotSpots[mode]
+    if not spot then return nil end
+    radius = radius or 0.84
+    local zl = goal.half - radius - 1.5
+    local y0 = goal.ground + radius + 0.15
+    local y1 = goal.top - radius - 1.3
+    return Vector3.new(goal.x, y0 + (y1 - y0) * spot[2], goal.z + goal.out * zl * spot[1])
+end
+
+function MystrixHub.Functions.ShotAutoList(goal, lob, radius)
+    radius = radius or 0.84
+    local cache = goal.Lists
+    if not cache then
+        cache = {}
+        goal.Lists = cache
+    end
+    local slot = lob and 1 or 2
+    local hit = cache[slot]
+    if hit and hit.radius == radius then return hit.list end
+    local zl = goal.half - radius - 1.5
+    local y0 = goal.ground + radius + 0.15
+    local y1 = goal.top - radius - 1.3
+    local zs = { -0.97, -0.88, -0.76, -0.62, -0.46, -0.3, -0.12, 0.12, 0.3, 0.46, 0.62, 0.76, 0.88, 0.97 }
+    local ys = lob and { 0.55, 0.7, 0.84, 0.95 } or { 0.04, 0.16, 0.3, 0.48, 0.66, 0.82, 0.95 }
+    local list = {}
+    for _, zf in ipairs(zs) do
+        for _, yf in ipairs(ys) do
+            list[#list + 1] = Vector3.new(goal.x, y0 + (y1 - y0) * yf, goal.z + zl * zf)
+        end
+    end
+    cache[slot] = { radius = radius, list = list }
+    return list
+end
+
+function MystrixHub.Functions.ShotFly(env, gy, from, vel, spin, limitT, bx, bz, bn, stepDt, kp)
+    local Flight = SilentAimState.Flight
+    local params = env.Params
+    local goal = env.Goal
+    local gx, gz, out = goal.x, goal.z, goal.out
+    local radius = env.Radius
+    local q = (goal.top - goal.ground) / 8.714285714285714
+    local pr = 0.2143 * q
+    local postZ = goal.half + pr
+    local barY = goal.top + pr
+    local reachR = radius + pr + 0.05
+    local airStep, rollStep = Flight.airStep, Flight.rollStep
+    local bounce, toGround, bounceMin = Flight.bounce, Flight.toGround, Flight.BOUNCE_MIN
+    local pos, v, s = from, vel, spin
+    local rolling = false
+    if pos.Y <= gy + 0.05 and v.Y <= bounceMin then
+        rolling = true
+        pos = Vector3.new(pos.X, gy, pos.Z)
+        v, s = toGround(v, s)
+    end
+    local dt = stepDt or 1 / 60
+    local t = 0
+    local blocked = false
+    local framed = false
+    local fx, fz = from.X, from.Z
+    local step = 0
+    while t < limitT do
+        local np, nv, ns
+        if rolling then
+            np, nv, ns = rollStep(pos, v, s, dt, params)
+            if nv.X * nv.X + nv.Z * nv.Z < 0.04 then
+                return nil, t, blocked, framed
+            end
+        else
+            np, nv, ns = airStep(pos, v, s, dt, params)
+            if np.Y < gy and nv.Y < 0 then
+                local k = math.clamp((pos.Y - gy) / math.max(pos.Y - np.Y, 1e-6), 0, 1)
+                local hp, hv, hs = airStep(pos, v, s, dt * k, params)
+                hp = Vector3.new(hp.X, gy, hp.Z)
+                local bv, bs = bounce(hv, hs, params)
+                if bv.Y < bounceMin then
+                    bv, bs = toGround(bv, bs)
+                    rolling = true
+                    np, nv, ns = rollStep(hp, bv, bs, dt * (1 - k), params)
+                else
+                    np, nv, ns = airStep(hp, bv, bs, dt * (1 - k), params)
+                end
+            end
+        end
+        if kp and not kp.t then
+            local d1 = (pos.X - kp.x) * kp.fx + (pos.Z - kp.z) * kp.fz - kp.ahead
+            local d2 = (np.X - kp.x) * kp.fx + (np.Z - kp.z) * kp.fz - kp.ahead
+            if d1 > 0 and d2 <= 0 then
+                local a = d1 / (d1 - d2)
+                kp.t = t + dt * a
+                kp.pos = pos:Lerp(np, a)
+            end
+        end
+        if (np.X - gx) * out >= 0 then
+            local dxs = np.X - pos.X
+            local a = dxs ~= 0 and math.clamp((gx - pos.X) / dxs, 0, 1) or 1
+            local cp = pos:Lerp(np, a)
+            local hx, hy, hz = np.X - pos.X, np.Y - pos.Y, np.Z - pos.Z
+            local hm = math.sqrt(hx * hx + hz * hz)
+            local ez = cp.Z - gz
+            if hm > 1e-6 and cp.Y <= barY + radius + 0.5 then
+                local uz = hz / hm
+                local ax = math.abs(hx / hm)
+                local d1 = postZ - ez
+                local d2 = -postZ - ez
+                local e1 = (d1 * uz < 0) and math.abs(d1) * ax or math.abs(d1)
+                local e2 = (d2 * uz < 0) and math.abs(d2) * ax or math.abs(d2)
+                if e1 < reachR or e2 < reachR then framed = true end
+            end
+            local hn = math.sqrt(hx * hx + hy * hy)
+            if hn > 1e-6 and math.abs(ez) <= postZ then
+                local dy = barY - cp.Y
+                local uyn = hy / hn
+                local uxn = math.abs(hx) / hn
+                local eb = (dy * uyn < 0) and math.abs(dy) * uxn or math.abs(dy)
+                if eb < reachR then framed = true end
+            end
+            return cp, t + dt * a, blocked, framed
+        end
+        if bn > 0 and not blocked and np.Y - gy < 7 then
+            step += 1
+            if step % 2 == 0 then
+                local ox, oz = np.X - fx, np.Z - fz
+                if ox * ox + oz * oz > 16 then
+                    for i = 1, bn do
+                        local ex, ez = bx[i] - np.X, bz[i] - np.Z
+                        if ex * ex + ez * ez < 5.8 then
+                            blocked = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        pos, v, s = np, nv, ns
+        t += dt
+    end
+    return nil, t, blocked, framed
+end
+
+function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode)
+    local F = MystrixHub.Functions
+    local SA = SilentAimState
+    local env = F.ShotEnv()
+    if not env then return nil end
+    mode = mode or "warm"
+    local goal = env.Goal
+    local params = env.Params
+    local radius = env.Radius
+    local gy = SA.BallView.groundBallY(from)
+    local pitchY = gy - radius
+    local fam = SA.Families[family]
+    local cap = 125
+    if fam and fam.speed then
+        local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
+        cap = top * (fam.header and 1 or 1.05) * 0.97
+    end
+    local dxg, dzg = goal.x - from.X, goal.z - from.Z
+    local flatD = math.sqrt(dxg * dxg + dzg * dzg)
+    local speed = cap
+    if lob then
+        local factor = 1.2 + 0.35 * math.clamp(flatD / 90, 0, 1)
+        speed = math.clamp(math.sqrt(params.gravity * math.max(flatD, 12)) * factor, 22, cap)
+    end
+    local minA = minAngle or (lob and 0.35 or -0.9)
+    local maxA = lob and 1.3 or 0.8
+    local kit = F.KeeperKit()
+    local keeperNow = F.SilentAimKeeper(goal)
+    local kpos = keeperNow and F.KeeperAt(goal, from, keeperNow, kit) or nil
+    local kx = kpos and kpos.X or goal.x - goal.out * 6
+    local kz = kpos and kpos.Z or goal.z
+    local oX = -goal.out
+    local bx, bz, bn = F.ShotBodies(goal, lob)
+    local curveOn = SA.AutoCurve == true and not lob and flatD >= 8 and not (fam and fam.header)
+    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1), 72)
+    local zLim, yMin, yMax = F.ShotBounds(env)
+    local react = kit and math.max(kit.cfg.Reaction[1] - 0.03, 0.1) or 0.2
+    local now = os.clock()
+    local deadline = budget and (now + budget) or nil
+    local points, targeted = F.ShotTargets(goal, lob, radius)
+    local cache = MystrixHub.ShotCache
+    local light = mode ~= "strike"
+    local simDt = lob and 1 / 45 or 1 / 60
+    if light then
+        simDt = lob and 1 / 30 or 1 / 40
+    end
+    local candIters = light and 6 or 10
+    local tol = 0.45
+    local best, fallback, loose
+
+    local function faceFor(vel)
+        local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+        local fx, fz = oX, 0
+        if m > 5 and (vel.X / m) * oX < -0.2 then
+            fx, fz = -vel.X / m, -vel.Z / m
+        end
+        local d = fx * oX
+        if d < 0.3 then
+            fx = fx + oX * (0.3 - d)
+            local l = math.sqrt(fx * fx + fz * fz)
+            fx, fz = fx / l, fz / l
+        end
+        return fx, fz
+    end
+
+    local function evaluate(p, curve, dl)
+        local vel, spin, miss, ft, blocked, c, extra
+        local key
+        if curve == 0 then
+            vel, spin, miss, ft, blocked, c, extra = F.PitchSolve(env, gy, from, p, speed, minA, maxA, lob, simDt, bx, bz, bn, dl)
+        else
+            local sign = curve > 0 and 1 or -1
+            key = ((((math.floor(p.Z * 2) + 2000) * 4096 + (math.floor(p.Y * 2) + 2000)) * 8 + (sign + 1) * 2 + (lob and 1 or 0)) * 2 + (goal.out > 0 and 1 or 0))
+            vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, p, speed, curve, minA, maxA, key, bx, bz, bn, lob, simDt, candIters, dl)
+        end
+        if not vel then return nil end
+        local dz = math.abs(c.Z - goal.z)
+        if dz > goal.half - 0.8 or c.Y < yMin or c.Y > goal.top - 0.4 then return nil end
+        local fx, fz = faceFor(vel)
+        local kp = { x = kx, z = kz, fx = fx, fz = fz, ahead = 0.8 }
+        local _, _, _, framed = F.ShotFly(env, gy, from, vel, spin, ft + 0.5, bx, bz, 0, simDt, kp)
+        local mp, mt = kp.pos or c, kp.t or ft
+        local lat = (mp.X - kx) * -fz + (mp.Z - kz) * fx
+        local gap, save = F.KeeperSave(lat, mp.Y - pitchY, mt - react, flatD)
+        local pg
+        if gap >= 1.2 then
+            pg = 1
+        elseif gap <= 0 then
+            pg = 1 - save
+        else
+            pg = (1 - save) + save * gap / 1.2
+        end
+        local edge = math.min(zLim - dz, yMax - c.Y)
+        local penalty = 1
+        if blocked then penalty *= 0.1 end
+        if framed then penalty *= 0.05 end
+        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft - miss * 8
+        return {
+            vel = vel,
+            spin = spin,
+            point = p,
+            curve = curve,
+            miss = miss,
+            time = ft,
+            blocked = blocked,
+            framed = framed,
+            cross = c,
+            key = key,
+            th = extra,
+            gap = gap,
+            pg = pg,
+            edge = edge,
+            score = score,
+            strict = edge >= 0 and miss <= tol and not framed,
+        }
+    end
+
+    local function take(e)
+        if not e then return end
+        if e.strict and not e.blocked then
+            if not best or e.score > best.score then best = e end
+        elseif e.strict or e.framed then
+            e.fallback = true
+            if not fallback or e.score > fallback.score then fallback = e end
+        elseif targeted or e.miss <= 2.5 then
+            e.fallback = true
+            e.score = -e.miss
+            if not loose or e.score > loose.score then loose = e end
+        end
+    end
+
+    local function inward(p)
+        return Vector3.new(p.X, goal.ground + (p.Y - goal.ground) * 0.82, goal.z + (p.Z - goal.z) * 0.6)
+    end
+
+    local function coarse(p)
+        local dx = p.X - from.X
+        local f = math.abs(dx) > 1 and math.clamp((kx - goal.out * 0.8 - from.X) / dx, 0, 1) or 1
+        local mz = from.Z + (p.Z - from.Z) * f
+        local my = from.Y + (p.Y - from.Y) * f
+        local ddz = p.Z - from.Z
+        local d = math.sqrt(dx * dx + ddz * ddz)
+        local tf = d / (speed * (lob and 0.6 or 0.85)) * f
+        local avail = math.max(tf - react, 0)
+        local reach
+        if kit then
+            local q = kit.shSpeed / kit.shAccel
+            local moved = avail <= q and 0.5 * kit.shAccel * avail * avail or 0.5 * kit.shAccel * q * q + kit.shSpeed * (avail - q)
+            local idx = math.clamp(math.floor(avail / kit.step) + 2, 1, #kit.reachX)
+            reach = moved + kit.reachX[idx] + kit.hand
+        else
+            reach = 4.8 + 15 * avail
+        end
+        return math.abs(mz - kz) - reach + math.max(math.abs(my - pitchY - 3.2) - 1.8, 0) * 0.6
+    end
+
+    local key = string.format("%s|%s|%d|%s|%s|%d", tostring(family), tostring(lob), math.floor(goal.x), tostring(curveOn), SA.TargetKey or "Auto", math.floor(minA * 100))
+    local plan = cache[key]
+    if plan and (now - plan.at > 2 or (plan.from - from).Magnitude > 30) then
+        plan = nil
+        cache[key] = nil
+    end
+    local settled = false
+    if plan then
+        local entry = evaluate(plan.point, plan.curve, nil)
+        if entry and entry.strict and not entry.blocked then
+            entry.score += 1
+            take(entry)
+            settled = entry.pg >= 0.95 and entry.edge >= 0.4
+        else
+            cache[key] = nil
+        end
+    end
+
+    if not settled then
+        local ranked = {}
+        for i, p in ipairs(points) do
+            ranked[i] = { point = p, score = coarse(p), i = i }
+        end
+        table.sort(ranked, function(a, b)
+            if a.score ~= b.score then return a.score > b.score end
+            return a.i < b.i
+        end)
+        local M = math.min(#ranked, targeted and #ranked or 14)
+        if M > 0 then
+            local cursors = MystrixHub.ShotCursor
+            local count = mode == "strike" and M or (mode == "preview" and 1 or math.min(M, 3))
+            local first = mode == "strike" and 1 or (cursors[key] or 1)
+            local tried = 0
+            for j = 0, count - 1 do
+                local item = ranked[(first - 1 + j) % M + 1]
+                local dl = (mode ~= "strike" or best or fallback or loose) and deadline or nil
+                local e = evaluate(item.point, 0, dl)
+                take(e)
+                if e and e.framed then
+                    take(evaluate(inward(item.point), 0, dl))
+                end
+                if curveOn then
+                    local weak = (not e) or (not e.strict) or e.gap < 1.5 or e.blocked
+                    if j < 3 or (weak and j < 8) then
+                        take(evaluate(item.point, k, dl))
+                        take(evaluate(item.point, -k, dl))
+                        if weak then
+                            take(evaluate(item.point, k * 0.5, dl))
+                            take(evaluate(item.point, -k * 0.5, dl))
+                        end
+                    end
+                end
+                tried += 1
+                if not targeted and best and best.pg >= 0.97 and best.edge >= 0.8 then break end
+                if deadline and os.clock() > deadline and (best or fallback or loose or mode ~= "strike") then break end
+            end
+            if mode ~= "strike" then
+                cursors[key] = (first - 1 + tried) % M + 1
+            end
+        end
+    end
+
+    local result = best or fallback or loose
+    if not result then
+        cache[key] = nil
+        return nil
+    end
+    if result.strict and not result.blocked then
+        cache[key] = { point = result.point, curve = result.curve, from = from, at = now }
+    end
+
+    if mode == "strike" then
+        local vel, spin, miss, ft, blocked, c
+        if result.curve == 0 then
+            vel, spin, miss, ft, blocked, c = F.PitchSolve(env, gy, from, result.point, speed, minA, maxA, lob, 1 / 120, bx, bz, bn, nil, result.th)
+        elseif result.key then
+            vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, result.point, speed, result.curve, minA, maxA, result.key, bx, bz, bn, lob, lob and 1 / 90 or 1 / 120, 8, nil)
+        end
+        if vel and c then
+            local dz = math.abs(c.Z - goal.z)
+            if dz <= goal.half - 0.8 and c.Y >= yMin and c.Y <= goal.top - 0.4 and miss <= math.max(result.miss + 0.3, 0.6) then
+                result.vel = vel
+                result.spin = spin
+                result.miss = miss
+                result.time = ft
+                result.blocked = blocked
+                result.cross = c
+            end
+        end
+    end
+
+    result.from = from
+    result.lob = lob
+    result.goalX = goal.x
+    result.at = now
+    result.born = now
+    MystrixHub.ShotLast = result
+    return result
+end
+
+function MystrixHub.Functions.ShotFallback(from, family, lob)
+    local F = MystrixHub.Functions
+    local SA = SilentAimState
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    local env = F.ShotEnv()
+    local fam = SA.Families and SA.Families[family]
+    local cap = 125
+    if fam and fam.speed then
+        local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
+        cap = top * (fam.header and 1 or 1.05) * 0.97
+    end
+    local dx, dz = goal.x - from.X, goal.z - from.Z
+    local flatD = math.sqrt(dx * dx + dz * dz)
+    if flatD < 1 then return nil end
+    local gravity = env and env.Params.gravity or 46
+    local speed = cap
+    if lob then
+        local factor = 1.2 + 0.35 * math.clamp(flatD / 90, 0, 1)
+        speed = math.clamp(math.sqrt(gravity * math.max(flatD, 12)) * factor, 22, cap)
+    end
+    local minA = lob and 0.35 or -0.9
+    local maxA = lob and 1.3 or 0.8
+    local radius = env and env.Radius or 0.84
+    local points, targeted = F.ShotTargets(goal, lob, radius)
+    local keeper = F.SilentAimKeeper(goal)
+    local kz = keeper and keeper.Z or goal.z
+    local ordered = {}
+    for i, p in ipairs(points) do
+        ordered[i] = { p = p, d = targeted and 0 or math.abs(p.Z - kz), i = i }
+    end
+    table.sort(ordered, function(a, b)
+        if a.d ~= b.d then return a.d > b.d end
+        return a.i < b.i
+    end)
+    if env and SA.BallView then
+        local gy = SA.BallView.groundBallY(from)
+        local deadline = os.clock() + F.Budget(0.012)
+        local bestVel, bestSpin, bestMiss
+        bestMiss = math.huge
+        for _, item in ipairs(ordered) do
+            local vel, spin, miss = F.PitchSolve(env, gy, from, item.p, speed, minA, maxA, lob, 1 / 45, {}, {}, 0, nil)
+            if vel and miss < bestMiss then
+                bestVel, bestSpin, bestMiss = vel, spin, miss
+            end
+            if bestMiss < 0.5 or (bestVel and os.clock() > deadline) then break end
+        end
+        if bestVel then
+            return { vel = bestVel, spin = bestSpin }
+        end
+    end
+    local p = ordered[1].p
+    local px, pz = p.X - from.X, p.Z - from.Z
+    local pd = math.sqrt(px * px + pz * pz)
+    if pd < 1 then return nil end
+    local t = pd / (speed * 0.7)
+    local ang = math.clamp(math.atan2(p.Y - from.Y + gravity * 0.5 * t * t, math.max(pd, 1)), minA, maxA)
+    local vel = Vector3.new(px / pd * math.cos(ang) * speed, math.sin(ang) * speed, pz / pd * math.cos(ang) * speed)
+    return { vel = vel, spin = Vector3.new(0, 0, 0) }
+end
+function MystrixHub.Functions.IsOriginalGoalShot(from, vel, spin)
+    local F = MystrixHub.Functions
+    if typeof(from) ~= "Vector3" or typeof(vel) ~= "Vector3" then return false end
+    if typeof(spin) ~= "Vector3" then spin = Vector3.zero end
+    local goal = F.ShotGate(from)
+    if not goal then return false end
+    if vel.X * goal.out <= 0.05 then return false end
+    local lateral
+    local topLimit = goal.top + 12
+    local okEnv, env = pcall(F.ShotEnv)
+    if okEnv and env and env.Params and SilentAimState.BallView then
+        local okGy, gy = pcall(SilentAimState.BallView.groundBallY, from)
+        if not okGy or type(gy) ~= "number" then
+            gy = goal.ground + (env.Radius or 1)
+        end
+        local seconds = math.clamp(math.abs(goal.x - from.X) / math.max(math.abs(vel.X) * 0.55, 8) + 0.8, 0.8, 6)
+        local okFly, hit = pcall(F.ShotFly, env, gy, from, vel, spin, seconds, {}, {}, 0, 1 / 60)
+        if okFly and hit then
+            if hit.Y > topLimit then return false end
+            lateral = math.abs(hit.Z - goal.z)
+        end
+    end
+    if not lateral then
+        local t = (goal.x - from.X) / vel.X
+        if t <= 0 then return false end
+        lateral = math.abs(from.Z + vel.Z * t - goal.z)
+    end
+    return lateral <= goal.half + 8
+end
+
+function MystrixHub.Functions.SilentAimRedirect(from, vel, spin, family)
+    local F = MystrixHub.Functions
+    local SA = SilentAimState
+    local stats = SA.Stats
+    if not stats then
+        stats = { calls = 0, redirected = 0, last = "" }
+        SA.Stats = stats
+    end
+    stats.calls += 1
+    if type(family) ~= "string" or MystrixHub.ShotIgnore[family] then
+        stats.last = "ignored family " .. tostring(family)
+        return nil
+    end
+    if not F.ShotGate(from) then
+        stats.last = "gate"
+        return nil
+    end
+    if SA.OnlyGoalShots == true then
+        local ok, valid = pcall(F.IsOriginalGoalShot, from, vel, spin)
+        if not ok or valid ~= true then
+            stats.last = "not goal-bound"
+            stats.skipped = (stats.skipped or 0) + 1
+            SA.Pending = nil
+            return nil
+        end
+    end
+    local now = os.clock()
+    local last = SA.StrikeCache
+    if last and last.family == family and now - last.at < 0.35 and (last.from - from).Magnitude < 0.5 then
+        stats.redirected += 1
+        stats.last = "cached"
+        return last.vel, last.spin
+    end
+    local pend = SA.Pending
+    if pend and pend.family == family and now - pend.at < 1.2 and (pend.from - from).Magnitude < 0.8 then
+        SA.Pending = nil
+        SA.StrikeCache = { from = from, family = family, vel = pend.vel, spin = pend.spin, at = now }
+        stats.redirected += 1
+        stats.last = "plan"
+        return pend.vel, pend.spin
+    end
+    local nv, ns = F.SilentAimSolve(from, family)
+    if nv then
+        SA.StrikeCache = { from = from, family = family, vel = nv, spin = ns, at = now }
+        stats.redirected += 1
+        stats.last = "ok"
+        return nv, ns
+    end
+    stats.last = "no solution"
+    return nil
+end
+
+function MystrixHub.Functions.SilentAimSolve(from, family)
+    local F = MystrixHub.Functions
+    local SA = SilentAimState
+    local lob = MystrixHub.ShotLobs[family] == true
+    local ok, result = pcall(F.ShotBest, from, family, lob, F.Budget(0.012), nil, "strike")
+    if not ok then
+        SA.LastError = tostring(result)
+        result = nil
+    end
+    if not (result and result.vel) then
+        local ok2, fb = pcall(F.ShotFallback, from, family, lob)
+        if ok2 then
+            result = fb
+        else
+            SA.LastError = tostring(fb)
+            result = nil
+        end
+    end
+    if result and result.vel then
+        return result.vel, result.spin
+    end
+    return nil
+end
+
+function MystrixHub.Functions.SilentAimPlan(plan)
+    local F = MystrixHub.Functions
+    local SA = SilentAimState
+    local family = plan.family
+    if type(family) ~= "string" or MystrixHub.ShotIgnore[family] then return nil end
+    local from = plan.ball
+    if typeof(from) ~= "Vector3" or not F.ShotGate(from) then return nil end
+    if SA.OnlyGoalShots == true then
+        local checkVel = plan.vel
+        if typeof(checkVel) ~= "Vector3" then
+            if typeof(plan.dir) ~= "Vector3" then return nil end
+            checkVel = Vector3.new(plan.dir.X, plan.dir.Y, plan.dir.Z) * 60
+        end
+        local ok, valid = pcall(F.IsOriginalGoalShot, from, checkVel, plan.spin)
+        if not ok or valid ~= true then return nil end
+    end
+    local vel, spin = F.SilentAimSolve(from, family)
+    if not vel then return nil end
+    SA.Pending = { from = from, family = family, vel = vel, spin = spin, at = os.clock() }
+    return vel, spin
+end
+
+function MystrixHub.Functions.InstallPlanSync()
+    local SA = getgenv().MystrixSilentAim
+    if SA.PlanHooked then return true end
+    if not (hookmetamethod and getnamecallmethod and setnamecallmethod and newcclosure) then return false end
+    local old
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local state = getgenv().MystrixSilentAim
+        if state.Enabled and state.PlanSync ~= false and getnamecallmethod() == "FireServer" then
+            local plan = ...
+            if type(plan) == "table"
+                and plan.hold ~= true
+                and typeof(plan.ball) == "Vector3"
+                and type(plan.family) == "string"
+                and plan.power ~= nil
+                and plan.leg ~= nil
+                and typeof(plan.dir) == "Vector3" then
+                local H = getgenv().MystrixHub
+                local F = H and H.Functions
+                if F then
+                    local ok, vel, spin = pcall(F.SilentAimPlan, plan)
+                    setnamecallmethod("FireServer")
+                    if ok and vel then
+                        local copy = table.clone(plan)
+                        local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                        if m > 0.001 then
+                            copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
+                        end
+                        if typeof(plan.vel) == "Vector3" then
+                            copy.vel = vel
+                        end
+                        if typeof(plan.spin) == "Vector3" and spin then
+                            copy.spin = spin
+                        end
+                        return old(self, copy, select(2, ...))
+                    end
+                end
+            end
+        end
+        return old(self, ...)
+    end))
+    SA.PlanHooked = true
+    return true
+end
+function MystrixHub.Functions.CurrentFamily()
+    local name = MystrixHub.ShotFamily
+    if name and os.clock() - (MystrixHub.ShotFamilyAt or 0) < 0.6 then
+        return name
+    end
+    return nil
+end
+
+function MystrixHub.Functions.PreviewAim(from, vel, spin)
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    if not F.SilentAimModules() then return nil end
+    if SA.OnlyGoalShots == true and not F.IsOriginalGoalShot(from, vel, spin) then return nil end
+    local goal = F.ShotGate(from, vel)
+    if not goal then return nil end
+    local flat = Vector3.new(vel.X, 0, vel.Z)
+    local fm = flat.Magnitude
+    local family, lob, minAngle
+    lob = false
+    local auto = MystrixHub.Auto
+    if auto and auto.Phase == "air" then
+        local gy = SA.BallView.groundBallY(from)
+        family = auto.Mode == "away" and "Bicycle" or (from.Y - gy <= 2.4 and "Volley" or "RunningHeader")
+        minAngle = -0.95
+    elseif MystrixHub.TrickActive then
+        family = MystrixHub.TrickKey == "KickLob" and "Lofted" or "Laced"
+        lob = family == "Lofted"
+    else
+        family = F.CurrentFamily()
+        if family then
+            if MystrixHub.ShotIgnore[family] then return nil end
+            lob = MystrixHub.ShotLobs[family] == true
+        elseif fm > 1 and vel.Y / fm > 0.62 then
+            family, lob = "Lofted", true
+        else
+            family = "Laced"
+        end
+    end
+    local now = os.clock()
+    MystrixHub.PreviewWant = { family = family, lob = lob, minAngle = minAngle, at = now }
+    local cache = MystrixHub.PreviewCache
+    local c = cache and cache[family .. (minAngle and "|a" or "")]
+    if c and c.goalX == goal.x and now - c.at < 0.6 and (c.from - from).Magnitude < 8 then
+        return c.vel, c.spin
+    end
+    return nil
+end
+
+function MystrixHub.Functions.StartShotTick()
+    local F = MystrixHub.Functions
+    F.InstallPreviewSpoof()
+    if MystrixHub.ShotTickConn then return end
+    local acc = 0
+    local pause = 0.1
+    MystrixHub.ShotTickConn = RunService.Heartbeat:Connect(function(dt)
+        acc += dt
+        if acc < pause then return end
+        acc = 0
+        pause = 0.1
+        local SA = SilentAimState
+        if not SA.Enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local id = char:GetAttribute("DribbleId")
+        local ball = F.GetBall()
+        if not ball or type(id) ~= "number" or ball:GetAttribute("Possessor") ~= id then return end
+        if not F.SilentAimModules() then return end
+        local pos = SA.BallView.getPosition()
+        if not pos or not F.ShotGate(pos) then return end
+        local want = MystrixHub.PreviewWant
+        local family, lob, minAngle
+        if want and os.clock() - want.at < 0.5 then
+            family, lob, minAngle = want.family, want.lob, want.minAngle
+        else
+            family = F.CurrentFamily() or "Laced"
+            if MystrixHub.ShotIgnore[family] then family = "Laced" end
+            lob = MystrixHub.ShotLobs[family] == true
+        end
+        local t0 = os.clock()
+        local ok, result = pcall(F.ShotBest, pos, family, lob, F.Budget(0.004), minAngle, "preview")
+        local cache = MystrixHub.PreviewCache
+        if not cache then
+            cache = {}
+            MystrixHub.PreviewCache = cache
+        end
+        local pkey = family .. (minAngle and "|a" or "")
+        if ok and result then
+            cache[pkey] = {
+                at = os.clock(),
+                from = pos,
+                goalX = result.goalX,
+                vel = result.vel,
+                spin = result.spin,
+            }
+        else
+            cache[pkey] = nil
+        end
+        pause = math.clamp((os.clock() - t0) * 6, 0.1, 0.5)
+    end)
+    MystrixHub.ConnectionController.Insert(MystrixHub.ShotTickConn)
+end
+
+function MystrixHub.Functions.InstallPickTrack()
+    local SA = getgenv().MystrixSilentAim
+    if SA.PickHooked then return end
+    local ok, Select = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Select
+    end)
+    if not ok or type(Select) ~= "table" or type(Select.pick) ~= "function" or not hookfunction then return end
+    local orig
+    local function wrapper(self, forced)
+        local H = getgenv().MystrixHub
+        local state = getgenv().MystrixSilentAim
+        local input = self
+        if H and type(self) == "table" then
+            H.KickIntent = self.intent
+            H.KickIntentAt = os.clock()
+            if state.Enabled and state.OnlyGoalShots ~= true and (self.intent == "Shoot" or self.intent == "Lob") then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local root = char and char:FindFirstChild("Root")
+                    if not root then return end
+                    local p = root.Position
+                    local dir = H.Functions.KickGoalDir(p.X, p.Z)
+                    if dir then
+                        local copy = table.clone(self)
+                        copy.aimDir = dir
+                        copy.travel = dir
+                        copy.facing = dir
+                        copy.sideStepping = false
+                        input = copy
+                    end
+                end)
+            end
+        end
+        local result, second = orig(input, forced)
+        if type(result) == "table" and type(result.family) == "table" and type(result.family.name) == "string" and H then
+            H.ShotFamily = result.family.name
+            H.ShotFamilyAt = os.clock()
+        end
+        return result, second
+    end
+    local hok, res = pcall(hookfunction, Select.pick, wrapper)
+    if hok and res then
+        orig = res
+        SA.PickHooked = true
+    end
+end
+
+function MystrixHub.Functions.InstallSilentAim()
+    local F = MystrixHub.Functions
+    local SA = getgenv().MystrixSilentAim
+    SA.Redirect = F.SilentAimRedirect
+    local ok, DribbleClient = pcall(function()
+        return require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game"):WaitForChild("DribbleClient"))
+    end)
+    if not (ok and type(DribbleClient) == "table") then
+        return false
+    end
+    if SA.HookedModule ~= DribbleClient then
+        SA.Hooked = false
+        SA.HookedModule = nil
+        SA.PickHooked = nil
+        SA.PlanAimHooked = nil
+        SA.PreviewShowHooked = nil
+        SA.PreviewShowHooking = nil
+        SA.BallView = nil
+        SA.Flight = nil
+        SA.Families = nil
+        SA.KeeperRules = nil
+        SA.Radius = nil
+        MystrixHub.ShotEnvCache = nil
+        MystrixHub.GoalCache = nil
+    end
+    F.SilentAimModules()
+    F.InstallPickTrack()
+    pcall(F.InstallPlanAim)
+    if not SA.Hooked then
+        local installed = 0
+        for _, name in ipairs({ "strike", "strikeFree" }) do
+            local fn = DribbleClient[name]
+            if type(fn) == "function" then
+                local orig
+                local function wrapper(from, vel, spin, family, t)
+                    if SA.Enabled and SA.Redirect and type(family) == "string" and typeof(from) == "Vector3" and typeof(vel) == "Vector3" then
+                        local rok, newVel, newSpin = pcall(SA.Redirect, from, vel, spin, family)
+                        if rok then
+                            if newVel then
+                                SA.LastVel = newVel
+                                SA.LastAt = os.clock()
+                                vel = newVel
+                                spin = newSpin or spin
+                                local H = getgenv().MystrixHub
+                                if H then H.ShotLast = nil end
+                            end
+                        else
+                            SA.LastError = tostring(newVel)
+                        end
+                    end
+                    return orig(from, vel, spin, family, t)
+                end
+                if hookfunction then
+                    local hok, result = pcall(hookfunction, fn, wrapper)
+                    if hok and result then
+                        orig = result
+                        installed += 1
+                    end
+                else
+                    orig = fn
+                    if pcall(function() DribbleClient[name] = wrapper end) then
+                        installed += 1
+                    end
+                end
+            end
+        end
+        SA.Hooked = installed > 0
+        SA.HookedModule = SA.Hooked and DribbleClient or nil
+    end
+    pcall(F.InstallPlanSync)
+    F.StartShotTick()
+    return SA.Hooked == true
+end
+
+function MystrixHub.Functions.KickGoalDir(x, z)
+    local F = MystrixHub.Functions
+    local goal = F.SilentAimGoal()
+    if not goal then return nil end
+    if (x - goal.x) * goal.out >= 0 then return nil end
+    local dx, dz = goal.x - x, goal.z - z
+    local m = math.sqrt(dx * dx + dz * dz)
+    if m < 1.5 then return nil end
+    local range = SilentAimState.Range or 300
+    if range < 300 and m > range then return nil end
+    return Vector3.new(dx / m, 0, dz / m)
+end
+
+function MystrixHub.Functions.InstallPlanAim()
+    local SA = getgenv().MystrixSilentAim
+    if SA.PlanAimHooked or not hookfunction then return end
+    local ok, Plan = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Plan
+    end)
+    if not ok or type(Plan) ~= "table" or type(Plan.find) ~= "function" then return end
+    local orig
+    local function wrapper(self, ...)
+        local H = getgenv().MystrixHub
+        local state = getgenv().MystrixSilentAim
+        if H and state.Enabled and state.OnlyGoalShots ~= true and type(self) == "table" and typeof(self.pos) == "Vector3" then
+            local intent = H.KickIntent
+            if (intent == "Shoot" or intent == "Lob") and os.clock() - (H.KickIntentAt or 0) < 0.15 then
+                local ball = self.pos
+                if type(self.ballAt) == "function" and self.now then
+                    local bok, bp = pcall(self.ballAt, self.now)
+                    if bok and typeof(bp) == "Vector3" then ball = bp end
+                end
+                local dir = H.Functions.KickGoalDir(ball.X, ball.Z)
+                if dir then
+                    self.aimDir = dir
+                end
+            end
+        end
+        return orig(self, ...)
+    end
+    local hok, res = pcall(hookfunction, Plan.find, wrapper)
+    if hok and res then
+        orig = res
+        SA.PlanAimHooked = true
+    end
+end
+
+function MystrixHub.Functions.InstallPreviewSpoof()
+    local SA = getgenv().MystrixSilentAim
+    if SA.PreviewShowHooked or SA.PreviewShowHooking then return end
+    SA.PreviewShowHooking = true
+    task.spawn(function()
+        local ok, KP = pcall(function()
+            local game_ = LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("Client"):WaitForChild("Game")
+            return require(game_:WaitForChild("KickPreview", 10))
+        end)
+        if not (ok and type(KP) == "table" and type(KP.show) == "function") then
+            SA.PreviewShowHooking = false
+            return
+        end
+        local orig = KP.show
+        local function wrapper(strike, ...)
+            local state = getgenv().MystrixSilentAim
+            if state.Enabled and state.Spoof ~= false and type(strike) == "table" and typeof(strike.from) == "Vector3" and typeof(strike.vel) == "Vector3" then
+                local view = MystrixHub.TrickView
+                local locked = view ~= nil and view.Active == true
+                local rok, nv, ns = pcall(MystrixHub.Functions.PreviewAim, strike.from, strike.vel, strike.spin)
+                if rok and nv then
+                    local copy = table.clone(strike)
+                    copy.vel = nv
+                    copy.spin = ns or strike.spin
+                    if locked then copy.turn = false end
+                    state.PreviewLastVel = nv
+                    return orig(copy, ...)
+                end
+                if locked then
+                    local copy = table.clone(strike)
+                    copy.turn = false
+                    return orig(copy, ...)
+                end
+            end
+            return orig(strike, ...)
+        end
+        KP.show = wrapper
+        SA.PreviewShowHooked = true
+        SA.PreviewShowHooking = false
+        MystrixHub.ConnectionController.Insert({ Disconnect = function()
+            if KP.show == wrapper then
+                KP.show = orig
+            end
+            SA.PreviewShowHooked = false
+        end })
+    end)
+end
+
+function MystrixHub.Functions.ShotPredict(params, pos, vel, spin, gy, horizon, dt)
+    local Flight = getgenv().MystrixSilentAim.Flight
+    local list = {}
+    local v, s = vel, spin
+    local rolling = false
+    local t = 0
+    local n = 0
+    while t < horizon do
+        local np, nv, ns
+        if rolling then
+            np, nv, ns = Flight.rollStep(pos, v, s, dt, params)
+        else
+            np, nv, ns = Flight.airStep(pos, v, s, dt, params)
+            if np.Y < gy and nv.Y < 0 then
+                np = Vector3.new(np.X, gy, np.Z)
+                local bv, bs = Flight.bounce(nv, ns, params)
+                if bv.Y < Flight.BOUNCE_MIN then
+                    bv, bs = Flight.toGround(bv, bs)
+                    rolling = true
+                end
+                nv, ns = bv, bs
+            end
+        end
+        pos, v, s = np, nv, ns
+        t += dt
+        n += 1
+        list[n] = { t = t, pos = pos }
+    end
+    return list
+end
+
+getgenv().MystrixTracker = getgenv().MystrixTracker or { Enabled = false, Rate = 0.25, Color = Color3.fromRGB(43, 255, 172) }
+
+function MystrixHub.Functions.TrackerModules()
+    local T = getgenv().MystrixTracker
+    if T.BallSim and T.World then return true end
+    pcall(function()
+        local g = Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game")
+        local bs = g:WaitForChild("BallSim")
+        T.BallSim = require(bs)
+        T.World = require(bs:WaitForChild("World"))
+    end)
+    return T.BallSim ~= nil and T.World ~= nil
+end
+
+function MystrixHub.Functions.TrackerTrace(ev)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixTracker
+    local BallSim, World = T.BallSim, T.World
+    local data = World.get()
+    if T.FrameSrc ~= data.frames then
+        local copy = {}
+        for key, frame in pairs(data.frames) do
+            copy[key] = frame.touched and setmetatable({ touched = false }, { __index = frame }) or frame
+        end
+        T.FrameSrc = data.frames
+        T.FrameCopy = copy
+    end
+    local world = { groundY = data.groundY, frames = T.FrameCopy, bodies = {} }
+    local params = World.params()
+    local flight = World.FLIGHT
+    local step = BallSim.STEP * 2
+    local gy = data.groundY
+    local goal = F.SilentAimGoal()
+    local event = BallSim.fromEvent(flight, ev, gy)
+    local pts = { { p = event.pos, t = event.t } }
+    local last = event.pos
+    local airborne = event.pos.Y - gy > 1.2
+    local landing
+    for _ = 1, 260 do
+        if BallSim.resting(event, flight) then break end
+        event = BallSim.step(flight, event, step, params, world, false, 0, nil)
+        local p = event.pos
+        if p.Y - gy > 1.2 then airborne = true end
+        local crossed = goal ~= nil and (p.X - goal.x) * goal.out >= 0
+        local touched = airborne and (p.Y - gy <= 0.06 or event.rolling)
+        if (crossed or touched or (p - last).Magnitude >= 1.8) and (p - last).Magnitude > 0.05 then
+            pts[#pts + 1] = { p = p, t = event.t }
+            last = p
+        end
+        if touched then
+            landing = Vector3.new(p.X, gy - params.radius + 0.1, p.Z)
+            break
+        end
+        if crossed or #pts > 56 then break end
+    end
+    return pts, landing
+end
+
+function MystrixHub.Functions.StopBallTracker()
+    pcall(function() RunService:UnbindFromRenderStep("MystrixBallTracker") end)
+    local T = getgenv().MystrixTracker
+    if T.Base then
+        pcall(function() T.Base:Destroy() end)
+        T.Base = nil
+    end
+end
+
+function MystrixHub.Functions.StartBallTracker()
+    local F = MystrixHub.Functions
+    F.StopBallTracker()
+    if not F.SilentAimModules() or not F.TrackerModules() then return false end
+    local T = getgenv().MystrixTracker
+    local SA = getgenv().MystrixSilentAim
+    local BV = SA.BallView
+    local COUNT = 56
+    local base = Instance.new("Part")
+    base.Name = "MystrixTracker"
+    base.Anchored = true
+    base.CanCollide = false
+    base.CanQuery = false
+    base.CanTouch = false
+    base.CastShadow = false
+    base.Transparency = 1
+    base.Size = Vector3.new(0.1, 0.1, 0.1)
+    base.CFrame = CFrame.identity
+    base.Parent = workspace
+    T.Base = base
+
+    local function adorn(className)
+        local a = Instance.new(className)
+        a.Adornee = base
+        a.AlwaysOnTop = true
+        a.Color3 = T.Color
+        a.Visible = false
+        pcall(function() a.AdornCullingMode = Enum.AdornCullingMode.Never end)
+        a.Parent = base
+        return a
+    end
+
+    local segs = {}
+    for i = 1, COUNT do
+        local s = adorn("LineHandleAdornment")
+        s.ZIndex = 2
+        s.Thickness = 4
+        s.Transparency = 0.05
+        segs[i] = s
+    end
+    local marker = adorn("CylinderHandleAdornment")
+    marker.ZIndex = 2
+    marker.Height = 0.08
+    marker.Radius = 1.1
+    marker.InnerRadius = 0
+    marker.Transparency = 0.15
+    local ring = adorn("CylinderHandleAdornment")
+    ring.ZIndex = 1
+    ring.Height = 0.06
+    ring.Radius = 2.2
+    ring.InnerRadius = 1.6
+    ring.Transparency = 0.35
+
+    local flat = CFrame.Angles(math.pi / 2, 0, 0)
+    local applied = T.Color
+    local lastSolve = 0
+    local path, hidden, baseMoved = nil, true, false
+    local shownFrom = 1
+
+    local function hideAll()
+        path = nil
+        if hidden then return end
+        hidden = true
+        for i = 1, COUNT do
+            segs[i].Visible = false
+        end
+        marker.Visible = false
+        ring.Visible = false
+    end
+
+    local function draw(p)
+        local pts = p.pts
+        local n = math.min(#pts - 1, COUNT)
+        p.n = n
+        for i = 1, n do
+            local a, b = pts[i].p, pts[i + 1].p
+            local s = segs[i]
+            s.Length = (b - a).Magnitude
+            s.CFrame = CFrame.lookAt(a, b)
+            s.Visible = true
+        end
+        for i = n + 1, COUNT do
+            segs[i].Visible = false
+        end
+        shownFrom = 1
+        if p.landing then
+            local cf = CFrame.new(p.landing) * flat
+            marker.CFrame = cf
+            ring.CFrame = cf
+            marker.Visible = true
+            ring.Visible = true
+        else
+            marker.Visible = false
+            ring.Visible = false
+        end
+        hidden = false
+    end
+
+    local function trim(p, now)
+        local pts = p.pts
+        local first = 1
+        while first < p.n and pts[first + 1].t <= now do
+            first += 1
+        end
+        if first ~= shownFrom then
+            local lo, hi = math.min(first, shownFrom), math.min(math.max(first, shownFrom), p.n)
+            for i = lo, hi do
+                segs[i].Visible = i >= first
+            end
+            shownFrom = first
+        end
+    end
+
+    RunService:BindToRenderStep("MystrixBallTracker", Enum.RenderPriority.Camera.Value + 40, function()
+        if not T.Enabled then
+            hideAll()
+            return
+        end
+        if T.Color ~= applied then
+            applied = T.Color
+            for i = 1, COUNT do
+                segs[i].Color3 = applied
+            end
+            marker.Color3 = applied
+            ring.Color3 = applied
+        end
+        local ball = BV.getBall()
+        local pos = BV.getPosition()
+        if not (ball and pos) then
+            hideAll()
+            return
+        end
+        local now = os.clock()
+        local state, _, ev, cp = BV.freeSim()
+        if state and ev and cp and state.vel.Magnitude > 3 then
+            local key = tostring(ev.seq) .. ":" .. tostring(ev.t)
+            if not path or path.mode ~= "free" or path.key ~= key or now - path.at > 1 then
+                local ok, pts, landing = pcall(F.TrackerTrace, cp)
+                if ok and pts then
+                    path = { mode = "free", key = key, at = now, pts = pts, landing = landing }
+                    draw(path)
+                end
+            end
+            if path and path.mode == "free" then
+                if baseMoved then
+                    base.CFrame = CFrame.identity
+                    baseMoved = false
+                end
+                trim(path, state.t)
+            else
+                hideAll()
+            end
+            return
+        end
+        if path and path.mode ~= "solve" then
+            hideAll()
+        end
+        if now - lastSolve >= math.max(T.Rate, 0.15) or not path then
+            lastSolve = now
+            local ok, result = pcall(F.ShotBest, pos, "Laced", false, F.Budget(0.004), nil, "warm")
+            if ok and result and result.vel
+                and (not path or (path.vel - result.vel).Magnitude > 0.5 or (path.from - pos).Magnitude > 6) then
+                local evt = {
+                    seq = 0,
+                    t = 0,
+                    pos = pos,
+                    vel = result.vel,
+                    spin = result.spin,
+                    kind = "kick",
+                    by = 0,
+                    pid = 0,
+                    n = 0
+                }
+                local ok2, pts, landing = pcall(F.TrackerTrace, evt)
+                if ok2 and pts then
+                    path = { mode = "solve", pts = pts, landing = landing, from = pos, vel = result.vel }
+                    draw(path)
+                end
+            end
+        end
+        if path and path.mode == "solve" then
+            if (pos - path.from).Magnitude > 40 then
+                hideAll()
+            else
+                base.CFrame = CFrame.new(pos - path.from)
+                baseMoved = true
+            end
+        else
+            hideAll()
+        end
+    end)
+    MystrixHub.ConnectionController.Insert({ Disconnect = function()
+        MystrixHub.Functions.StopBallTracker()
+    end })
+    return true
+end
+
+function MystrixHub.Functions.KeeperDivesModule()
+    local H = MystrixHub
+    if H.KeeperDivesRef then return H.KeeperDivesRef end
+    local ok, mod = pcall(function()
+        local shared = Services.ReplicatedStorage:WaitForChild("Shared", 5)
+        local gameFolder = shared and shared:WaitForChild("Game", 5)
+        local inst = gameFolder and gameFolder:WaitForChild("KeeperDives", 5)
+        return inst and require(inst)
+    end)
+    if ok and type(mod) == "table" then
+        H.KeeperDivesRef = mod
+        return mod
+    end
+    return nil
+end
+
+function MystrixHub.Functions.KeeperDiveTouch(kind)
+    local H = MystrixHub
+    local cache = H.KeeperTouchCache
+    if not cache then
+        cache = {}
+        H.KeeperTouchCache = cache
+    end
+    if cache[kind] then return cache[kind] end
+    local mod = H.Functions.KeeperDivesModule()
+    local touch
+    if mod and type(mod.track) == "function" then
+        local ok, track = pcall(mod.track, kind)
+        if ok and type(track) == "table" and type(track.touch) == "number" then
+            touch = track.touch
+            cache[kind] = touch
+        end
+    end
+    return touch or 0.35
+end
+
+function MystrixHub.Functions.InstallTrickFilter()
+    local TF = getgenv().MystrixTrickFilter
+    if TF.V2 then return true end
+    if not hookfunction then return false end
+    local ok, Kick = pcall(function()
+        return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick"))
+    end)
+    if not ok or type(Kick) ~= "table" then return false end
+    local installed = 0
+    for _, modName in ipairs({ "Plan", "Header", "Bicycle", "Dive" }) do
+        local module = Kick[modName]
+        local fn = module and module.find
+        if type(fn) == "function" then
+            local orig
+            local function wrapper(self, ...)
+                local H = getgenv().MystrixHub
+                if H and type(self) == "table" and type(self.family) == "table" then
+                    local fname = self.family.name
+                    local lock = H.TrickLock
+                    if lock and os.clock() < lock.Until and fname ~= lock.Name then
+                        return nil
+                    end
+                    local T = getgenv().MystrixAutoTricks
+                    local auto = H.Auto
+                    if T
+                        and T.Enabled
+                        and T.Auto == false
+                        and auto
+                        and auto.Phase == "air"
+                        and not (T.AirFamilies and T.AirFamilies[fname]) then
+                        return nil
+                    end
+                end
+                return orig(self, ...)
+            end
+            local hok, res = pcall(hookfunction, fn, wrapper)
+            if hok and res then
+                orig = res
+                installed += 1
+            end
+        end
+    end
+    TF.V2 = installed > 0
+    return TF.V2 == true
+end
+
+function MystrixHub.Functions.SetTrickSelection(value)
+    local T = getgenv().MystrixAutoTricks
+    local catalog = MystrixHub.TrickCatalog
+    local picked = {}
+
+    local function take(name)
+        if catalog[name] then
+            picked[name] = true
+        end
+    end
+
+    if type(value) == "table" then
+        for k, v in pairs(value) do
+            if type(v) == "string" then
+                take(v)
+            elseif v == true and type(k) == "string" then
+                take(k)
+            end
+        end
+    elseif type(value) == "string" then
+        take(value)
+    end
+
+    if next(picked) == nil then
+        T.Auto = true
+        T.AirFamilies = {}
+        T.Skills = {}
+        T.Lob = false
+        return true
+    end
+
+    local air, skills = {}, {}
+    local lob = false
+    for name in pairs(picked) do
+        local entry = catalog[name]
+        if entry.air then air[entry.air] = true end
+        if entry.lob then lob = true end
+        if entry.skill then skills[#skills + 1] = entry.skill end
+    end
+    T.Auto = false
+    T.AirFamilies = air
+    T.Skills = skills
+    T.Lob = lob
+
+    local hooked = MystrixHub.Functions.InstallTrickFilter()
+    if next(air) ~= nil and not hooked then
+        warn("[Mystrix Hub] trick filter could not be installed, air tricks are not forced")
+    end
+    return hooked
+end
+
+function MystrixHub.Functions.TrickChoose(st, char, root, goal, best, bike, cands, groundY, sampleNow)
+    local F = MystrixHub.Functions
+    local T = getgenv().MystrixAutoTricks
+    local families = getgenv().MystrixSilentAim.Families
+    if not families then return nil end
+    local weights = {
+        Bicycle = 70,
+        SideVolley = 26,
+        Volley = 22,
+        DivingHeader = 12,
+        JumpHeader = 6,
+        RunningHeader = 4,
+        Header = 2,
+    }
+    local minT = {
+        DivingHeader = 0.5,
+        JumpHeader = 0.55,
+        RunningHeader = 0.45,
+        Header = 0.3,
+        Volley = 0.25,
+        SideVolley = 0.3,
+    }
+    local clock = os.clock()
+    local fail = st.Fail or {}
+    local locked = st.Phase == "air" and st.LockFamily or nil
+    local allowed = T.Auto == false and T.AirFamilies or nil
+    local options = {}
+    local bikeChecked, bikeValid = false, false
+    local function viableBicycle()
+        if not bikeChecked then
+            bikeChecked = true
+            bikeValid = bike ~= nil and st.Mods ~= nil and F.TrickBicycleOk(st, char, root, goal, sampleNow, groundY)
+        end
+        return bikeValid
+    end
+    for family, weight in pairs(weights) do
+        local usable = (not allowed or allowed[family])
+            and (not locked or family == locked)
+            and (locked ~= nil or (fail[family] or 0) <= clock)
+        if usable then
+            local candidate
+            if family == "Bicycle" then
+                if bike and bike.h >= 8.2 and bike.h <= 11.3 and viableBicycle() then
+                    candidate = bike
+                end
+            else
+                local def = families[family]
+                local h = def and def.ballHeight
+                if h then
+                    local preferred = (h[1] + h[2]) * 0.5
+                    local floorT = locked and 0.12 or (minT[family] or 0.3)
+                    local bestScore = math.huge
+                    for _, c in ipairs(cands or {}) do
+                        if c.t >= floorT and c.h >= h[1] + 0.08 and c.h <= h[2] - 0.08 then
+                            local score = c.t * 0.75 + math.abs(c.h - preferred) * 0.08
+                            if score < bestScore then
+                                candidate, bestScore = c, score
+                            end
+                        end
+                    end
+                end
+            end
+            if candidate then
+                if family == st.LastAir then weight *= 0.3 end
+                options[#options + 1] = { family = family, cand = candidate, weight = weight }
+            end
+        end
+    end
+    if #options == 0 then return nil end
+    local total = 0
+    for _, item in ipairs(options) do total += item.weight end
+    local roll = math.random() * total
+    for _, item in ipairs(options) do
+        roll -= item.weight
+        if roll <= 0 then
+            return item.cand, item.family == "Bicycle" and "away" or "goal", item.family
+        end
+    end
+    local item = options[#options]
+    return item.cand, item.family == "Bicycle" and "away" or "goal", item.family
+end
+
+function MystrixHub.Functions.SkillForced(side)
+    local skills = getgenv().MystrixAutoTricks.Skills
+    if not skills or #skills == 0 then return nil end
+    local spec = skills[math.random(#skills)]
+    local away = side > 0 and "Left" or "Right"
+    return { kind = spec.kind, dir = spec.dir == "Away" and away or spec.dir, half = spec.half }
+end
+
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/wadhiaubsjdh8yhwda/a/refs/heads/main/lib"))()
+
+local CurrentGameName = game.Name
+pcall(function()
+    local GameInfo = Services.MarketplaceService:GetProductInfo(game.PlaceId)
+    if GameInfo and type(GameInfo.Name) == "string" and GameInfo.Name ~= "" then
+        CurrentGameName = GameInfo.Name
+    end
+end)
+local gameName = "RagdollSoccer"
+local Window = lib.new({
+    Title = "Mystrix Hub", Script = CURRENT_VERSION, Build = CurrentGameName, NotifyPosition = "Bottom Right",ConfigFolder = "Mystrix/" .. gameName .. "/configs",
+})
+
+MystrixHub.UIController.Window = Window
+
+Window:Category("Main")
+
+local CombatTab = Window:Tab({
+    Name = "Combat",
+    Icon = "lucide:crosshair",
+})
+
+local BallTab = Window:Tab({
+    Name = "Ball",
+    Icon = "lucide:target",
+})
+
+local PlayerTab = Window:Tab({
+    Name = "Player",
+    Icon = "lucide:user-round",
+})
+
+MystrixHub.UIController.Tabs.Combat = CombatTab
+MystrixHub.UIController.Tabs.Player = PlayerTab
+MystrixHub.UIController.Tabs.Ball = BallTab
+
+local SilentAimSection = CombatTab:Section({
+    Name = "Silent Aim",
+    Icon = "lucide:crosshair",
+    Side = 1,
+})
+
+SilentAimSection:Dropdown({
+    Name = "Silent Aim Target",
+    Options = { "Auto", "Top Right Corner", "Bottom Right Corner", "Top Left Corner", "Bottom Left Corner", "Top Center", "Bottom Center", "Upper Right", "Upper Left", "Lower Right", "Lower Left", "Right Post", "Left Post", "Middle" },
+    Default = { "Auto" },
+    Multi = true,
+    Callback = function(value)
+        MystrixHub.Functions.SetSilentTargets(value)
+    end,
+})
+
+SilentAimSection:Slider({
+    Name = "Silent Aim Range",
+    Min = 20,
+    Max = 300,
+    Suffix = "st",
+    Default = 300,
+    Callback = function(value)
+        getgenv().MystrixSilentAim.Range = value
+    end,
+})
+
+SilentAimSection:Toggle({
+    Name = "Silent Aim",
+    Keybind = Enum.KeyCode.H,
+    Default = false,
+    Callback = function(state)
+        local SA = getgenv().MystrixSilentAim
+        local forced = MystrixHub.Force ~= nil and MystrixHub.Force.Active == true
+        if state then
+            local ok = MystrixHub.Functions.InstallSilentAim()
+            if not ok then
+                SA.User = false
+                SA.Enabled = forced
+                return
+            end
+            SA.User = true
+            SA.Enabled = true
+        else
+            SA.User = false
+            SA.Enabled = forced
+        end
+    end,
+})
+
+SilentAimSection:Toggle({
+    Name = "Only Goal Shots",
+    Default = SilentAimState.OnlyGoalShots,
+    Callback = function(state)
+        local SA = getgenv().MystrixSilentAim
+        SA.OnlyGoalShots = state == true
+        SA.Pending = nil
+        SA.StrikeCache = nil
+    end,
+})
+
+SilentAimSection:Toggle({
+    Name = "Auto Curve",
+    Default = false,
+    Callback = function(state)
+        getgenv().MystrixSilentAim.AutoCurve = state
+    end,
+})
+
+SilentAimSection:Slider({
+    Name = "Curve Strength",
+    Min = 50,
+    Max = 100,
+    Suffix = "%",
+    Default = 100,
+    Callback = function(value)
+        getgenv().MystrixSilentAim.CurveAmount = value / 100
+    end,
+})
+
+local KeeperSection = BallTab:Section({
+    Name = "Goalkeeper",
+    Icon = "lucide:shield-half",
+    Side = 2,
+})
+
+KeeperSection:Toggle({
+    Name = "Auto Goalkeeper",
+    Default = false,
+    Callback = function(state)
+        local GK = getgenv().MystrixKeeper
+        GK.Enabled = state
+        if state then
+            if not MystrixHub.Functions.StartKeeper() then
+                GK.Enabled = false
+            end
+        else
+            MystrixHub.Functions.StopKeeper()
+        end
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Dive / Slide",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixKeeper.Dive = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Rush Out",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixKeeper.Rush = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Gather Loose Balls",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixKeeper.Gather = state
+    end,
+})
+
+KeeperSection:Toggle({
+    Name = "Keeper Poke",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixKeeper.Poke = state
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Depth",
+    Min = 2,
+    Max = 12,
+    Suffix = "st",
+    Default = 4.5,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().MystrixKeeper.Depth = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Dive Range",
+    Min = 6,
+    Max = 22,
+    Suffix = "st",
+    Default = 22,
+    Callback = function(value)
+        getgenv().MystrixKeeper.DiveRange = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Dive Commit Range",
+    Min = 15,
+    Max = 90,
+    Suffix = "st",
+    Default = 45,
+    Callback = function(value)
+        getgenv().MystrixKeeper.CommitRange = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Stand Reach",
+    Min = 0.5,
+    Max = 4,
+    Suffix = "st",
+    Default = 2,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().MystrixKeeper.StandReach = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Keeper Rush Range",
+    Min = 15,
+    Max = 60,
+    Suffix = "st",
+    Default = 34,
+    Callback = function(value)
+        getgenv().MystrixKeeper.RushRange = value
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Dive Timing Offset",
+    Min = 0,
+    Max = 25,
+    Suffix = "cs",
+    Default = 3,
+    Callback = function(value)
+        getgenv().MystrixKeeper.Lead = value / 100
+    end,
+})
+
+KeeperSection:Slider({
+    Name = "Dive Arm Reach",
+    Min = 2,
+    Max = 5,
+    Suffix = "st",
+    Default = 3.4,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().MystrixKeeper.ArmReach = value
+    end,
+})
+
+local PowerSection = CombatTab:Section({
+    Name = "Power",
+    Icon = "lucide:gauge",
+    Side = 2,
+})
+
+PowerSection:Toggle({
+    Name = "Auto Max",
+    Keybind = Enum.KeyCode.B,
+    Default = false,
+    Callback = function(state)
+        local MP = getgenv().MystrixMaxPower
+        local forced = MystrixHub.Force ~= nil and MystrixHub.Force.Active == true
+        if state then
+            if not MystrixHub.Functions.InstallMaxPower() then
+                MP.User = false
+                MP.Enabled = forced
+                return
+            end
+            MP.User = true
+            MP.Enabled = true
+        else
+            MP.User = false
+            MP.Enabled = forced
+        end
+    end,
+})
+
+local SprintSection = PlayerTab:Section({
+    Name = "Sprint",
+    Icon = "lucide:footprints",
+    Side = 1,
+})
+
+SprintSection:Toggle({
+    Name = "Infinite Sprint",
+    Keybind = Enum.KeyCode.N,
+    Default = false,
+    Callback = function(state)
+        getgenv().MystrixSprint.Infinite = state
+        MystrixHub.Functions.RefreshRunSpeed()
+    end,
+})
+
+SprintSection:Toggle({
+    Name = "Auto Sprint",
+    Default = false,
+    Callback = function(state)
+        getgenv().MystrixSprint.Auto = state
+        if state then
+            MystrixHub.Functions.StartAutoSprint()
+        else
+            MystrixHub.Functions.StopAutoSprint()
+        end
+    end,
+})
+
+SprintSection:Slider({
+    Name = "Sprint Speed",
+    Min = 100,
+    Max = 160,
+    Default = 100,
+    Suffix = "%",
+    Callback = function(value)
+        getgenv().MystrixSprint.Boost = value / 100
+        MystrixHub.Functions.RefreshRunSpeed()
+    end,
+})
+
+local RagdollSection = PlayerTab:Section({
+    Name = "Ragdoll",
+    Icon = "lucide:shield",
+    Side = 2,
+})
+
+RagdollSection:Toggle({
+    Name = "Anti-Tackle",
+    Default = false,
+    Callback = function(state)
+        if state and not MystrixHub.Functions.InstallAntiRagdoll() then
+            MystrixHub.Functions.SetAntiTackle(false)
+            return
+        end
+        MystrixHub.Functions.SetAntiTackle(state)
+    end,
+})
+
+RagdollSection:Toggle({
+    Name = "Instant Get Up",
+    Default = false,
+    Callback = function(state)
+        if state and not MystrixHub.Functions.InstallAntiRagdoll() then
+            MystrixHub.Functions.SetInstantGetUp(false)
+            return
+        end
+        MystrixHub.Functions.SetInstantGetUp(state)
+    end,
+})
+
+local PokeSection = PlayerTab:Section({
+    Name = "Poke",
+    Icon = "lucide:hand",
+    Side = 1,
+})
+
+PokeSection:Toggle({
+    Name = "Auto Poke",
+    Default = false,
+    Callback = function(state)
+        local AP = getgenv().MystrixAutoPoke
+        AP.Enabled = state
+        if state then
+            MystrixHub.Functions.StartAutoPoke()
+        else
+            MystrixHub.Functions.StopAutoPoke()
+        end
+    end,
+})
+
+PokeSection:Slider({
+    Name = "Poke Range",
+    Min = 3,
+    Max = 12,
+    Suffix = "st",
+    Default = 6,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().MystrixAutoPoke.Range = value
+    end,
+})
+
+local CooldownSection = PlayerTab:Section({
+    Name = "Cooldown",
+    Icon = "lucide:timer",
+    Side = 2,
+})
+
+CooldownSection:Toggle({
+    Name = "No Tackle / Poke Cooldown",
+    Default = false,
+    Callback = function(state)
+        local NC = getgenv().MystrixNoCooldown
+        NC.Enabled = state
+        if state then
+            MystrixHub.Functions.StartNoCooldown()
+        else
+            MystrixHub.Functions.StopNoCooldown()
+        end
+    end,
+})
+
+local ShootingSection = CombatTab:Section({
+    Name = "Shooting",
+    Icon = "lucide:goal",
+    Side = 2,
+})
+
+ShootingSection:Toggle({
+    Name = "Auto Shoot",
+    Keybind = Enum.KeyCode.K,
+    Default = false,
+    Callback = function(state)
+        local AS = getgenv().MystrixAutoShoot
+        if state then
+            if not MystrixHub.Functions.InstallSilentAim() then
+                AS.Enabled = false
+                return
+            end
+            pcall(MystrixHub.Functions.InstallMaxPower)
+            AS.Enabled = true
+            MystrixHub.Functions.StartAutoShoot()
+        else
+            AS.Enabled = false
+            MystrixHub.Functions.StopAutoShoot()
+        end
+    end,
+})
+
+ShootingSection:Slider({
+    Name = "Shoot Distance",
+    Min = 10,
+    Max = 150,
+    Default = 60,
+    Suffix = "st",
+    Callback = function(value)
+        getgenv().MystrixAutoShoot.Range = value
+    end,
+})
+
+local ReachSection = BallTab:Section({
+    Name = "Ball Reach",
+    Icon = "lucide:move-horizontal",
+    Side = 1,
+})
+
+ReachSection:Toggle({
+    Name = "Extended Ball Reach",
+    Default = false,
+    Callback = function(state)
+        local R = getgenv().MystrixReach
+        R.Enabled = state
+        if not MystrixHub.Functions.ApplyBallReach() then
+            R.Enabled = false
+        end
+    end,
+})
+
+ReachSection:Slider({
+    Name = "Reach Added",
+    Min = 1,
+    Max = 8,
+    Suffix = "st",
+    Default = 3,
+    Decimals = 1,
+    Callback = function(value)
+        getgenv().MystrixReach.Add = value
+    end,
+})
+
+local PickupSection = BallTab:Section({
+    Name = "Ball Pickup",
+    Icon = "lucide:magnet",
+    Side = 1,
+})
+
+PickupSection:Toggle({
+    Name = "Auto Pickup",
+    Default = false,
+    Callback = function(state)
+        local AP = getgenv().MystrixAutoPickup
+        AP.Enabled = state
+        if state then
+            MystrixHub.Functions.StartAutoPickup()
+        else
+            MystrixHub.Functions.StopAutoPickup()
+        end
+    end,
+})
+
+PickupSection:Slider({
+    Name = "Pickup Range",
+    Min = 5,
+    Max = 60,
+    Suffix = "st",
+    Default = 25,
+    Callback = function(value)
+        getgenv().MystrixAutoPickup.Range = value
+    end,
+})
+
+local TrackerSection = BallTab:Section({
+    Name = "Ball Tracker",
+    Icon = "lucide:radar",
+    Side = 1,
+})
+
+local TrackerToggle = TrackerSection:Toggle({
+    Name = "Ball Tracker",
+    Keybind = Enum.KeyCode.J,
+    Default = false,
+    Callback = function(state)
+        local T = getgenv().MystrixTracker
+        T.Enabled = state
+        if state then
+            if not MystrixHub.Functions.StartBallTracker() then
+                T.Enabled = false
+            end
+        else
+            MystrixHub.Functions.StopBallTracker()
+        end
+    end,
+})
+
+local trackerColorCallback = function(value)
+    if typeof(value) == "Color3" then
+        getgenv().MystrixTracker.Color = value
+    end
+end
+
+local pickerMade = false
+for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
+    if not pickerMade and TrackerToggle and type(TrackerToggle) == "table" and TrackerToggle[name] then
+        pickerMade = pcall(function()
+            TrackerToggle[name](TrackerToggle, {
+                Name = "Tracker Color",
+                Default = getgenv().MystrixTracker.Color,
+                Callback = trackerColorCallback,
+            })
+        end)
+    end
+end
+for _, name in ipairs({ "Colorpicker", "ColorPicker" }) do
+    if not pickerMade and TrackerSection[name] then
+        pickerMade = pcall(function()
+            TrackerSection[name](TrackerSection, {
+                Name = "Tracker Color",
+                Default = getgenv().MystrixTracker.Color,
+                Callback = trackerColorCallback,
+            })
+        end)
+    end
+end
+
+TrackerSection:Slider({
+    Name = "Tracker Refresh",
+    Min = 0.15,
+    Max = 0.6,
+    Default = 0.25,
+    Suffix = "s",
+    Decimals = 2,
+    Callback = function(value)
+        getgenv().MystrixTracker.Rate = value
+    end,
+})
+
+local DefenseSection = CombatTab:Section({
+    Name = "Defense",
+    Icon = "lucide:shield-check",
+    Side = 2,
+})
+
+DefenseSection:Toggle({
+    Name = "Auto Guard",
+    Keybind = Enum.KeyCode.M,
+    Default = false,
+    Callback = function(state)
+        local GD = getgenv().MystrixGuard
+        GD.Enabled = state
+        if state then
+            MystrixHub.Functions.StartGuard()
+        else
+            MystrixHub.Functions.StopGuard()
+        end
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Distance",
+    Min = 2,
+    Max = 20,
+    Suffix = "st",
+    Default = 8,
+    Callback = function(value)
+        getgenv().MystrixGuard.Distance = value
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Prediction",
+    Min = 0.1,
+    Max = 1,
+    Default = 0.35,
+    Suffix = "s",
+    Decimals = 2,
+    Callback = function(value)
+        getgenv().MystrixGuard.Predict = value
+    end,
+})
+
+DefenseSection:Slider({
+    Name = "Guard Engage Range",
+    Min = 8,
+    Max = 45,
+    Suffix = "st",
+    Default = 22,
+    Callback = function(value)
+        getgenv().MystrixGuard.Engage = value
+    end,
+})
+
+DefenseSection:Toggle({
+    Name = "Ignore Teammates",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixGuard.IgnoreTeammates = state
+    end,
+})
+
+local SkillsSection = CombatTab:Section({
+    Name = "Tricks",
+    Icon = "lucide:wand-sparkles",
+    Side = 1,
+})
+
+SkillsSection:Dropdown({
+    Name = "Trick Select",
+    Options = MystrixHub.TrickOptions,
+    Default = { "Auto" },
+    Multi = true,
+    Callback = function(value)
+        MystrixHub.Functions.SetTrickSelection(value)
+    end,
+})
+
+SkillsSection:Toggle({
+    Name = "Auto Tricks",
+    Default = false,
+    Callback = function(state)
+        local AT = getgenv().MystrixAutoTricks
+        if state then
+            if not MystrixHub.Functions.InstallSilentAim() then
+                AT.Enabled = false
+                return
+            end
+            pcall(MystrixHub.Functions.InstallMaxPower)
+            if not MystrixHub.Functions.StartAutoTricks() then
+                AT.Enabled = false
+                return
+            end
+            AT.Enabled = true
+        else
+            AT.Enabled = false
+            MystrixHub.Functions.StopAutoTricks()
+        end
+    end,
+})
+
+SkillsSection:Slider({
+    Name = "Tricks Range",
+    Min = 20,
+    Max = 120,
+    Default = 70,
+    Suffix = "st",
+    Callback = function(value)
+        getgenv().MystrixAutoTricks.Range = value
+    end,
+})
+
+SkillsSection:Slider({
+    Name = "Defender Distance",
+    Min = 6,
+    Max = 30,
+    Suffix = "st",
+    Default = 14,
+    Callback = function(value)
+        getgenv().MystrixAutoTricks.Defender = value
+    end,
+})
+
+local DribbleSection = CombatTab:Section({
+    Name = "Dribble",
+    Icon = "lucide:footprints",
+    Side = 1,
+})
+
+DribbleSection:Toggle({
+    Name = "Auto Dribble",
+    Default = false,
+    Callback = function(state)
+        local AD = getgenv().MystrixAutoDribble
+        if state then
+            if not MystrixHub.Functions.SkillModule() then
+                AD.Enabled = false
+                return
+            end
+            AD.Enabled = true
+            MystrixHub.Functions.StartAutoDribble()
+        else
+            AD.Enabled = false
+            MystrixHub.Functions.StopAutoDribble()
+        end
+    end,
+})
+
+DribbleSection:Slider({
+    Name = "Dribble Range",
+    Min = 6,
+    Max = 20,
+    Suffix = "st",
+    Default = 12,
+    Callback = function(value)
+        getgenv().MystrixAutoDribble.Range = value
+    end,
+})
+
+DribbleSection:Toggle({
+    Name = "Dribble Evade",
+    Default = true,
+    Callback = function(state)
+        getgenv().MystrixAutoDribble.Evade = state
+    end,
+})
+
+DribbleSection:Slider({
+    Name = "Evade Strength",
+    Min = 30,
+    Max = 100,
+    Suffix = "%",
+    Default = 80,
+    Callback = function(value)
+        getgenv().MystrixAutoDribble.EvadeStrength = value / 100
+    end,
+})
+
+Window:Category("Settings")
+
+local SettingsTab = Window:Tab({
+    Name = "Settings",
+    Icon = "lucide:settings",
+})
+
+MystrixHub.UIController.Tabs.Settings = SettingsTab
+
+Window:BuildSettings(SettingsTab)
+
+return Window
